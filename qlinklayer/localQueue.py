@@ -18,16 +18,19 @@ class LocalQueue:
 
     """
 
-    def __init__(self, wsize = None, maxSeq = (2^32 - 1), scheduleAfter = 0):
+    def __init__(self, wsize = None, maxSeq = None, scheduleAfter = 0):
 
         # Largest possible sequence number before wraparound
-        self.maxSeq = maxSeq
+        if maxSeq is None:
+            self.maxSeq = 2**32
+        else:
+            self.maxSeq = maxSeq
 
         # Maximum number of items to hold in the queue at any one time
         if wsize is None:
-            self.wsize = maxSeq + 1
+            self.wsize = self.maxSeq 
         else:
-            assert wsize <= maxSeq + 1
+            assert wsize <= self.maxSeq
             self.wsize = wsize
 
         # Next sequence number to assign
@@ -37,23 +40,25 @@ class LocalQueue:
         self.scheduleAfter = scheduleAfter
 
         # Actual queue
-        self.queue = deque()
+        # TODO not a great data structure
+        self.queue = {}
+
+        # Current sequence number that can be consumed
+        self.popSeq = 0
 
     def add(self, originID, request):
+        """
+        Add item to the Queue with a new sequence number, used by master node only.
+        """
 
         # Check how many items are on the queue right now
         l = len(self.queue)
         if l > self.wsize:
-            raise LinkLayerException("Local queue full")
-
-        # Compute the minimum time at which this request can be served
-        now = pydynaa.DynAASim().current_time
-        sa = now + self.scheduleAfter
+            raise LinkLayerException("Local queue full:" + str(l))
 
         # There is space, create a new queue item
         seq = self.nextSeq
-        lq = _LocalQueueItem(request, seq, sa)
-        self.queue.append(lq)
+        self.add_with_id(originID, seq, request)
 
         # Increment the next sequence number to assign
         self.nextSeq = (self.nextSeq + 1) % self.maxSeq
@@ -68,6 +73,7 @@ class LocalQueue:
 
         # TODO Needs fixing
         lq = _LocalQueueItem(request, seq, sa) 
+        self.queue[seq] = lq
 
     def pop(self):
         """
@@ -80,27 +86,29 @@ class LocalQueue:
             return None
 
         # Get item off queue
-        q = self.queue.popleft()
+        q = self.queue[self.popSeq]
 
         # Check if it's ready to be scheduled
         now = pydynaa.DynAASim().current_time
 
         if q.scheduleAt >= now:
-            # Item ready, return it for processing
+            # Item ready
+
+            # Remove from queue
+            self.queue.pop(self.popSeq, None)
+
+            # Increment lower bound of sequence numbers to return next
+            self.popSeq = (self.popSeq + 1) % self.maxSeq
+
+            # Return item
             return q
-        else:
-            # Item not yet ready, return None and put it back
-            self.queue.appendleft(q)
-            return None
 
     def contains(self, seq):
 
-        # TODO better data structure
-        for item in self.queue:
-            if item.seq == seq:
-                return True
-
-        return False
+        if seq in self.queue:
+            return True
+        else:
+            return False
 
     def ready(self, seq, minTime):
         """
@@ -108,12 +116,12 @@ class LocalQueue:
         scheduled at least minTime from now.
         """
 
-        # TODO better data structure
-        for item in self.queue:
-            if item.seq == seq:
-                item.ready = True
-                return
-        
+        try: 
+            self.queue[seq].ready = True
+        except KeyError:
+            # Not in queue, TODO error handling
+            return
+            
 
 class _LocalQueueItem:
 

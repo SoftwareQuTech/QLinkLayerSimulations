@@ -1,0 +1,132 @@
+2018-05-21 09:59:50,602,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 0 queue ID 0 queue seq 0
+2018-05-21 09:59:50,605,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 0 queue ID 0 queue seq 0
+2018-05-21 09:59:50,607,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 0 claiming queue seq 1
+2018-05-21 09:59:50,609,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 0 claiming queue seq 0
+2018-05-21 10:00:44,515,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 0 queue ID 0 queue seq 0
+2018-05-21 10:00:44,516,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 0 claiming queue seq 0
+2018-05-21 10:00:44,521,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 0 queue ID 0 queue seq 1
+2018-05-21 10:00:44,522,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 0 claiming queue seq 0
+2018-05-21 10:00:44,538,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 1 queue ID 0 queue seq 2
+2018-05-21 10:00:44,570,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 1 queue ID 0 queue seq 0
+2018-05-21 10:00:44,603,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:44,638,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 1 claiming queue seq 0
+2018-05-21 10:00:44,671,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:44,707,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 1 claiming queue seq 3
+2018-05-21 10:00:44,756,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 2 queue ID 0 queue seq 4
+2018-05-21 10:00:44,789,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:44,819,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 2 claiming queue seq 0
+2018-05-21 10:00:44,838,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 3 queue ID 0 queue seq 5
+2018-05-21 10:00:44,871,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 2 queue ID 0 queue seq 0
+2018-05-21 10:00:44,903,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:44,937,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 3 claiming queue seq 0
+2018-05-21 10:00:44,971,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:45,005,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 2 claiming queue seq 6
+2018-05-21 10:00:45,024,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 3 queue ID 0 queue seq 0
+2018-05-21 10:00:45,058,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 4 queue ID 0 queue seq 7
+2018-05-21 10:00:45,108,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:45,141,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 3 claiming queue seq 8
+2018-05-21 10:00:45,174,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:45,206,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 4 claiming queue seq 0
+2018-05-21 10:00:45,238,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 5 queue ID 0 queue seq 9
+2018-05-21 10:00:45,271,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:45,304,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 5 claiming queue seq 0
+2018-05-21 10:00:45,321,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 4 queue ID 0 queue seq 0
+2018-05-21 10:00:45,353,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:45,386,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 4 claiming queue seq 10
+2018-05-21 10:00:45,418,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 6 queue ID 0 queue seq 11
+2018-05-21 10:00:45,453,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 5 queue ID 0 queue seq 0
+2018-05-21 10:00:45,472,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:45,505,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 6 claiming queue seq 0
+2018-05-21 10:00:45,522,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:45,555,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 5 claiming queue seq 12
+2018-05-21 10:00:45,587,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 6 queue ID 0 queue seq 0
+2018-05-21 10:00:45,620,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 7 queue ID 0 queue seq 13
+2018-05-21 10:00:45,652,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:45,685,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 6 claiming queue seq 14
+2018-05-21 10:00:45,717,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:45,750,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 7 claiming queue seq 0
+2018-05-21 10:00:45,767,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 8 queue ID 0 queue seq 15
+2018-05-21 10:00:45,800,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 7 queue ID 0 queue seq 0
+2018-05-21 10:00:45,836,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:45,868,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 8 claiming queue seq 0
+2018-05-21 10:00:45,901,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:45,934,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 7 claiming queue seq 16
+2018-05-21 10:00:45,967,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 8 queue ID 0 queue seq 0
+2018-05-21 10:00:45,999,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 9 queue ID 0 queue seq 17
+2018-05-21 10:00:46,031,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:46,063,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 8 claiming queue seq 18
+2018-05-21 10:00:46,094,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:46,125,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 9 claiming queue seq 0
+2018-05-21 10:00:46,158,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 10 queue ID 0 queue seq 19
+2018-05-21 10:00:46,208,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 9 queue ID 0 queue seq 0
+2018-05-21 10:00:46,240,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:46,273,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 10 claiming queue seq 0
+2018-05-21 10:00:46,306,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:46,339,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 9 claiming queue seq 20
+2018-05-21 10:00:46,357,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 10 queue ID 0 queue seq 0
+2018-05-21 10:00:46,389,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 11 queue ID 0 queue seq 21
+2018-05-21 10:00:46,421,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:46,454,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 10 claiming queue seq 22
+2018-05-21 10:00:46,487,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:46,522,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 11 claiming queue seq 0
+2018-05-21 10:00:46,541,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 11 queue ID 0 queue seq 0
+2018-05-21 10:00:46,574,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:46,607,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 11 claiming queue seq 23
+2018-05-21 10:00:46,639,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 12 queue ID 0 queue seq 0
+2018-05-21 10:00:46,671,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:46,688,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 12 claiming queue seq 24
+2018-05-21 10:00:46,721,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 12 queue ID 0 queue seq 25
+2018-05-21 10:00:46,753,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:46,786,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 12 claiming queue seq 0
+2018-05-21 10:00:46,804,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 13 queue ID 0 queue seq 0
+2018-05-21 10:00:46,837,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:46,870,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 13 claiming queue seq 26
+2018-05-21 10:00:46,905,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 13 queue ID 0 queue seq 27
+2018-05-21 10:00:46,939,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 14 queue ID 0 queue seq 0
+2018-05-21 10:00:46,971,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:47,004,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 13 claiming queue seq 0
+2018-05-21 10:00:47,037,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:47,069,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 14 claiming queue seq 28
+2018-05-21 10:00:47,087,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 15 queue ID 0 queue seq 0
+2018-05-21 10:00:47,119,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 14 queue ID 0 queue seq 29
+2018-05-21 10:00:47,152,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:47,184,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 15 claiming queue seq 30
+2018-05-21 10:00:47,217,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:47,250,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 14 claiming queue seq 0
+2018-05-21 10:00:47,268,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 16 queue ID 0 queue seq 0
+2018-05-21 10:00:47,305,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 15 queue ID 0 queue seq 31
+2018-05-21 10:00:47,337,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:47,370,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 16 claiming queue seq 32
+2018-05-21 10:00:47,403,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:47,435,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 15 claiming queue seq 0
+2018-05-21 10:00:47,468,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 16 queue ID 0 queue seq 33
+2018-05-21 10:00:47,500,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 17 queue ID 0 queue seq 0
+2018-05-21 10:00:47,533,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:47,560,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 16 claiming queue seq 0
+2018-05-21 10:00:47,576,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:47,581,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 17 claiming queue seq 34
+2018-05-21 10:00:47,582,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 18 queue ID 0 queue seq 0
+2018-05-21 10:00:47,603,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 17 queue ID 0 queue seq 35
+2018-05-21 10:00:47,637,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:47,674,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 18 claiming queue seq 36
+2018-05-21 10:00:47,707,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:47,740,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 17 claiming queue seq 0
+2018-05-21 10:00:47,756,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 18 queue ID 0 queue seq 37
+2018-05-21 10:00:47,789,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:47,822,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 18 claiming queue seq 0
+2018-05-21 10:00:47,839,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 19 queue ID 0 queue seq 0
+2018-05-21 10:00:47,871,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:47,904,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 19 claiming queue seq 38
+2018-05-21 10:00:47,937,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 20 queue ID 0 queue seq 0
+2018-05-21 10:00:47,968,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 19 queue ID 0 queue seq 39
+2018-05-21 10:00:48,003,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:48,038,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 20 claiming queue seq 40
+2018-05-21 10:00:48,071,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:48,104,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 19 claiming queue seq 0
+2018-05-21 10:00:48,121,GLOBAL,NODE Bob: Recv valid ADD from 1 comms seq 20 queue ID 0 queue seq 41
+2018-05-21 10:00:48,153,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 21 queue ID 0 queue seq 0
+2018-05-21 10:00:48,186,GLOBAL,NODE Alice: Error Received
+2018-05-21 10:00:48,216,GLOBAL,NODE Alice: Recv valid ACK ADD from 2 acking comms seq 20 claiming queue seq 0
+2018-05-21 10:00:48,251,GLOBAL,NODE Bob: Error Received
+2018-05-21 10:00:48,285,GLOBAL,NODE Bob: Recv valid ACK ADD from 1 acking comms seq 21 claiming queue seq 42
+2018-05-21 10:00:48,302,GLOBAL,NODE Alice: Recv valid ADD from 2 comms seq 22 queue ID 0 queue seq 0

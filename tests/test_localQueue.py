@@ -13,10 +13,11 @@ class TestLocalQueue(unittest.TestCase):
     def test_init(self):
         # Test empty case
         standard_queue = LocalQueue()
-        assert standard_queue.maxSeq == 2^32 - 1
-        assert standard_queue.wsize == standard_queue.maxSeq + 1
+        assert standard_queue.maxSeq == 2**32
+        assert standard_queue.wsize == standard_queue.maxSeq
         assert standard_queue.scheduleAfter == 0
         assert standard_queue.nextSeq == 0
+        assert standard_queue.popSeq == 0
         assert len(standard_queue.queue) == 0
 
         # Test setting
@@ -25,6 +26,7 @@ class TestLocalQueue(unittest.TestCase):
         assert custom_queue.maxSeq == 2
         assert custom_queue.scheduleAfter == 3
         assert custom_queue.nextSeq == 0
+        assert custom_queue.popSeq == 0
         assert len(custom_queue.queue) == 0
 
     def test_add(self):
