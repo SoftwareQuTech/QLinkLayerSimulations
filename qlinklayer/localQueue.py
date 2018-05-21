@@ -91,7 +91,7 @@ class LocalQueue:
         # Check if it's ready to be scheduled
         now = pydynaa.DynAASim().current_time
 
-        if q.scheduleAt >= now:
+        if q.scheduleAt <= now:
             # Item ready
 
             # Remove from queue
@@ -102,6 +102,16 @@ class LocalQueue:
 
             # Return item
             return q
+
+    def get_min_schedule(self):
+        """
+        Get the smallest time at which we may schedule the next item
+        """
+        if len(self.queue) == 0:
+            # No items on queue
+            return None
+
+        return self.queue[self.popSeq].scheduleAt
 
     def contains(self, seq):
 
