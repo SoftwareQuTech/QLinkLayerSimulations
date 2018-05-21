@@ -8,11 +8,12 @@ from qlinklayer.distQueue import DistributedQueue
 from easysquid.qnode import QuantumNode
 from easysquid.toolbox import *
 from easysquid.connection import ClassicalConnection
+from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import TimedProtocol
 
-class TestProtocol(TimedProtocol):
+class FastTestProtocol(TimedProtocol):
 
-    def __init__(self, node, dq, timeStep, p=0.7):
+    def __init__(self, node, dq, timeStep, p=0.7, num=1000, maxNum=100000):
 
         super().__init__(timeStep=timeStep, node=node)
 
@@ -24,15 +25,31 @@ class TestProtocol(TimedProtocol):
 
         # Item Counter
         self.count = 0
-        
+
+        # Number of requests to randomly produce in timestep
+        self.num = num
+
+        # Maximum number to produce
+        self.maxNum = maxNum
 
     def run_protocol(self):
-        if np.random.uniform(0,1) < self.p:
-            self.dq.add([self.node.name, self.count])
-            self.count = self.count + 1
+
+        if self.count >= self.maxNum:
+            return
+
+        for j in range(self.num):
+            if np.random.uniform(0,1) < self.p:
+                self.dq.add([self.node.name, self.count])
+                self.count = self.count + 1
 
     def process_data(self):
         self.dq.process_data()
+
+class TestProtocol(FastTestProtocol):
+    def __init__(self, node, dq, timeStep, p=0.7):
+
+        super().__init__(node, dq, timeStep, p, 1)
+        
 
 
 class TestDistributedQueue(unittest.TestCase):
@@ -44,7 +61,7 @@ class TestDistributedQueue(unittest.TestCase):
 
         node = QuantumNode("TestNode 1", 1)
         node2 = QuantumNode("TestNode 2", 2)
-        conn = ClassicalConnection(1,2)
+        conn = ClassicalFibreConnection(1,2, length=1)
 
         # No arguments
         dq = DistributedQueue(node,conn)
@@ -93,7 +110,7 @@ class TestDistributedQueue(unittest.TestCase):
         assert dq.expectedSeq == 0 
 
 
-    def test_add(self):
+    def test_add_basic(self):
 
         # Set up two nodes and run a simulation in which items
         # are randomly added at specific time intervals
@@ -101,12 +118,12 @@ class TestDistributedQueue(unittest.TestCase):
         alice = QuantumNode("Alice",1, logger = self.logger)
         bob = QuantumNode("Bob",2, logger = self.logger)
 
-        conn = ClassicalConnection(1,2)
+        conn = ClassicalFibreConnection(1,2, length=1)
         aliceDQ = DistributedQueue(alice, conn)
         bobDQ = DistributedQueue(bob, conn)
 
-        aliceProto = TestProtocol(alice, aliceDQ,10)
-        bobProto = TestProtocol(bob, bobDQ,10)
+        aliceProto = TestProtocol(alice, aliceDQ,1)
+        bobProto = TestProtocol(bob, bobDQ,1)
 
         alice.setup_connection(conn, classicalProtocol=aliceProto)
         bob.setup_connection(conn, classicalProtocol=bobProto)
@@ -129,7 +146,80 @@ class TestDistributedQueue(unittest.TestCase):
             assert qA[k].seq == qB[k].seq
             assert qA[k].seq == count
             count = count + 1
-            
+
+    def test_fast_master(self):
+
+        # Set up two nodes and run a simulation in which items
+        # are randomly added at specific time intervals
+        pydynaa.DynAASim().reset()
+        alice = QuantumNode("Alice",1, logger = self.logger)
+        bob = QuantumNode("Bob",2, logger = self.logger)
+
+        conn = ClassicalFibreConnection(1,2, length=10000)
+        aliceDQ = DistributedQueue(alice, conn)
+        bobDQ = DistributedQueue(bob, conn)
+
+        aliceProto = FastTestProtocol(alice, aliceDQ,1)
+        bobProto = TestProtocol(bob, bobDQ,1)
+
+        alice.setup_connection(conn, classicalProtocol=aliceProto)
+        bob.setup_connection(conn, classicalProtocol=bobProto)
+        alice.start()
+        bob.start()
+
+        pydynaa.DynAASim().run(500)
+
+        # Check the Queue contains ordered elements from Alice and Bob
+        qA = aliceDQ.queueList[0].queue
+        qB = bobDQ.queueList[0].queue
+
+        # First they should have the same length
+        assert len(qA) == len(qB)
+
+        # Check the items are the same and the sequence numbers are ordered
+        count = 0
+        for k in range(len(qA)):
+            assert qA[k].request == qB[k].request
+            assert qA[k].seq == qB[k].seq
+            assert qA[k].seq == count
+            count = count + 1    
+
+    def test_fast_slave(self):
+
+        # Set up two nodes and run a simulation in which items
+        # are randomly added at specific time intervals
+        pydynaa.DynAASim().reset()
+        alice = QuantumNode("Alice",1, logger = self.logger)
+        bob = QuantumNode("Bob",2, logger = self.logger)
+
+        conn = ClassicalFibreConnection(1,2, length=1000)
+        aliceDQ = DistributedQueue(alice, conn)
+        bobDQ = DistributedQueue(bob, conn)
+
+        aliceProto = TestProtocol(alice, aliceDQ,1)
+        bobProto = FastTestProtocol(bob, bobDQ,1)
+
+        alice.setup_connection(conn, classicalProtocol=aliceProto)
+        bob.setup_connection(conn, classicalProtocol=bobProto)
+        alice.start()
+        bob.start()
+
+        pydynaa.DynAASim().run(500)
+
+        # Check the Queue contains ordered elements from Alice and Bob
+        qA = aliceDQ.queueList[0].queue
+        qB = bobDQ.queueList[0].queue
+
+        # First they should have the same length
+        assert len(qA) == len(qB)
+
+        # Check the items are the same and the sequence numbers are ordered
+        count = 0
+        for k in range(len(qA)):
+            assert qA[k].request == qB[k].request
+            assert qA[k].seq == qB[k].seq
+            assert qA[k].seq == count
+            count = count + 1
             
 if __name__ == "__main__":
     unittest.main()

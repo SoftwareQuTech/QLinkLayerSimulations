@@ -229,36 +229,50 @@ class DistributedQueue(EasyProtocol):
         if cseq > self.expectedSeq:
 
             # We seem to have missed some packets, for now just declare an error
-            # TODO
+            # TODO is this what we want?
             self.node.log_debug("ADD ERROR Skipped sequence number " + str(nodeID) + " comms seq " + str(cseq) + " queue ID " + str(qid) + " queue seq " + str(qseq))
             self.send_error(self.CMD_ERR_MISSED_SEQ)
+            return
 
         elif cseq < self.expectedSeq:
 
             # We have already seen this number
-            # TODO
+            # TODO is this what we want?
             self.node.log_debug("ADD ERROR Duplicate sequence number " + str(nodeID) + " comms seq " + str(cseq) + " queue ID " + str(qid) + " queue seq " + str(qseq))
             self.send_error(self.CMD_ERR_DUPLICATE_SEQ)
+            return
 
         # Is the queue ID acceptable?
         if not(self._valid_qid(qid)):
             self.node.log_debug("ADD ERROR No such queue from " + str(nodeID) + " comms seq " + str(cseq) + " queue ID " + str(qid) + " queue seq " + str(qseq))
             self.send_error(seld.CMD_ERR_NOSUCH_Q)
+            return
 
         # Is there such an item already in the queue?
         if not(self.master):
+
+            # Duplicate sequence number
+            # TODO is this what we want?
             if self.queueList[qid].contains(qseq):
                 self.node.log_debug("ADD ERROR duplicate sequence number from " + str(nodeID) + " comms seq " + str(cseq) + " queue ID " + str(qid) + " queue seq " + str(qseq))
                 self.send_error(self.CMD_ERR_DUPLICATE_QSEQ)
+                return
 
         # Is there a request supplied?
         if request is None:
+
+            # Request details missing
+            # TODO is this what we want?
             self.node.log_debug("ADD ERROR missing request from " + str(nodeID) + " comms seq " + str(cseq) + " queue ID " + str(qid) + " queue seq " + str(qseq))
             self.send_error(self.CMD_ERR_NOREQ)
+            return
 
         ## Received valid ADD: Process add request
 
         self.node.log_debug("ADD from " + str(nodeID) + " comms seq " + str(cseq) + " queue ID " + str(qid) + " queue seq " + str(qseq))
+
+        # Increment next sequence number expected
+        self.expectedSeq = (self.expectedSeq + 1) % self.maxSeq
 
         if self.master:
             # We are the node in control of the queue
@@ -331,46 +345,21 @@ class DistributedQueue(EasyProtocol):
 
 ########## API to add to Queue
 
-    def add(self, request):
+    def add(self, request, qid = 0):
         """
         Add a request to create entanglement.
         """
 
-        # For now we use only one queue
-        qid = 0
-
-        # Check if we are the master node in control of the queue
-        # and perform the appropriate actions to add the item
-
-        if self.master:
-            # We are the node in control of the queue
-
-            # Check how many we added before letting the slave node add items
-            if self.acksWaiting < self.myWsize:
-
-                # We have added less than until we are required to switch. We can go ahead
-                # and add
-                self._master_do_add(qid,request)
-
-            else:
-                
-                # Add to backlog to be be processed later
-                self.backlogAdd.append(request)
+        if (self.acksWaiting < self.myWsize) and (len(self.backlogAdd) == 0):
+            
+            # Still in window, and no backlog left to process, go add
+            self._general_do_add(request, qid)
 
         else:
-            # We are not in control of the queue and must make a request to the other side
-            # first
 
-            # Check if we are still waiting for outstanding acks
-            if self.acksWaiting < self.myWsize:
-
-                # We can proceed
-                self._request_add(qid,request)
-
-            else:
-    
-                # Add to the backlog to be processed later
-                self.backlogAdd.append(request)
+            # Add to backlog for later processing
+            self.node.log_debug("ADD to backlog")
+            self.backlogAdd.append(request)
 
     def local_pop(self, qid = 0):
         """
@@ -405,8 +394,9 @@ class DistributedQueue(EasyProtocol):
             canAdd = min(diff, len(self.backlogAdd))
 
             for j in range(canAdd):
+                self.node.log_debug("Processing backlog")
                 oldRequest = self.backlogAdd.popleft()
-                self.add(oldRequest)
+                self._general_do_add(oldRequest)
 
         # If there are no outstanding acks, we can go back to being idle
         if self.acksWaiting == 0:
@@ -442,7 +432,20 @@ class DistributedQueue(EasyProtocol):
         # Send ack
         self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, queue_seq])
 
-    def _master_do_add(self, qid, request):
+    def _general_do_add(self,request, qid = 0):
+
+        # Check if we are the master node in control of the queue
+        # and perform the appropriate actions to add the item
+
+        if self.master:
+            self._master_do_add(request, qid)
+
+        else:
+            # We are not in control of the queue and must make a request to the other side
+            # first
+            self._request_add(request, qid)
+
+    def _master_do_add(self, request, qid):
         """
         Master node: Perform addition to queue as master node, assuming we are cleared to do so.
         """
@@ -464,7 +467,7 @@ class DistributedQueue(EasyProtocol):
 
         self.status = self.STAT_BUSY
 
-    def _request_add(self, qid, request):
+    def _request_add(self, request, qid):
         """
         Non-master node: Request addition by contacting the node in control of the queue.
         """
