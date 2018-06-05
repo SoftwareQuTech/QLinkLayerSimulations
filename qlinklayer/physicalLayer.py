@@ -2,21 +2,11 @@
 # Physical Layer generation
 #
 
-import netsquid as ns
-import netsquid.pydynaa as pydynaa
-
-from netsquid.qubits import qubitapi
-from netsquid.qubits.qubitapi import fidelity
-
-from easysquid.quantumMemoryDevice import QuantumMemoryDevice
-from easysquid.qnode import QuantumNode
-from easysquid.easyprotocol import TimedProtocol, EasyProtocol
-from easysquid.heraldedGeneration import MiddleHeraldedConnection
+from easysquid.easyprotocol import TimedProtocol
 from easysquid.entanglementGenerator import NV_PairPreparation
-from netsquid.qubits.ketstates import b00, b01, b10, b11
-from easysquid.puppetMaster import PM_Controller, PM_DataSequence, PM_MultiDataSequence
 
 from easysquid.toolbox import EasySquidException
+
 
 class PhysicalLayerGeneration(TimedProtocol):
     """
@@ -36,8 +26,8 @@ class PhysicalLayerGeneration(TimedProtocol):
         Link layer protocol to connect to.
     """
 
-    def __init__(self, timeStep, t0, node, conn, egp):
-        super(MakePairsProtocol, self).__init__(timeStep, t0, node, conn)
+    def __init__(self, timeStep, t0, node, conn, egp, alpha):
+        super(TimedProtocol, self).__init__(timeStep, t0, node, conn)
 
         # Link to higher layer - the link layer
         self.egp = egp
@@ -57,12 +47,12 @@ class PhysicalLayerGeneration(TimedProtocol):
         """
 
         # Check whether we should make pairs
-        if not(egp.request_ready()):
+        if not (self.egp.request_ready()):
             # No pairs needed right now
             return
 
         # Find a free memory slot
-        freeID = -1;
+        freeID = -1
         for j in range(self.node.qmem.max_num):
             if not self.node.qmem.in_use(j):
                 freeID = j
@@ -70,9 +60,9 @@ class PhysicalLayerGeneration(TimedProtocol):
 
         if freeID < 0:
             # No memory available, do nothing
-            return 
+            return
 
-        # This will make a new pair
+            # This will make a new pair
         [spin, photon] = self.prep.generate()
 
         # Store the spin state
@@ -95,7 +85,7 @@ class PhysicalLayerGeneration(TimedProtocol):
 
         # If successful, record the qubit, otherwise remove it
         if outcome == 1 or outcome == 2:
-            egp.pair_made(myID, hisID, outcome)
+            self.egp.pair_made(myID, hisID, outcome)
 
         elif outcome == 0:
             # Generation failed, remove the qubit
@@ -113,6 +103,4 @@ class PhysicalLayerGeneration(TimedProtocol):
             self.node.qmem.release_qubit(j)
 
     def start(self):
-        super(MakePairsProtocol, self).start()
-
-
+        super(TimedProtocol, self).start()

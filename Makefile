@@ -1,7 +1,21 @@
 PYTHON        = python3
-SOURCEDIR     = source
+PIP           = pip3
+SOURCEDIR     = qlinklayer
+TESTS         = tests
+
+
+clean:
+	@find . -name '*.pyc' -delete
+
+lint:
+	@$(PYTHON) -m flake8 $(SOURCEDIR) $(TESTS)
+
+python-deps:
+	@$(PIP) install -r requirements.txt
 
 tests:
-	$(PYTHON) -m unittest discover -s $(SOURCEDIR) tests
+	@$(PYTHON) -m unittest discover -s $(SOURCEDIR) $(TESTS)
 
-.PHONY: tests
+verify: clean python-deps lint tests
+
+.PHONY: clean lint python-deps tests verify

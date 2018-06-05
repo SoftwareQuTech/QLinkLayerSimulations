@@ -4,11 +4,7 @@
 # 
 
 import netsquid.pydynaa as pydynaa
-
-from collections import deque
-
-from qlinklayer.general import *
-
+from qlinklayer.general import LinkLayerException
 
 
 class LocalQueue:
@@ -18,17 +14,17 @@ class LocalQueue:
 
     """
 
-    def __init__(self, wsize = None, maxSeq = None, scheduleAfter = 0):
+    def __init__(self, wsize=None, maxSeq=None, scheduleAfter=0):
 
         # Largest possible sequence number before wraparound
         if maxSeq is None:
-            self.maxSeq = 2**32
+            self.maxSeq = 2 ** 32
         else:
             self.maxSeq = maxSeq
 
         # Maximum number of items to hold in the queue at any one time
         if wsize is None:
-            self.wsize = self.maxSeq 
+            self.wsize = self.maxSeq
         else:
             assert wsize <= self.maxSeq
             self.wsize = wsize
@@ -52,9 +48,8 @@ class LocalQueue:
         """
 
         # Check how many items are on the queue right now
-        l = len(self.queue)
-        if l > self.wsize:
-            raise LinkLayerException("Local queue full:" + str(l))
+        if len(self.queue) > self.wsize:
+            raise LinkLayerException("Local queue full: {}".format(len))
 
         # There is space, create a new queue item
         seq = self.nextSeq
@@ -66,13 +61,13 @@ class LocalQueue:
         return seq
 
     def add_with_id(self, originID, seq, request):
-       
+
         # Compute the minimum time at which this request can be served
         now = pydynaa.DynAASim().current_time
         sa = now + self.scheduleAfter
 
         # TODO Needs fixing
-        lq = _LocalQueueItem(request, seq, sa) 
+        lq = _LocalQueueItem(request, seq, sa)
         self.queue[seq] = lq
 
     def pop(self):
@@ -103,6 +98,18 @@ class LocalQueue:
             # Return item
             return q
 
+    def peek(self):
+        """
+        Get item off the top of the queue without removing it
+        :return:
+        """
+        if len(self.queue) == 0:
+            # No items on queue
+            return None
+
+        # Get item off queue
+        return self.queue[self.popSeq]
+
     def get_min_schedule(self):
         """
         Get the smallest time at which we may schedule the next item
@@ -126,31 +133,22 @@ class LocalQueue:
         scheduled at least minTime from now.
         """
 
-        try: 
+        try:
             self.queue[seq].ready = True
         except KeyError:
             # Not in queue, TODO error handling
             return
-            
+
+    def modify_schedule(self, seq, scheduleAt):
+        item = self.queue[seq]
+        item.scheduleAt = scheduleAt + pydynaa.DynAASim().current_time
+
 
 class _LocalQueueItem:
-
-
     def __init__(self, request, seq, scheduleAt):
-
         self.request = request
         self.seq = seq
         self.scheduleAt = scheduleAt
 
         # Flag whether this queue item is ready to be executed
         self.ready = False
-
-
-
-
-
-
-
-
-        
-    
