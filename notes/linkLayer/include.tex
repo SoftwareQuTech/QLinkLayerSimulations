@@ -1,0 +1,72 @@
+
+\usepackage{natbib}
+\usepackage{amssymb,amsmath,latexsym}
+\usepackage{amsthm}
+\usepackage{hyperref}
+\usepackage{bm}
+\usepackage{microtype}
+\usepackage{url}
+\usepackage{graphicx}
+
+
+\usepackage[lined,ruled,vlined]{algorithm2e}
+
+
+\usepackage{xcolor}
+\theoremstyle{plain}
+\newtheorem{condition}{Condition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\newtheorem{claim}{Claim}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{example}{Example}
+
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+\newtheorem{protocol}{Protocol}
+
+
+\newcommand{\abs}[1]{\left| #1 \right|}
+\newcommand{\bra}[1]{\left\langle #1 \right|}
+\newcommand{\ket}[1]{\left| #1 \right\rangle}
+\newcommand{\proj}[1]{| #1 \rangle\!\langle #1 |}
+\newcommand{\pname}[1]{\textsf{#1}}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\I}{\mathbb{I}}
+\newcommand{\steph}[1]{\textcolor{blue}{Steph: #1}}
+\newcommand{\suppl}{appendix}
+
+
+
+% Todo notes
+\usepackage{xargs}
+\usepackage[colorinlistoftodos,prependcaption]{todonotes}
+\newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
+\newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
+\newcommandx{\info}[2][1=]{\todo[linecolor=green,backgroundcolor=green!25,bordercolor=green,#1]{#2}}
+\newcommandx{\improvement}[2][1=]{\todo[linecolor=purple,backgroundcolor=purple!25,bordercolor=purple,#1]{#2}}
+\newcommandx{\thiswillnotshow}[2][1=]{\todo[disable,#1]{#2}}
+
+\newcommand{\Complex}{\mathbb{C}}
+\newcommand{\id}{\mathsf{id}}
+
+% Listings (python code)
+\usepackage{listings} 
+
+\definecolor{lightgray}{gray}{0.9}
+\lstset{
+    showstringspaces=false,
+    basicstyle=\ttfamily,
+    keywordstyle=\color{blue},
+    commentstyle=\color{black},
+    stringstyle=\color[RGB]{255,150,75},
+    % xleftmargin=-5ex
+}
+\newcommand{\inlinecode}[1]{\colorbox{lightgray}{\lstinline[language=Python]$#1$}}
+% \newenvironment{code}
+%     {\begin{lstlisting}[language=Python]}
+
+%     {\end{lstlisting}}
