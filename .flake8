@@ -1,0 +1,6 @@
+[flake8]
+count = True
+exclude = bin, docs, .git, .idea, __pycache__
+ignore = W291 W293
+max-line-length = 120
+statistics = True

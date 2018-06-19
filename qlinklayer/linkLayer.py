@@ -9,6 +9,7 @@ from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.distQueue import DistributedQueue
 from qlinklayer.physicalLayer import PhysicalLayerGeneration
 
+
 class EntanglementGenerationProtocol(EasyProtocol):
     """
     Entanglement generation protocol.
@@ -47,11 +48,11 @@ class EntanglementGenerationProtocol(EasyProtocol):
         self.qmm = QuantumMemoryManagement()
 
         # Physical layer entanglement generation
-        self.physical = PhysicalLayerGeneration(t0=conn.t0, timeSteps=conn.tmax, node=node, conn=conn, egp=self)
+        self.physical = PhysicalLayerGeneration(t0=conn.t0, timeStep=conn.tmax, node=node, conn=conn, egp=self)
 
-###### API to the Entanglement Generation Protocol
+    # API to the Entanglement Generation Protocol
 
-    def create(self, numPairs, appID = 0, Fmin = 0.5, tmax = 100000):
+    def create(self, numPairs, appID=0, Fmin=0.5, tmax=100000):
         """
         Create request.
 
@@ -71,12 +72,12 @@ class EntanglementGenerationProtocol(EasyProtocol):
         request = _EGP_Create(numPairs, appID, Fmin, tmax)
 
         # Decide which queue to add it to
-        qid = self.scheduler.next_add(request)
+        qid = self.scheduler.get_queue(request)
 
         # Add to request queue (TODO for now we use only 1 queue, qid=0)
         self.distQueue.add(request, qid)
 
-####### Communication with lower layer (physical layer protocol)
+    # Communication with lower layer (physical layer protocol)
 
     def request_ready(self):
         """
@@ -97,5 +98,3 @@ class _EGP_Create:
         self.appID = appID
         self.Fmin = Fmin
         self.tmax = tmax
-        
-     
