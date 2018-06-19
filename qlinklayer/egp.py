@@ -49,17 +49,17 @@ class EGPRequest:
             A copy of the EGPRequest object
         """
         c = type(self)(self.otherID, self.num_pairs, self.min_fidelity, self.max_time, self.purpose_id, self.priority)
-        c.create_time = self.create_time
-        c.create_id = self.create_id
+        c.assign_create_id(self.create_id, self.create_time)
         return c
 
-    def assign_seq_id(self, create_id):
+    def assign_create_id(self, create_id, create_time):
         """
         Sets the sequence number of this request
         :param seq_id: int
             The sequence number associated with this request
         """
         self.create_id = create_id
+        self.create_time = create_time
 
 
 class EGP(EasyProtocol):
@@ -78,6 +78,8 @@ class EGP(EasyProtocol):
         # Hook up user defined callbacks for passing results
         self.err_callback = err_callback
         self.ok_callback = ok_callback
+        self.next_creation_id = 0
+        self.max_creation_id = 2**32 - 1
 
     @abc.abstractmethod
     def connect_to_peer_protocol(self, other_egp):
@@ -178,6 +180,7 @@ class NodeCentricEGP(EGP):
     # Commands for getting the QMM Free Memory
     CMD_REQ_E = 0
     CMD_ACK_E = 1
+    CMD_EXPIRE = 2
 
     ERR_UNSUPP = 40
     ERR_NOTIME = 41
@@ -217,7 +220,8 @@ class NodeCentricEGP(EGP):
         # Communication handlers
         self.commandHandlers = {
             self.CMD_REQ_E: self.cmd_REQ_E,
-            self.CMD_ACK_E: self.cmd_ACK_E
+            self.CMD_ACK_E: self.cmd_ACK_E,
+            self.CMD_EXPIRE: self.cmd_EXPIRE
         }
 
         # Create local share of distributed queue
@@ -312,6 +316,10 @@ class NodeCentricEGP(EGP):
         my_free_mem = self.qmm.get_free_mem_ad()
         self.conn.put_from(self.node.nodeID, [[self.CMD_REQ_E, my_free_mem]])
 
+    def send_expire_notification(self, aid):
+        logger.debug("Sending EXPIRE notification to peer")
+        self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE, aid]])
+
     def cmd_REQ_E(self, data):
         """
         Command handler when requested for free memory of QMM.  Sends a message to our peer with
@@ -336,6 +344,17 @@ class NodeCentricEGP(EGP):
         self.other_free_memory = data
         self.scheduler.update_other_mem_size(self.other_free_memory)
 
+    def cmd_EXPIRE(self, data):
+        """
+        Command handler when our peer alerts of an inconsistency in the MHP Sequence numbers.  We should issue an
+        ERR_EXPIRE to higher layer protocols to throw away qubits associated with a specific absolute queue id
+        :param data: tuple (qid, qseq)
+            Absolute queue id corresponding to the request that has an error
+        """
+        logger.debug("Got EXPIRE command from peer, clearing request and issuing error")
+        self.mhp.reset_protocol()
+        self.issue_err(err=self.ERR_EXPIRE, data=data)
+
     # Primary EGP Protocol Methods
     def create(self, creq):
         """
@@ -345,7 +364,7 @@ class NodeCentricEGP(EGP):
             information for use with the EGP
         """
         try:
-            creq.create_time = self.get_current_time()
+            self._assign_creation_information(creq)
 
             # Check if we can support this request
             err = self.check_supported_request(creq)
@@ -361,10 +380,18 @@ class NodeCentricEGP(EGP):
 
             # Add the request to the DQP
             self._add_to_queue(creq)
+            return (creq.create_id, creq.create_time)
 
         except Exception as err:
             logger.error("Failed to issue create: {}".format(err))
             self.issue_err(self.ERR_OTHER, err_data=err)
+
+    def _assign_creation_information(self, creq):
+        create_time = self.get_current_time()
+        create_id = self.next_creation_id
+        creq.assign_create_id(create_id=create_id, create_time=create_time)
+        self.next_creation_id = self.next_creation_id + 1
+        logger.debug("Assigned creation id {} creation time {} to request".format(creq.create_id, creq.create_time))
 
     def check_supported_request(self, creq):
         """
@@ -554,7 +581,8 @@ class NodeCentricEGP(EGP):
 
         # Create entanglement identifier
         logical_id = self.qmm.physical_to_logical(self.mhp.storage_physical_ID)
-        ent_id = (self.conn.idA, self.conn.idB, mhp_seq, logical_id)
+        creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
+        ent_id = (creatorID, creq.otherID, mhp_seq, logical_id)
 
         # Issue OK
         logger.debug("Issuing okay to caller")
