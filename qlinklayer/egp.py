@@ -144,7 +144,7 @@ class EGP(EasyProtocol):
         # Process message demanding on command
         self.commandHandlers[cmd](data)
 
-    def issue_err(self, err):
+    def issue_err(self, err, err_data=None):
         """
         Issues an error back to higher layer protocols with the error code that prevented
         successful generation of entanglement
@@ -154,7 +154,7 @@ class EGP(EasyProtocol):
             The error info
         """
         if self.err_callback:
-            self.err_callback(result=err)
+            self.err_callback(result=(err, err_data))
         else:
             return err
 
@@ -203,8 +203,6 @@ class NodeCentricEGP(EGP):
 
         # Quantum Memory Management, track our own free memory
         self.qmm = QuantumMemoryManagement(node=self.node)
-        self.my_free_memory = self.qmm.get_free_mem_ad()
-        self.other_free_memory = None
 
         # Fidelity Estimation Unit used to estimate the fidelity of produced entangled pairs
         self.feu = FidelityEstimationUnit()
@@ -226,6 +224,8 @@ class NodeCentricEGP(EGP):
 
         # Create the request scheduler
         self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
+        self.my_free_memory = self.scheduler.my_free_memory
+        self.other_free_memory = None
 
         self.length_to_midpoint = length_to_midpoint
 
@@ -320,7 +320,8 @@ class NodeCentricEGP(EGP):
         self.other_free_memory = data
         self.scheduler.update_other_mem_size(data)
         free_memory_size = self.qmm.get_free_mem_ad()
-        logger.debug("{} Got request for free memory advertisement, sending: {}".format(self.node.nodeID, free_memory_size))
+        logger.debug("{} Got request for free memory advertisement, sending: {}".format(self.node.nodeID,
+                                                                                        free_memory_size))
         self.conn.put_from(self.node.nodeID, [[self.CMD_ACK_E, free_memory_size]])
 
     def cmd_ACK_E(self, data):
@@ -359,9 +360,9 @@ class NodeCentricEGP(EGP):
             # Add the request to the DQP
             self._add_to_queue(creq)
 
-        except Exception:
-            self.issue_err(self.ERR_OTHER)
-            raise
+        except Exception as err:
+            logger.error("Failed to issue create: {}".format(err))
+            self.issue_err(self.ERR_OTHER, err_data=err)
 
     def check_supported_request(self, creq):
         """
@@ -435,6 +436,11 @@ class NodeCentricEGP(EGP):
         Handler to be given to the MHP service that allows it to ask the scheduler
         if there are any requests and to receive a request to process
         """
+        # Pass request information back up to higher layer protocol
+        stale_requests = self.scheduler.timeout_stale_requests()
+        for request in stale_requests:
+            self.issue_err(err=self.ERR_TIMEOUT, err_data=request)
+
         # Check if scheduler has any ready requests
         if self.scheduler.request_ready():
             # Grab the request
@@ -477,56 +483,34 @@ class NodeCentricEGP(EGP):
         :param result: tuple
             Contains the processing result information from attempting entanglement generation
         """
-        # Retrieve message from MHP
-        logger.debug("Handling MHP Reply")
-        try:
-            r, other_free_memory, mhp_seq, (qid, qseq), proto_err = result
+        # Get the MHP results
+        logger.debug("Handling MHP Reply: {}".format(result))
+        r, other_free_memory, mhp_seq, (qid, qseq), proto_err = self._extract_mhp_reply(result=result)
 
-        except Exception:
-            raise LinkLayerException("Malformed MHP reply received: {}".format(result))
+        # Check if there were any errors that occurred
+        if proto_err != self.mhp_service.PROTO_OK:
+            logger.error("Protocol error occured in MHP: {}".format(proto_err))
+            self.issue_err(proto_err)
 
-        # Sanity check the MHP sequence number
-        if mhp_seq > self.expected_seq:
-            self.outstanding_generations = []
-            logger.error("Returned MHP_SEQ {} greater than expected SEQ {}".format(mhp_seq, self.expected_seq))
-            self.issue_err(self.ERR_OTHER)
+        # Update scheduler with other nodes new memory size
+        logger.debug("Updating scheduler with other mem size")
+        self.scheduler.update_other_mem_size(other_free_memory)
+
+        # No entanglement generation
+        if r == 0:
+            logger.warning("Failed to produce entanglement with other node")
             return
 
-        elif mhp_seq < self.expected_seq:
-            logger.warning("Received old MHP SEQ {} while expecting SEQ {}".format(mhp_seq, self.expected_seq))
-            return
+        # Check the MHP Sequence Number
+        valid_mhp = self._handle_mhp_sequence(mhp_seq)
 
         # Check if the protocol executed simple info passing
         if proto_err == self.mhp_service.PROTO_INFO:
             self.scheduler.update_other_mem_size(other_free_memory)
             return
 
-        # Otherwise check if there were any errors that occurred
-        elif proto_err != self.mhp_service.PROTO_OK:
-            logger.error("Protocol error occured in MHP: {}".format(proto_err))
-            self.issue_err(proto_err)
-            return
-
-        # Update scheduler with other nodes new memory size
-        logger.debug("Updating scheduler with other mem size")
-        self.scheduler.update_other_mem_size(other_free_memory)
-
-        # Update the expected MHP sequence number
-        self.expected_seq = (self.expected_seq + 1) % self.dqp.maxSeq
-
-        # Failed to generate entanglement
-        if r == 0:
-            logger.warning("Failed to produce entanglement with other node")
-            return
-
-        # Correct the pair on our end if necessary
-        creq = self.requests[(qid, qseq)]
-        if r == 2 and self.node.nodeID == creq.otherID:
-            logger.debug("Applying correction to qubit")
-            storage_qubit = self.mhp.storage_physical_ID
-            self._apply_correction_to_qubit(storage_qubit)
-
         # Check if we took too long to create the pair
+        creq = self.requests[(qid, qseq)]
         now = self.get_current_time()
         if creq.create_time + creq.max_time < now:
             logger.error("Took too long to generate pair, removing request and resetting")
@@ -535,43 +519,72 @@ class NodeCentricEGP(EGP):
             self.outstanding_generations.remove((qid, qseq))
 
             # Clear out memory that may have been used
-            for storage_q in self.mhp.storage_IDs:
-                self.qmm.free_qubit(storage_q)
+            self.qmm.free_qubits(self.mhp.reserved_qubits)
 
             # Reset the protocol for the next request
-            self.mhp._reset_protocol()
+            self.mhp.reset_protocol()
             self.issue_err(self.ERR_TIMEOUT)
-            return
 
-        # Get the fidelity estimate from FEU
-        logger.debug("Estimating fidelity")
-        fidelity_estimate = self.feu.estimate_fidelity(alpha=self.mhp.alpha)
+        elif valid_mhp:
+            self.expected_seq = (self.expected_seq + 1) % self.dqp.maxSeq
 
-        # Create entanglement identifier
-        logical_id = self.qmm.physical_to_logical(self.mhp.storage_physical_ID)
-        ent_id = (self.conn.idA, self.conn.idB, mhp_seq, logical_id)
+            # Check if we need to correct the qubit
+            if r == 2 and self.node.nodeID == creq.otherID:
+                logger.debug("Applying correction to qubit")
+                self._apply_correction_to_qubit(self.mhp.storage_physical_ID)
 
-        # Issue OK
-        logger.debug("Issuing okay to caller")
-        result = (ent_id, fidelity_estimate, now, now)
-        self.issue_ok(result)
+            # Get the fidelity estimate from FEU
+            logger.debug("Estimating fidelity")
+            fidelity_estimate = self.feu.estimate_fidelity(alpha=self.mhp.alpha)
 
-        # Update number of remaining pairs on request, remove if completed
-        if creq.num_pairs == 1:
-            logger.debug("Generated final pair, removing request")
-            self.requests.pop((qid, qseq))
+            # Create entanglement identifier
+            logical_id = self.qmm.physical_to_logical(self.mhp.storage_physical_ID)
+            ent_id = (self.conn.idA, self.conn.idB, mhp_seq, logical_id)
 
-            # Remove (j, idj) from outstanding generation list
-            self.outstanding_generations.remove((qid, qseq))
+            # Issue OK
+            logger.debug("Issuing okay to caller")
+            result = (ent_id, fidelity_estimate, now, now)
+            self.issue_ok(result)
 
-        elif creq.num_pairs >= 2:
-            logger.debug("Decrementing number of remaining pairs")
-            creq.num_pairs -= 1
+            # Update number of remaining pairs on request, remove if completed
+            if creq.num_pairs == 1:
+                logger.debug("Generated final pair, removing request")
+                self.requests.pop((qid, qseq))
 
-        else:
-            raise LinkLayerException("Request has invalid number of remaining pairs!")
+                # Remove (j, idj) from outstanding generation list
+                self.outstanding_generations.remove((qid, qseq))
+
+            elif creq.num_pairs >= 2:
+                logger.debug("Decrementing number of remaining pairs")
+                creq.num_pairs -= 1
+
+            else:
+                raise LinkLayerException("Request has invalid number of remaining pairs!")
 
         logger.debug("Finished handling MHP Reply")
+
+    def _extract_mhp_reply(self, result):
+        try:
+            r, other_free_memory, mhp_seq, (qid, qseq), proto_err = result
+            return r, other_free_memory, mhp_seq, (qid, qseq), proto_err
+        except Exception as err:
+            self.issue_err(err=self.ERR_OTHER, err_data=err)
+            raise LinkLayerException("Malformed MHP reply received: {}".format(result))
+
+    def _handle_mhp_sequence(self, mhp_seq):
+        # Sanity check the MHP sequence number
+        if mhp_seq > self.expected_seq:
+            self.outstanding_generations = []
+            logger.error("Returned MHP_SEQ {} greater than expected SEQ {}".format(mhp_seq, self.expected_seq))
+            self.issue_err(self.ERR_OTHER)
+            return False
+
+        elif mhp_seq < self.expected_seq:
+            logger.warning("Received old MHP SEQ {} while expecting SEQ {}".format(mhp_seq, self.expected_seq))
+            return False
+
+        else:
+            return True
 
     def _apply_correction_to_qubit(self, storage_qubit):
         """

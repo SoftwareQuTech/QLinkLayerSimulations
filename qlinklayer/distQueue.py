@@ -116,12 +116,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             return master
 
     def connect_to_peer_protocol(self, other_distQueue):
-        # Create a common connection
-        connection = ClassicalFibreConnection(self.node, other_distQueue.node, length=0.03)
+        if not self.conn:
+            # Create a common connection
+            self.conn = ClassicalFibreConnection(self.node, other_distQueue.node, length=1e-5)
 
         # Perform setup on both protocols
-        self._connect_to_peer_protocol(connection)
-        other_distQueue._connect_to_peer_protocol(connection)
+        self._connect_to_peer_protocol(self.conn)
+        other_distQueue._connect_to_peer_protocol(self.conn)
 
     def _connect_to_peer_protocol(self, connection):
         self.setConnection(connection)
@@ -129,10 +130,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.master = self._establish_master(self.master)
 
     def process_data(self):
-
         # Fetch message from the other side
         [content, t] = self.conn.get_as(self.myID)
-
         if isinstance(content, tuple):
             for item in content:
                 cmd = item[0]

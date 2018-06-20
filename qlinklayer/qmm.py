@@ -71,6 +71,10 @@ class QuantumMemoryManagement:
         self.reserved_qubits[id] = False
         self.node.qmem.release_qubit(id)
 
+    def free_qubits(self, id_list):
+        for q in id_list:
+            self.free_qubit(q)
+
     def reserve_entanglement_pair(self, n=1):
         """
         Reserves a pair of communication qubit and storage qubits for use with MHP.

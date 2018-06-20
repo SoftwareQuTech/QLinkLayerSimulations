@@ -5,7 +5,7 @@ from easysquid.simpleLink import NodeCentricMHP
 from easysquid.easyfibre import HeraldedFibreConnection
 from easysquid.toolbox import EasySquidException, create_logger
 from netsquid.qubits.qubitapi import create_qubits
-
+from netsquid.pydynaa import DynAASim
 logger = create_logger("logger")
 
 
@@ -231,7 +231,8 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
         logger.debug("Sending messages to A ({}) and B ({})".format(dataA, dataB))
         self.channel_M_to_A.put(dataA)
         self.channel_M_to_B.put(dataB)
-        self.mhp_seq += 1
+        if outcome in [1, 2]:
+            self.mhp_seq += 1
         logger.debug("Incremented MHP Sequence Number to {}".format(self.mhp_seq))
 
     @abc.abstractmethod
@@ -483,10 +484,10 @@ class MHPServiceProtocol(TimedServiceProtocol):
     def __init__(self, timeStep, t0=0.0, node=None, connection=None, callback=None):
         super(MHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection,
                                                  callback=callback)
-        self._reset_protocol()
+        self.reset_protocol()
 
     @abc.abstractmethod
-    def _reset_protocol(self):
+    def reset_protocol(self):
         """
         To be used for resetting the protocol for each incoming request.  To be overloaded
         """
@@ -496,7 +497,6 @@ class MHPServiceProtocol(TimedServiceProtocol):
         """
         Generic protocol, either accepts incoming requests (if any) or continues processing current one
         """
-        from netsquid.pydynaa import DynAASim
         logger.debug("{} Running protocol".format(DynAASim().current_time))
         if self._in_progress():
             self._continue_request_handling()
@@ -562,7 +562,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
         self.status = self.STAT_IDLE
 
-    def _reset_protocol(self):
+    def reset_protocol(self):
         """
         Resets the protocol to an unitialized state so that we don't produce entanglement
         :return:
@@ -650,6 +650,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.curPairs = 0
         self.numPairs = len(self.storage_IDs)
         self.storage_physical_ID = self.storage_IDs[self.curPairs]
+        self.reserved_qubits = [comm_q] + storage_q
         logger.debug("Storage IDs: {}".format(self.storage_IDs))
 
     def run_entanglement_protocol(self):
@@ -699,7 +700,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :param passM: any
             Information to pass back up to the EGP
         """
-        result = (0, passM, 0, (0, 0), self.conn.CMD_INFO)
+        result = (0, passM, 0, (0, 0), 0)
         self.callback(result=result)
 
     def _handle_error(self, respM, passM):
@@ -748,7 +749,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         # We have successfully generated all pairs and can reset the protocol
         if self.curPairs >= self.numPairs:
             logger.debug("Completed servicing current request, returning to idle state")
-            self._reset_protocol()
+            self.reset_protocol()
 
         else:
             self.status = self.STAT_BUSY
