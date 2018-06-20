@@ -129,7 +129,7 @@ class TestDistributedQueue(unittest.TestCase):
             (bob, [bobProto]),
         ]
         conns = [
-            (conn, [aliceProto, bobProto])
+            (conn, "dqp_conn", [aliceProto, bobProto])
         ]
 
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
@@ -168,7 +168,7 @@ class TestDistributedQueue(unittest.TestCase):
         nodes = [alice, bob]
 
         conns = [
-            (conn, [aliceProto, bobProto])
+            (conn, "dqp_conn", [aliceProto, bobProto])
         ]
 
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
@@ -209,7 +209,7 @@ class TestDistributedQueue(unittest.TestCase):
         nodes = [alice, bob]
 
         conns = [
-            (conn, [aliceProto, bobProto])
+            (conn, "dqp_conn", [aliceProto, bobProto])
         ]
 
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)

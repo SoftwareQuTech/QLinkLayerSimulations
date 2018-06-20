@@ -27,35 +27,39 @@ class RequestScheduler:
             Tuple containing the request information for the MHP or None if no request
         """
         # Get the queue id containing the next request and obtain the next request
+        if not self.request_ready():
+            logger.debug("Next request is not ready")
+            return None
+
         qid = self.next_pop()
         queue_item = self.distQueue.local_peek(qid)
+        request = queue_item.request
 
-        if not queue_item:
+        if not self.has_resources_for_request(request):
+            logger.debug("Not enough resources for request")
             return None
 
         logger.debug("Scheduler has next request: {}".format(vars(queue_item)))
 
-        # Extract the EGPRequest stored in the request
+        generations = self.construct_generation_list(qid, queue_item)
+
+        self.distQueue.local_pop(qid)
+
+        return generations
+
+    def construct_generation_list(self, qid, queue_item):
         request = queue_item.request
 
-        if not queue_item.ready:
-            return None
-
         # Reserve qubits to be used for the request
-        comm_q, storage_q = self.qmm.reserve_entanglement_pair(request.num_pairs)
+        comm_q, storage_ids = self.qmm.reserve_entanglement_pair(request.num_pairs)
+        free_memory_size = self.qmm.get_free_mem_ad()
 
-        logger.debug("Scheduler allocated comm_q, storage_q ({}, {})".format(comm_q, storage_q))
-        if comm_q == -1 and storage_q == -1:
-            logger.debug("Scheduler determined it is not possible to fulfill this request")
-            return None
+        generation_list = []
+        for storage_q in storage_ids:
+            generation_request = (queue_item.ready, (qid, queue_item.seq), comm_q, storage_q, None, free_memory_size)
+            generation_list.append(generation_request)
 
-        # Only remove items that are ready to be serviced
-        if queue_item.ready:
-            self.distQueue.local_pop(qid)
-
-        # Construct the expected tuple
-        request_tup = (queue_item.ready, (qid, queue_item.seq), request, None, comm_q, storage_q)
-        return request_tup
+        return generation_list
 
     def get_queue(self, request):
         """
@@ -86,14 +90,6 @@ class RequestScheduler:
             logger.debug("No requests in distributed queue")
             return False
 
-        request = queue_item.request
-
-        # Verify whether we have the resources to satisfy this request
-        logger.debug("Checking if we can satisfy request: {}".format(vars(request)))
-        if self.other_mem < request.num_pairs or self.my_free_memory < request.num_pairs:
-            logger.debug("Insufficient memory requirements to satisfy request")
-            return False
-
         # Determine min time of item on that queue
         minTime = self.distQueue.get_min_schedule(qid)
         if minTime is None:
@@ -105,6 +101,20 @@ class RequestScheduler:
             return queue_item.ready
         else:
             return False
+
+    def has_resources_for_request(self, request):
+        # Verify whether we have the resources to satisfy this request
+        logger.debug("Checking if we can satisfy request: {}".format(vars(request)))
+        n = request.num_pairs
+        if self.other_mem < n:
+            logger.debug("Peer memory size {} less than requested pairs {}".format(self.other_mem, n))
+            return False
+
+        elif self.my_free_memory < n:
+            logger.debug("Local memory size {} less than requested pairs {}".format(self.my_free_memory, n))
+            return False
+
+        return True
 
     def timeout_stale_requests(self):
         # Check if there are any items in the queue

@@ -61,7 +61,7 @@ class TestRequestScheduler(unittest.TestCase):
         pydynaa.DynAASim().reset()
         qmm = QuantumMemoryManagement(node=self.nodeA)
         test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
-
+        test_scheduler.other_mem = 1
         num_requests = 100
         request_set = [EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=10, purpose_id=0,
                                   priority=0) for i in range(num_requests)]
@@ -69,7 +69,7 @@ class TestRequestScheduler(unittest.TestCase):
         conn = self.dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",
                                    nodes=[(self.nodeA, [self.dqpA]), (self.nodeB, [self.dqpB])],
-                                   connections=[(conn, [self.dqpA, self.dqpB])])
+                                   connections=[(conn, "dqp_conn", [self.dqpA, self.dqpB])])
         self.network.start()
 
         sim_steps = 2000
@@ -90,9 +90,9 @@ class TestRequestScheduler(unittest.TestCase):
         for request in stale_requests:
             self.assertGreaterEqual(sim_steps, request.create_time + request.max_time)
 
-        # Verify that the next request should not be stale
-        (flag, (qid, qseq), req, param, comm_q, storage_q) = test_scheduler.next()
-        self.assertGreater(req.create_time + req.max_time, sim_steps)
+        # Verify that the next request is the one we submitted
+        generations = test_scheduler.next()
+        self.assertEqual(generations, [(True, (0, 50), 0, 1, None, 0)])
 
     def test_request_ready(self):
         pydynaa.DynAASim().reset()
@@ -106,7 +106,7 @@ class TestRequestScheduler(unittest.TestCase):
         conn = self.dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",
                                    nodes=[(self.nodeA, [self.dqpA]), (self.nodeB, [self.dqpB])],
-                                   connections=[(conn, [self.dqpA, self.dqpB])])
+                                   connections=[(conn, "dqp_conn", [self.dqpA, self.dqpB])])
         self.network.start()
 
         # Check that an empty queue has no ready requests
@@ -123,8 +123,8 @@ class TestRequestScheduler(unittest.TestCase):
         self.assertTrue(test_scheduler.request_ready())
 
         # Verify that the next request is the one we submitted
-        (flag, (qid, qseq), req, param, comm_q, storage_q) = test_scheduler.next()
-        self.assertEqual(request, req)
+        generations = test_scheduler.next()
+        self.assertEqual(generations, [(True, (0, 0), 0, 1, None, 0)])
 
     def test_next(self):
         pydynaa.DynAASim().reset()
@@ -136,7 +136,7 @@ class TestRequestScheduler(unittest.TestCase):
         conn = self.dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",
                                    nodes=[(self.nodeA, [self.dqpA]), (self.nodeB, [self.dqpB])],
-                                   connections=[(conn, [self.dqpA, self.dqpB])])
+                                   connections=[(conn, "dqp_conn", [self.dqpA, self.dqpB])])
         self.network.start()
 
         # Check that an empty queue has no next requests
@@ -157,9 +157,15 @@ class TestRequestScheduler(unittest.TestCase):
         for q in storage_q:
             qmmA.free_qubit(q)
 
+        # Check that lack of peer resources causes no next request
+        self.assertIsNone(test_scheduler.next())
+
         # Verify that now we can obtain the next request
-        (flag, (qid, qseq), req, param, comm_q, storage_q) = test_scheduler.next()
-        self.assertEqual(request, req)
+        test_scheduler.other_mem = request.num_pairs
+
+        # Verify that the next request is the one we submitted
+        generations = test_scheduler.next()
+        self.assertEqual(generations, [(True, (0, 0), 0, 1, None, 0)])
 
 
 if __name__ == "__main__":

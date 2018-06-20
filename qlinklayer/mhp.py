@@ -233,7 +233,9 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
         self.channel_M_to_B.put(dataB)
         if outcome in [1, 2]:
             self.mhp_seq += 1
-        logger.debug("Incremented MHP Sequence Number to {}".format(self.mhp_seq))
+            logger.debug("Incremented MHP Sequence Number to {}".format(self.mhp_seq))
+        else:
+            logger.debug("Entanglement failed at heralding station")
 
     @abc.abstractmethod
     def _get_outcome_data(self, outcome):
@@ -646,12 +648,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return: None
         """
         self.electron_physical_ID = comm_q
-        self.storage_IDs = storage_q
-        self.curPairs = 0
-        self.numPairs = len(self.storage_IDs)
-        self.storage_physical_ID = self.storage_IDs[self.curPairs]
-        self.reserved_qubits = [comm_q] + storage_q
-        logger.debug("Storage IDs: {}".format(self.storage_IDs))
+        self.storage_physical_ID = storage_q
 
     def run_entanglement_protocol(self):
         """
@@ -728,31 +725,17 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         outcome, mhp_seq, aid = respM
         other_free_memory, other_aid = passM
 
-        # Store information for extraction if necessary
-        self.mhp_seq = mhp_seq
-        self.outcome = outcome
-        self.other_free_memory = other_free_memory
-        self.other_aid = other_aid
-
         # Clear used qubit ID if we failed, otherwise increment our successful generatoin
         if outcome == 0:
             self.node.qmem.release_qubit(self.storage_physical_ID)
-        elif outcome in [1, 2]:
-            self.curPairs += 1
 
-        result = (self.outcome, self.other_free_memory, self.mhp_seq, self.other_aid, 0)
+        self.status = self.STAT_IDLE
+
+        result = (outcome, other_free_memory, mhp_seq, other_aid, 0)
         logger.debug("Finished running protocol, returning results: {}".format(result))
 
         # Call back with the results
         self.callback(result=result)
-
-        # We have successfully generated all pairs and can reset the protocol
-        if self.curPairs >= self.numPairs:
-            logger.debug("Completed servicing current request, returning to idle state")
-            self.reset_protocol()
-
-        else:
-            self.status = self.STAT_BUSY
 
     def handle_photon_emission(self, photon):
         """

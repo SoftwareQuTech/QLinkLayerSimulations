@@ -441,40 +441,29 @@ class NodeCentricEGP(EGP):
         for request in stale_requests:
             self.issue_err(err=self.ERR_TIMEOUT, err_data=request)
 
-        # Check if scheduler has any ready requests
-        if self.scheduler.request_ready():
-            # Grab the request
-            request = self.scheduler.next()
-            if not request:
-                return False
-
-            logger.debug("Scheduler has request {} ready".format(request))
-
-            # Get necessary information for handling the request at MHP
-            (flag, (qid, qseq), req, param, comm_q, storage_q) = request
-            free_memory_size = self.qmm.get_free_mem_ad()
-
-            # Add this request to outstanding requests
-            self.outstanding_generations.append((qid, qseq))
-
-            # Ready the data for retrieval by the protocol
-            request = (flag, (qid, qseq), comm_q, storage_q, param, free_memory_size)
-            logger.debug("Constructed request info {} for MHP_NC".format(request))
-            self.mhp_service.put_ready_data(self.node.nodeID, request)
-
-            # Tell the protocol that data is ready
-            return True
+        # Process any currently outstanding generations
+        if self.outstanding_generations:
+            generation_request = self.outstanding_generations[0]
+            logger.debug("Have outstanding generation, passing {} to MHP".format(generation_request))
+            self.mhp_service.put_ready_data(self.node.nodeID, generation_request)
 
         else:
-            logger.debug("Scheduler has no requests ready")
-            request = (False, (0, 0), None, None, 0, [])
-            (flag, (qid, qseq), req, param, comm_q, storage_q) = request
-            free_memory_size = self.qmm.get_free_mem_ad()
-            request = (flag, (qid, qseq), comm_q, storage_q, param, free_memory_size)
-            logger.debug("Constructed request info {} for MHP_NC".format(request))
-            self.mhp_service.put_ready_data(self.node.nodeID, request)
+            incoming_generations = self.scheduler.next()
+            if incoming_generations:
+                self.outstanding_generations += incoming_generations
+                generation_request = self.outstanding_generations[0]
+                logger.debug("Have outstanding generation, passing {} to MHP".format(generation_request))
+                self.mhp_service.put_ready_data(self.node.nodeID, generation_request)
 
-            return True
+            # Otherwise have the MHP send free memory advertisement
+            else:
+                logger.debug("Scheduler has no requests ready")
+                free_memory_size = self.qmm.get_free_mem_ad()
+                request = (False, (None, None), None, None, None, free_memory_size)
+                logger.debug("Constructed INFO request {} for MHP_NC".format(request))
+                self.mhp_service.put_ready_data(self.node.nodeID, request)
+
+        return True
 
     # Callback handler to be given to MHP so that EGP updates when request is satisfied
     def handle_reply_mhp(self, result):
@@ -516,7 +505,6 @@ class NodeCentricEGP(EGP):
             logger.error("Took too long to generate pair, removing request and resetting")
             # Drop the request
             self.requests.pop((qid, qseq))
-            self.outstanding_generations.remove((qid, qseq))
 
             # Clear out memory that may have been used
             self.qmm.free_qubits(self.mhp.reserved_qubits)
@@ -527,7 +515,8 @@ class NodeCentricEGP(EGP):
 
         elif valid_mhp:
             self.expected_seq = (self.expected_seq + 1) % self.dqp.maxSeq
-
+            logger.debug("Removing generation request")
+            self.outstanding_generations.pop(0)
             # Check if we need to correct the qubit
             if r == 2 and self.node.nodeID == creq.otherID:
                 logger.debug("Applying correction to qubit")
@@ -551,9 +540,6 @@ class NodeCentricEGP(EGP):
                 logger.debug("Generated final pair, removing request")
                 self.requests.pop((qid, qseq))
 
-                # Remove (j, idj) from outstanding generation list
-                self.outstanding_generations.remove((qid, qseq))
-
             elif creq.num_pairs >= 2:
                 logger.debug("Decrementing number of remaining pairs")
                 creq.num_pairs -= 1
@@ -574,9 +560,11 @@ class NodeCentricEGP(EGP):
     def _handle_mhp_sequence(self, mhp_seq):
         # Sanity check the MHP sequence number
         if mhp_seq > self.expected_seq:
-            self.outstanding_generations = []
             logger.error("Returned MHP_SEQ {} greater than expected SEQ {}".format(mhp_seq, self.expected_seq))
-            self.issue_err(self.ERR_OTHER)
+            for generation in self.outstanding_generations:
+                self.issue_err(err=self.ERR_OTHER, err_data=generation)
+            self.outstanding_generations = []
+            self.expected_seq = mhp_seq
             return False
 
         elif mhp_seq < self.expected_seq:

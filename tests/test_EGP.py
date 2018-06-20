@@ -66,9 +66,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         ]
 
         conns = [
-            (egpA.dqp.conn, [egpA.dqp, egpB.dqp]),
-            (egpA.conn, [egpA, egpB]),
-            (egpA.mhp.conn, [egpA.mhp, egpB.mhp])
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
         egpA.mhp_service.start()
@@ -87,6 +87,7 @@ class TestNodeCentricEGP(unittest.TestCase):
             qA = aliceMemory.get_qubit(i + 1)
             qB = bobMemory.get_qubit(i + 1)
             self.assertEqual(qA.qstate, qB.qstate)
+            print(qA.qstate, qB.qstate)
 
     def test_unresponsive_dqp(self):
         ns.set_qstate_formalism(ns.DM_FORMALISM)
@@ -134,9 +135,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         ]
 
         conns = [
-            (egpA.dqp.conn, [egpA.dqp]),
-            (egpA.conn, [egpA, egpB]),
-            (egpA.mhp.conn, [egpA.mhp, egpB.mhp])
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
         egpA.mhp_service.start()
@@ -194,9 +195,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         ]
 
         conns = [
-            (egpA.dqp.conn, [egpA.dqp, egpB.dqp]),
-            (egpA.conn, [egpA, egpB]),
-            (egpA.mhp.conn, [egpA.mhp])
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp])
         ]
 
         egpA.mhp.start()
@@ -255,8 +256,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         ]
 
         conns = [
-            (egpA.dqp.conn, [egpA.dqp, egpB.dqp]),
-            (egpA.mhp.conn, [egpA.mhp, egpB.mhp])
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
         egpA.mhp_service.start()
@@ -325,9 +326,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         ]
 
         conns = [
-            (egpA.dqp.conn, [egpA.dqp, egpB.dqp]),
-            (egpA.conn, [egpA, egpB]),
-            (egpA.mhp.conn, [egpA.mhp, egpB.mhp])
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
         egpA.mhp_service.start()
