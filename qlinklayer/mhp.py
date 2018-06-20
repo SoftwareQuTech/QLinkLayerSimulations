@@ -120,11 +120,10 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
     """
     Generic connection to be used with MHP protocols, to be overloaded
     """
-    # Sequence number
-    mhp_seq = 0
-
     def __init__(self, *args, **kwargs):
         self.node_requests = {}
+        self.mhp_seq = 0
+        self.max_seq = 2**32 - 1
         super(MHPHeraldedConnection, self).__init__(*args, **kwargs)
 
     def _handle_cq(self, classical, qubit, sender):
@@ -218,21 +217,22 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
         :return: Non
         """
         # Send notification messages back.
-        logger.debug("Sending notification to both")
         if outcome == self.ERR_GENERAL:
+            logger.debug("Sending error information to both")
             dataA, dataB = self._get_error_data(self.ERR_GENERAL)
         else:
+            logger.debug("Sending generation outcome information to both")
             dataA, dataB = self._get_outcome_data(outcome)
 
         if dataA is None or dataB is None:
             raise EasySquidException("Missing control data.")
 
         # Send messages back to the nodes
-        logger.debug("Sending messages to A ({}) and B ({})".format(dataA, dataB))
+        logger.debug("Sending messages to A: {} and B: {}".format(dataA, dataB))
         self.channel_M_to_A.put(dataA)
         self.channel_M_to_B.put(dataB)
         if outcome in [1, 2]:
-            self.mhp_seq += 1
+            self.mhp_seq = (self.mhp_seq + 1) % self.max_seq
             logger.debug("Incremented MHP Sequence Number to {}".format(self.mhp_seq))
         else:
             logger.debug("Entanglement failed at heralding station")
@@ -322,8 +322,8 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         pass_BM = self.node_requests[self.nodeB.nodeID].pass_data
         aid_B = pass_BM[1]
 
-        resp_MA = [outcome, self.mhp_seq, aid_A]
-        resp_MB = [outcome, self.mhp_seq, aid_B]
+        resp_MA = (outcome, self.mhp_seq, aid_A)
+        resp_MB = (outcome, self.mhp_seq, aid_B)
 
         respA = MHPReply(response_data=resp_MA, pass_data=pass_BM)
         respB = MHPReply(response_data=resp_MB, pass_data=pass_AM)
@@ -344,6 +344,13 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         err = []
         if None in self.node_requests.values():
             err.append(self.ERR_NO_CLASSICAL_OTHER)
+
+        if not err:
+            return self.ERR_GENERAL
+
+        elif len(err) == 1:
+            return err[0]
+
         return err
 
     def _process_incoming_request(self, sender, request):
@@ -558,7 +565,10 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
     """
     STAT_IDLE = 0
     STAT_BUSY = 1
-    STAT_WAIT_ENT = 2
+
+    PROTO_OK = 0
+    NO_GENERATION = 0
+    ERR_LOCAL = 31
 
     def __init__(self, timeStep, t0, node, connection):
         super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
@@ -570,12 +580,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return:
         """
         self.electron_physical_ID = 0
-        self.storage_IDs = []
-        self.curPairs = 0
-        self.numPairs = 0
         self.storage_physical_ID = 0
         self.status = self.STAT_IDLE
-        self.request_data = None
+        self.aid = None
 
     def _has_resources(self):
         """
@@ -589,23 +596,15 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         Check if the protocol is busy
         :return:
         """
-        return self.status == self.STAT_BUSY or self.status == self.STAT_WAIT_ENT
+        return self.status == self.STAT_BUSY
 
     def _continue_request_handling(self):
         """
-        Continues handling in progress requests for entanglement.  This will run if attempts at entanglement
-        generation fail or if we need to generate multiple pairs of entangled qubits.
+        Continues handling in progress requests for entanglement.  This will run if we are waiting for communication
+        from the midpoint
         """
-        logger.debug("Continuing process of current request, current pair: {}".format(self.curPairs))
-
-        if self.status == self.STAT_BUSY:
-            # Update the storage location of the entangled qubit
-            self.storage_physical_ID = self.storage_IDs[self.curPairs]
-
-            self.run_entanglement_protocol()
-
-        elif self.status == self.STAT_WAIT_ENT:
-            logger.debug("Waiting for heralding reply for storage id {}".format(self.storage_physical_ID))
+        logger.debug("Continuing process of current request, current pair: ({}, {})".format(self.electron_physical_ID,
+                                                                                            self.storage_physical_ID))
 
     def _handle_request(self, request_data):
         """
@@ -621,7 +620,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # Extract request information
         flag, aid, comm_q, storage_q, param, free_memory_size = request_data
-        self.request_data = request_data
         self.aid = aid
         self.free_memory_size = free_memory_size
 
@@ -661,10 +659,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         except Exception as e:
             logger.error("Error occured attempting entanglement: {}".format(e))
-            result = (self.outcome, self.other_free_memory, self.mhp_seq, self.other_aid, 1)
-
-            logger.debug("Passing back results: {}".format(result))
-            self.callback(result=result)
+            self._handle_error(0, 1)
 
     def _process_reply(self, reply_message):
         """
@@ -697,7 +692,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :param passM: any
             Information to pass back up to the EGP
         """
-        result = (0, passM, 0, (0, 0), 0)
+        result = (self.NO_GENERATION, passM, -1, self.aid, self.PROTO_OK)
         self.callback(result=result)
 
     def _handle_error(self, respM, passM):
@@ -709,7 +704,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             Error information to pass back to EGP
         """
         self.node.qmem.release_qubit(self.storage_physical_ID)
-        result = (0, 0, 0, (0, 0), passM)
+        result = (self.NO_GENERATION, None, -1, self.aid, passM)
         self.callback(result=result)
 
     def _handle_production_reply(self, respM, passM):
@@ -727,11 +722,12 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # Clear used qubit ID if we failed, otherwise increment our successful generatoin
         if outcome == 0:
+            logger.debug("Generation attempt failed, releasing qubit {}".format(self.storage_physical_ID))
             self.node.qmem.release_qubit(self.storage_physical_ID)
 
         self.status = self.STAT_IDLE
 
-        result = (outcome, other_free_memory, mhp_seq, other_aid, 0)
+        result = (outcome, other_free_memory, mhp_seq, other_aid, self.PROTO_OK)
         logger.debug("Finished running protocol, returning results: {}".format(result))
 
         # Call back with the results
@@ -748,7 +744,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         pass_info = (self.free_memory_size, self.aid)
         logger.debug("Sending pass info: {}".format(pass_info))
         self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
-        self.status = self.STAT_WAIT_ENT
 
 
 class SimulatedNodeCentricMHPService(Service):
