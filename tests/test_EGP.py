@@ -180,13 +180,15 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=200,
+        max_time = 200
+        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=max_time,
                                    purpose_id=1, priority=10)
 
         alice_scheduled_create = partial(egpA.create, creq=alice_request)
 
         # Schedule a sequence of various create requests
-        sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
+        t0 = 0
+        sim_scheduler.schedule_function(func=alice_scheduled_create, t=t0)
 
         # Construct a network for the simulation
         nodes = [
@@ -207,8 +209,18 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         pydynaa.DynAASim().run(340)
 
-        self.assertEqual(len(alice_results), 1)
-        self.assertEqual(alice_results, [egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER])
+        # Assert that there were a few entanglement attempts before timing out the request
+        expected_err_mhp = egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER
+        expected_err_egp = egpA.ERR_TIMEOUT
+
+        # Unresponsive error two times followed by a timeout of the request
+        expected_results = [(expected_err_mhp, None), (expected_err_mhp, None), (expected_err_egp, alice_request)]
+        self.assertEqual(len(alice_results), 3)
+        self.assertEqual(alice_results[0:2], expected_results[0:2])
+
+        err, request = alice_results[2]
+        self.assertEqual(err, expected_err_egp)
+        self.assertEqual(request.create_time, alice_request.create_time)
 
     def test_unresponsive_egp(self):
         ns.set_qstate_formalism(ns.DM_FORMALISM)
