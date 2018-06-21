@@ -337,19 +337,18 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Note that if we are not the master node then we hold no prior queue id
         [qid, rec_qseq, request] = self.waitAddAcks[ackd_id]
 
-        logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, qseq))
-
         # Check whether we are in control of the queue
         if self.master:
             # We are in control
-
+            logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, rec_qseq))
             # Mark this item as ready
             # TODO add time to be scheduled
             logger.debug("Distributed queue readying item ({}, {})".format(qid, rec_qseq))
             self.queueList[qid].ready(rec_qseq, 0)
+            agreed_qseq = rec_qseq
 
         else:
-
+            logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, qseq))
             # We are not in control but merely hold a copy of the queue
             # We can now add
             self.queueList[qid].add_with_id(nodeID, qseq, request)
@@ -358,15 +357,16 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # TODO add time to be scheduled
             logger.debug("Distributed queue readying item ({}, {})".format(qid, qseq))
             self.queueList[qid].ready(qseq, 0)
+            agreed_qseq = qseq
 
         conn_delay = self.conn.channel_from_node(self.node).compute_delay()
         scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
         logger.debug("Scheduling after {}".format(scheduleAfter))
-        self.queueList[qid].modify_schedule(qseq, scheduleAfter)
+        self.queueList[qid].modify_schedule(agreed_qseq, scheduleAfter)
 
         # Return the results if told to
         if self.add_callback:
-            self.add_callback((self.DQ_OK, qid, qseq, copy(request)))
+            self.add_callback((self.DQ_OK, qid, agreed_qseq, copy(request)))
 
         # Remove item from waiting acks
         self.waitAddAcks.pop(ackd_id, None)
