@@ -57,43 +57,6 @@ class TestRequestScheduler(unittest.TestCase):
         test_scheduler.update_other_mem_size(mem=test_size)
         self.assertEqual(test_scheduler.other_mem, test_size)
 
-    def test_timeout_stale_requests(self):
-        pydynaa.DynAASim().reset()
-        qmm = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
-        test_scheduler.other_mem = 1
-        num_requests = 100
-        request_set = [EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=10, purpose_id=0,
-                                  priority=0) for i in range(num_requests)]
-
-        conn = self.dqpA.conn
-        self.network = EasyNetwork(name="DQPNetwork",
-                                   nodes=[(self.nodeA, [self.dqpA]), (self.nodeB, [self.dqpB])],
-                                   connections=[(conn, "dqp_conn", [self.dqpA, self.dqpB])])
-        self.network.start()
-
-        sim_steps = 2000
-        for t, request in enumerate(request_set):
-            if t % 2:
-                request.create_time = t
-                self.dqpA.add(request)
-            else:
-                request.create_time = sim_steps + t
-                self.dqpB.add(request)
-
-        pydynaa.DynAASim().run(sim_steps)
-
-        # Check that all requests became stale
-        stale_requests = test_scheduler.timeout_stale_requests()
-        self.assertEqual(len(stale_requests), num_requests // 2)
-
-        for request in stale_requests:
-            self.assertGreaterEqual(sim_steps, request.create_time + request.max_time)
-
-        # Verify that the next request is the one we submitted
-        generations = test_scheduler.next()
-        self.assertEqual(generations, [(True, (0, 50), 0, 1, None, 0)])
-
     def test_request_ready(self):
         pydynaa.DynAASim().reset()
         qmmA = QuantumMemoryManagement(node=self.nodeA)

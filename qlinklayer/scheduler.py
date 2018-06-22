@@ -116,32 +116,6 @@ class RequestScheduler:
 
         return True
 
-    def timeout_stale_requests(self):
-        # Check if there are any items in the queue
-        qid = self.next_pop()
-        next_queue_item = self.distQueue.local_peek(qid)
-
-        # Continue until we run out of items or find something to service
-        stale_requests = []
-        now = pydynaa.DynAASim().current_time
-        while next_queue_item:
-            # Grab the EGPRequest off of the queue item
-            next_request = next_queue_item.request
-
-            # Check if we missed or hit a deadline
-            if next_request.create_time + next_request.max_time <= now:
-                # Pass up all stale requests for error handling
-                stale_requests.append(self.distQueue.local_pop(qid).request)
-
-            # We found an item we can still service
-            else:
-                return stale_requests
-
-            qid = self.next_pop()
-            next_queue_item = self.distQueue.local_peek(qid)
-
-        return stale_requests
-
     def update_other_mem_size(self, mem):
         """
         Stores the other peer's free memory locally for use with scheduling
