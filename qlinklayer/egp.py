@@ -446,21 +446,26 @@ class NodeCentricEGP(EGP):
             Result of performing add of request, contains add error code, absolute qid and the request
         :return:
         """
-        # Store the request locally if DQP ADD was successful
-        logger.debug("Completed adding item to Distributed Queue, got result: {}".format(result))
-        status, qid, qseq, creq = result
-        if status == self.dqp.DQ_OK:
-            self.requests[(qid, qseq)] = creq
+        try:
+            # Store the request locally if DQP ADD was successful
+            logger.debug("Completed adding item to Distributed Queue, got result: {}".format(result))
+            status, qid, qseq, creq = result
+            if status == self.dqp.DQ_OK:
+                self.requests[(qid, qseq)] = creq
 
-        # Handle errors that may have occurred while adding the request
-        elif status == self.dqp.DQ_TIMEOUT:
-            self.issue_err(self.ERR_NOTIME)
+            # Handle errors that may have occurred while adding the request
+            elif status == self.dqp.DQ_TIMEOUT:
+                self.issue_err(self.ERR_NOTIME)
 
-        elif status == self.dqp.DQ_REJECT:
-            self.issue_err(self.ERR_REJECTED)
+            elif status == self.dqp.DQ_REJECT:
+                self.issue_err(self.ERR_REJECTED)
 
-        else:
-            self.issue_err(self.ERR_OTHER)
+            else:
+                self.issue_err(self.ERR_OTHER)
+
+        except Exception as err_data:
+            logger.error("Error occurred processing DQP add callback! {}".format(err_data))
+            self.issue_err(err=self.ERR_OTHER, err_data=err_data)
 
     # Handler to be given to MHP as a stateProvider
     def trigger_pair_mhp(self):
@@ -468,35 +473,40 @@ class NodeCentricEGP(EGP):
         Handler to be given to the MHP service that allows it to ask the scheduler
         if there are any requests and to receive a request to process
         """
-        # Pass request information back up to higher layer protocol
-        stale_requests = self.scheduler.timeout_stale_requests()
-        for request in stale_requests:
-            self.issue_err(err=self.ERR_TIMEOUT, err_data=request)
+        try:
+            # Pass request information back up to higher layer protocol
+            stale_requests = self.scheduler.timeout_stale_requests()
+            for request in stale_requests:
+                self.issue_err(err=self.ERR_TIMEOUT, err_data=request)
 
-        # Process any currently outstanding generations
-        if self.outstanding_generations:
-            generation_request = self.outstanding_generations[self.curr_gen]
-            logger.debug("Have outstanding generation, passing {} to MHP".format(generation_request))
-            self.mhp_service.put_ready_data(self.node.nodeID, generation_request)
-
-        else:
-            incoming_generations = self.scheduler.next()
-            if incoming_generations:
-                self.outstanding_generations = incoming_generations
-                self.curr_gen = 0
+            # Process any currently outstanding generations
+            if self.outstanding_generations:
                 generation_request = self.outstanding_generations[self.curr_gen]
                 logger.debug("Have outstanding generation, passing {} to MHP".format(generation_request))
                 self.mhp_service.put_ready_data(self.node.nodeID, generation_request)
 
-            # Otherwise have the MHP send free memory advertisement
             else:
-                logger.debug("Scheduler has no requests ready")
-                free_memory_size = self.qmm.get_free_mem_ad()
-                request = (False, None, None, None, None, free_memory_size)
-                logger.debug("Constructed INFO request {} for MHP_NC".format(request))
-                self.mhp_service.put_ready_data(self.node.nodeID, request)
+                incoming_generations = self.scheduler.next()
+                if incoming_generations:
+                    self.outstanding_generations = incoming_generations
+                    self.curr_gen = 0
+                    generation_request = self.outstanding_generations[self.curr_gen]
+                    logger.debug("Have outstanding generation, passing {} to MHP".format(generation_request))
+                    self.mhp_service.put_ready_data(self.node.nodeID, generation_request)
 
-        return True
+                # Otherwise have the MHP send free memory advertisement
+                else:
+                    logger.debug("Scheduler has no requests ready")
+                    free_memory_size = self.qmm.get_free_mem_ad()
+                    request = (False, None, None, None, None, free_memory_size)
+                    logger.debug("Constructed INFO request {} for MHP_NC".format(request))
+                    self.mhp_service.put_ready_data(self.node.nodeID, request)
+
+            return True
+
+        except Exception as err_data:
+            logger.error("Error occurred when triggering MHP! {}".format(err_data))
+            self.issue_err(err=self.ERR_OTHER, err_data=err_data)
 
     # Callback handler to be given to MHP so that EGP updates when request is satisfied
     def handle_reply_mhp(self, result):
@@ -505,53 +515,58 @@ class NodeCentricEGP(EGP):
         :param result: tuple
             Contains the processing result information from attempting entanglement generation
         """
-        # Get the MHP results
-        logger.debug("Handling MHP Reply: {}".format(result))
-        r, other_free_memory, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
+        try:
+            # Get the MHP results
+            logger.debug("Handling MHP Reply: {}".format(result))
+            r, other_free_memory, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
 
-        # Check if there was memory information included in the reply
-        if other_free_memory is not None:
-            logger.debug("Updating scheduler with other mem size {}".format(other_free_memory))
-            self.scheduler.update_other_mem_size(mem=other_free_memory)
+            # Check if there was memory information included in the reply
+            if other_free_memory is not None:
+                logger.debug("Updating scheduler with other mem size {}".format(other_free_memory))
+                self.scheduler.update_other_mem_size(mem=other_free_memory)
 
-        # If no absolute queue id is included then info was passed or an error occurred
-        if aid is None:
-            logger.debug("Handling reply that does not contain an absolute queue id")
-            self._handle_reply_without_aid(proto_err)
+            # If no absolute queue id is included then info was passed or an error occurred
+            if aid is None:
+                logger.debug("Handling reply that does not contain an absolute queue id")
+                self._handle_reply_without_aid(proto_err)
 
-        # Otherwise this response is associated with a generation attempt
-        else:
-            # Check if we need to time out this request
-            now = self.get_current_time()
-            creq = self.requests[aid]
-            deadline = creq.create_time + creq.max_time
+            # Otherwise this response is associated with a generation attempt
+            else:
+                # Check if we need to time out this request
+                now = self.get_current_time()
+                creq = self.requests[aid]
+                deadline = creq.create_time + creq.max_time
 
-            # Check if we need to timeout this request
-            if now > deadline:
-                logger.error("Timeout occurred processing request!")
-                self._clear_request(aid)
-                self.issue_err(err=self.ERR_TIMEOUT, err_data=creq)
-                return
+                # Check if we need to timeout this request
+                if now > deadline:
+                    logger.error("Timeout occurred processing request!")
+                    self._clear_request(aid)
+                    self.issue_err(err=self.ERR_TIMEOUT, err_data=creq)
+                    return
 
-            # Check if an error occurred while processing a request
-            if proto_err:
-                logger.error("Protocol error occured in MHP: {}".format(proto_err))
-                self.issue_err(proto_err)
+                # Check if an error occurred while processing a request
+                if proto_err:
+                    logger.error("Protocol error occured in MHP: {}".format(proto_err))
+                    self.issue_err(proto_err)
 
-            # No entanglement generation
-            if r == 0:
-                logger.warning("Failed to produce entanglement with other node")
-                return
+                # No entanglement generation
+                if r == 0:
+                    logger.warning("Failed to produce entanglement with other node")
+                    return
 
-            # Check if we need to time out this request
-            logger.debug("Processing MHP SEQ {}".format(mhp_seq))
-            valid_mhp = self._process_mhp_seq(mhp_seq)
+                # Check if we need to time out this request
+                logger.debug("Processing MHP SEQ {}".format(mhp_seq))
+                valid_mhp = self._process_mhp_seq(mhp_seq)
 
-            if valid_mhp:
-                logger.debug("Handling reply corresponding to absolute queue id {}".format(aid))
-                self._handle_generation_reply(r, mhp_seq, aid)
+                if valid_mhp:
+                    logger.debug("Handling reply corresponding to absolute queue id {}".format(aid))
+                    self._handle_generation_reply(r, mhp_seq, aid)
 
-        logger.debug("Finished handling MHP Reply")
+            logger.debug("Finished handling MHP Reply")
+
+        except Exception as err_data:
+            logger.error("An error occurred handling MHP Reply! {}".format(err_data))
+            self.issue_err(err=self.ERR_OTHER, err_data=err_data)
 
     def _extract_mhp_reply(self, result):
         """

@@ -507,13 +507,18 @@ class MHPServiceProtocol(TimedServiceProtocol):
         """
         Generic protocol, either accepts incoming requests (if any) or continues processing current one
         """
-        logger.debug("{} Running protocol".format(DynAASim().current_time))
-        if self._in_progress():
-            self._continue_request_handling()
+        try:
+            logger.debug("{} Running protocol".format(DynAASim().current_time))
+            if self._in_progress():
+                self._continue_request_handling()
 
-        elif self._has_resources() and self.stateProvider():
-            request_data = self.service.get_as(self.node.nodeID)
-            self._handle_request(request_data)
+            elif self._has_resources() and self.stateProvider():
+                request_data = self.service.get_as(self.node.nodeID)
+                self._handle_request(request_data)
+
+        except Exception as err_data:
+            result = self._construct_error_result(err_data)
+            self.callback(result=result)
 
     @abc.abstractmethod
     def _in_progress(self):
@@ -544,16 +549,31 @@ class MHPServiceProtocol(TimedServiceProtocol):
         """
         pass
 
+    @abc.abstractmethod
+    def _construct_error_result(self, err_data, **kwargs):
+        """
+        Constructs a result message that can be interpretted by the callback
+        :param err_data: obj any
+            Error information to include within the result
+        :return:
+        """
+        pass
+
     def process_data(self):
         """
 
         :return:
         """
-        [msg, deltaT] = self.conn.get_as(self.node.nodeID)
-        logger.debug("{} Received message {}".format(DynAASim().current_time, msg))
-        respM, passM = msg
-        reply_message = MHPReply(response_data=respM, pass_data=passM)
-        self._process_reply(reply_message)
+        try:
+            [msg, deltaT] = self.conn.get_as(self.node.nodeID)
+            logger.debug("{} Received message {}".format(DynAASim().current_time, msg))
+            respM, passM = msg
+            reply_message = MHPReply(response_data=respM, pass_data=passM)
+            self._process_reply(reply_message)
+
+        except Exception as err_data:
+            result = self._construct_error_result(err_data)
+            self.callback(result=result)
 
     @abc.abstractmethod
     def _process_reply(self, reply_message):
@@ -705,8 +725,12 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             Error information to pass back to EGP
         """
         self.node.qmem.release_qubit(self.storage_physical_ID)
-        result = (self.NO_GENERATION, None, -1, self.aid, passM)
+        result = self._construct_error_result(err_data=passM)
         self.callback(result=result)
+
+    def _construct_error_result(self, err_data, **kwargs):
+        result = (self.NO_GENERATION, None, -1, self.aid, err_data)
+        return result
 
     def _handle_production_reply(self, respM, passM):
         """
@@ -738,13 +762,19 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         Handles the photon when created.
         """
-        logger.debug("{} Storing entangled qubit into location {}".format(self.node.nodeID, self.storage_physical_ID))
-        if self.electron_physical_ID != self.storage_physical_ID:
-            self.node.qmem.move_qubit(self.electron_physical_ID, self.storage_physical_ID)
+        try:
+            logger.debug("{} Storing entangled qubit into location {}".format(self.node.nodeID,
+                                                                              self.storage_physical_ID))
+            if self.electron_physical_ID != self.storage_physical_ID:
+                self.node.qmem.move_qubit(self.electron_physical_ID, self.storage_physical_ID)
 
-        pass_info = (self.free_memory_size, self.aid)
-        logger.debug("Sending pass info: {}".format(pass_info))
-        self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
+            pass_info = (self.free_memory_size, self.aid)
+            logger.debug("Sending pass info: {}".format(pass_info))
+            self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
+
+        except Exception as err_data:
+            result = self._construct_error_result(err_data=err_data)
+            self.callback(result)
 
 
 class SimulatedNodeCentricMHPService(Service):
