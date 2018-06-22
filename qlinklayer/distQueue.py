@@ -115,16 +115,16 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         else:
             return master
 
-    def connect_to_peer_protocol(self, other_distQueue):
-        if not self.conn:
+    def connect_to_peer_protocol(self, other_distQueue, conn=None):
+        if not conn:
             # Create a common connection
-            self.conn = ClassicalFibreConnection(self.node, other_distQueue.node, length=1e-5)
+            conn = ClassicalFibreConnection(self.node, other_distQueue.node, length=1e-5)
 
         # Perform setup on both protocols
-        self._connect_to_peer_protocol(self.conn)
-        other_distQueue._connect_to_peer_protocol(self.conn)
+        self.establish_connection(conn)
+        other_distQueue.establish_connection(conn)
 
-    def _connect_to_peer_protocol(self, connection):
+    def establish_connection(self, connection):
         self.setConnection(connection)
         self.otherID = self.get_otherID()
         self.master = self._establish_master(self.master)
@@ -303,7 +303,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.queueList[qid].ready(qseq, 0)
 
         conn_delay = self.conn.channel_from_node(self.node).compute_delay()
-        scheduleAfter = max(0, conn_delay + self.otherTrig - self.myTrig)
+        scheduleAfter = max(0, conn_delay + self.myTrig - self.otherTrig)
+        logger.debug("{} Scheduling after {}".format(self.node.nodeID, scheduleAfter))
         self.queueList[qid].modify_schedule(qseq, scheduleAfter)
 
         if self.add_callback:
@@ -361,7 +362,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         conn_delay = self.conn.channel_from_node(self.node).compute_delay()
         scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
-        logger.debug("Scheduling after {}".format(scheduleAfter))
+        logger.debug("{} Scheduling after {}".format(self.node.nodeID, scheduleAfter))
         self.queueList[qid].modify_schedule(agreed_qseq, scheduleAfter)
 
         # Return the results if told to
@@ -491,6 +492,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Check if we are the master node in control of the queue
         # and perform the appropriate actions to add the item
 
+        logger.debug("{} Adding new item to queue".format(self.node.nodeID))
         if self.master:
             self._master_do_add(request, qid)
 
@@ -509,9 +511,11 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Send an add message to the other side
         self.send_msg(self.CMD_ADD, [self.myID, self.comms_seq, qid, queue_seq, request])
+        logger.debug("{} Communicated absolute queue id ({}, {}) to slave".format(self.node.nodeID, qid, queue_seq))
 
         # Mark that we are waiting for an ack for this
         self.waitAddAcks[self.comms_seq] = [qid, queue_seq, request]
+        logger.debug("{} Added waiting item in ADD ACKS list: {}".format(self.node.nodeID, [qid, queue_seq, request]))
 
         # Record waiting ack
         self.acksWaiting = self.acksWaiting + 1
@@ -528,9 +532,11 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Send an add message to the other side
         self.send_msg(self.CMD_ADD, [self.myID, self.comms_seq, qid, 0, request])
+        logger.debug("{} Sent ADD request to master".format(self.node.nodeID))
 
         # Mark that we are waiting for an ack for this
         self.waitAddAcks[self.comms_seq] = [qid, 0, request]
+        logger.debug("{} Added waiting item in ADD ACKS list: {}".format(self.node.nodeID, [qid, 0, request]))
 
         # Increment acks we are waiting for
         self.acksWaiting = self.acksWaiting + 1

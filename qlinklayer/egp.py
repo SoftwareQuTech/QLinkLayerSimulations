@@ -189,7 +189,7 @@ class NodeCentricEGP(EGP):
     ERR_REJECTED = 44
     ERR_OTHER = 45
 
-    def __init__(self, node, err_callback=None, ok_callback=None, length_to_midpoint=0.0):
+    def __init__(self, node, conn=None, err_callback=None, ok_callback=None):
         """
         Node Centric Entanglement Generation Protocol.  Uses a Distributed Queue Protocol and Scheduler to coordinate
         the execution of requests of entanglement production between two peers.
@@ -202,7 +202,7 @@ class NodeCentricEGP(EGP):
         :param mhp: `~easysquid.services.mhp`
             Middle Heralded Protocol for generating entanglement
         """
-        super(NodeCentricEGP, self).__init__(node=node, err_callback=err_callback, ok_callback=ok_callback)
+        super(NodeCentricEGP, self).__init__(node=node, conn=conn, err_callback=err_callback, ok_callback=ok_callback)
 
         # Quantum Memory Management, track our own free memory
         self.qmm = QuantumMemoryManagement(node=self.node)
@@ -233,23 +233,25 @@ class NodeCentricEGP(EGP):
         self.my_free_memory = self.scheduler.my_free_memory
         self.other_free_memory = None
 
-        self.length_to_midpoint = length_to_midpoint
-
-    def connect_to_peer_protocol(self, other_egp):
+    def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_conn=None, dqp_conn=None):
         """
         Sets up underlying protocols and connections between EGP's
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
-        # Set up MHP Service
-        self._connect_mhp(other_egp)
+        if not self.conn:
+            # Set up MHP Service
+            self._connect_mhp(other_egp, mhp_conn)
 
-        # Set up distributed queue
-        self._connect_dqp(other_egp)
+            # Set up distributed queue
+            self._connect_dqp(other_egp, dqp_conn)
 
-        # Set up communication channel for EGP level messages
-        self._connect_egp(other_egp)
+            # Set up communication channel for EGP level messages
+            self._connect_egp(other_egp, egp_conn)
 
-    def _connect_mhp(self, other_egp):
+        else:
+            logger.warning("Attempted to configure EGP with new connection while already connected")
+
+    def _connect_mhp(self, other_egp, mhp_conn=None):
         """
         Creates the MHP Service and sets up the MHP protocols running at each of the nodes
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
@@ -258,8 +260,7 @@ class NodeCentricEGP(EGP):
 
         # Create the service and set it for both protocols
         self.mhp_service = SimulatedNodeCentricMHPService(name="MHPService", nodeA=self.node, nodeB=peer_node,
-                                                          lengthA=self.length_to_midpoint,
-                                                          lengthB=other_egp.length_to_midpoint)
+                                                          conn=mhp_conn)
         other_egp.mhp_service = self.mhp_service
 
         # Set up local MHPs part of the service
@@ -279,13 +280,13 @@ class NodeCentricEGP(EGP):
         # Add the protocol to the service
         self.mhp_service.add_node(node=self.node, defaultProtocol=self.mhp, stateProvider=self.trigger_pair_mhp)
 
-    def _connect_dqp(self, other_egp):
+    def _connect_dqp(self, other_egp, dqp_conn=None):
         """
         Sets up the DQP between the nodes
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
         # Call DQP's connect to peer
-        self.dqp.connect_to_peer_protocol(other_egp.dqp)
+        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn)
 
         # Get the MHP timing offsets
         myTrig = self.mhp_service.get_node_proto(self.node).t0
@@ -295,7 +296,7 @@ class NodeCentricEGP(EGP):
         self.dqp.set_triggers(myTrig=myTrig, otherTrig=otherTrig)
         other_egp.dqp.set_triggers(myTrig=otherTrig, otherTrig=myTrig)
 
-    def _connect_egp(self, other_egp):
+    def _connect_egp(self, other_egp, egp_conn=None):
         """
         Sets up the communication channel for EGP level messages
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
@@ -303,7 +304,9 @@ class NodeCentricEGP(EGP):
         peer_node = other_egp.node
 
         # Create the fibre connection
-        egp_conn = ClassicalFibreConnection(nodeA=self.node, nodeB=peer_node, length=0.01)
+        if not egp_conn:
+            egp_conn = ClassicalFibreConnection(nodeA=self.node, nodeB=peer_node, length=0.01)
+
         self.setConnection(egp_conn)
         other_egp.setConnection(egp_conn)
 
@@ -551,6 +554,11 @@ class NodeCentricEGP(EGP):
         logger.debug("Finished handling MHP Reply")
 
     def _extract_mhp_reply(self, result):
+        """
+        Extracts the MHP processing results from the passed data.
+        :param result: tuple containing generation results
+        :return:
+        """
         try:
             r, other_free_memory, mhp_seq, aid, proto_err = result
             return r, other_free_memory, mhp_seq, aid, proto_err
@@ -559,6 +567,14 @@ class NodeCentricEGP(EGP):
             raise LinkLayerException("Malformed MHP reply received: {}".format(result))
 
     def _handle_reply_without_aid(self, proto_err):
+        """
+        If a request doesn't have an absolute queue ID it may be that an error occurred in the MHP or that we received
+        a pass through of information from our peer node in which case our only action was to update our memory size.
+        We should check if any errors occurred in the MHP
+        :param proto_err: int
+            Error number corresponding to the error in the MHP (if nonzero)
+        :return:
+        """
         # Check if an error occurred while processing a request
         if proto_err:
             logger.error("Protocol error occured in MHP: {}".format(proto_err))
@@ -567,6 +583,17 @@ class NodeCentricEGP(EGP):
         return
 
     def _handle_generation_reply(self, r, mhp_seq, aid):
+        """
+        Handles a successful generation reply from the heralding midpoint.  If we are the entanglement request
+        originator then we also correct the qubit locally if necessary.
+        :param r: int
+            Outcome of the generation attempt
+        :param mhp_seq: int
+            MHP Sequence number corresponding to this outcome
+        :param aid: tuple of (int, int)
+            Absolute Queue ID corresponding to the request this generation attempt belongs to
+        :return:
+        """
         now = self.get_current_time()
         creq = self.requests[aid]
 
@@ -604,6 +631,14 @@ class NodeCentricEGP(EGP):
             raise LinkLayerException("Request has invalid number of remaining pairs!")
 
     def _process_mhp_seq(self, mhp_seq):
+        """
+        Processes the MHP Sequence number from the midpoint.  If it is ahead of our expected sequence number then we
+        update our expected sequence number and stop handling the current request and issue errors upwards.  If we
+        receive an old sequence number we stop request handling.  Otherwise we increment our expected
+        :param mhp_seq: int
+            The MHP Sequence number from the midpoint
+        :return:
+        """
         logger.debug("Checking received MHP_SEQ")
         # Sanity check the MHP sequence number
         if mhp_seq > self.expected_seq:
@@ -613,7 +648,7 @@ class NodeCentricEGP(EGP):
                 self.issue_err(err=self.ERR_OTHER, err_data=generation)
 
             self.outstanding_generations = []
-            self.expected_seq = mhp_seq
+            self.expected_seq = (mhp_seq + 1) % self.mhp.conn.max_seq
             return False
 
         elif mhp_seq < self.expected_seq:
