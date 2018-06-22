@@ -216,6 +216,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
             Outcome result of performing the entanglement
         :return: Non
         """
+        logger.debug("{} sending notification to both".format(DynAASim().current_time))
         # Send notification messages back.
         if outcome == self.ERR_GENERAL:
             logger.debug("Sending error information to both")
@@ -549,7 +550,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
         :return:
         """
         [msg, deltaT] = self.conn.get_as(self.node.nodeID)
-        logger.debug("{} Received message {}".format(self.node.nodeID, msg))
+        logger.debug("{} Received message {}".format(DynAASim().current_time, msg))
         respM, passM = msg
         reply_message = MHPReply(response_data=respM, pass_data=passM)
         self._process_reply(reply_message)
@@ -748,29 +749,55 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
 class SimulatedNodeCentricMHPService(Service):
     """
-    Simulated
+    Simulated Node Centric MHP Service
     """
     protocol = NodeCentricMHPServiceProtocol
-    PROTO_OK = 0
-    PROTO_INFO = 2
 
-    def __init__(self, name, nodeA, nodeB, lengthA=1e-5, lengthB=1e-5):
+    def __init__(self, name, nodeA, nodeB, conn=None, lengthA=1e-5, lengthB=1e-5):
+        """
+        Node Centric MHP Service that creates the desired protocol for nodes.  Passes request information down to the
+        protocols for retrieval and execution
+        :param name: str
+            The name of the service
+        :param nodeA: obj `~easysquid.qnode.QuantumNode`
+            First of the pair of nodes using the service
+        :param nodeB: obj `~easysquid.qnode.QuantumNode`
+            Second the pair of nodes using the service
+        :param conn: obj `~easysquid.heraldedGeneration`
+            The connection with heralding midpoint to be used.  If None supplied a default is used.
+        :param lengthA: int
+            Length for the default connection from node A to the midpoint
+        :param lengthB: int
+            Length for the default connection from node B to the midpoint
+        """
         super(SimulatedNodeCentricMHPService, self).__init__(name=name)
-        self.conn = NodeCentricMHPHeraldedConnection(nodeA=nodeA, nodeB=nodeB, lengthA=lengthA, lengthB=lengthB,
-                                                     time_window=1)
 
-        nodeAProto = self.protocol(timeStep=self.conn.t_cycle, node=nodeA, connection=self.conn, t0=self.conn.trigA)
-        nodeBProto = self.protocol(timeStep=self.conn.t_cycle, node=nodeB, connection=self.conn, t0=self.conn.trigB)
+        # Set up a default connection if not specified
+        if not conn:
+            conn = NodeCentricMHPHeraldedConnection(nodeA=nodeA, nodeB=nodeB, lengthA=lengthA, lengthB=lengthB,
+                                                    use_time_window=True, time_window=1)
 
+        # Create the MHP node protocols
+        nodeAProto = self.protocol(timeStep=conn.t_cycle, node=nodeA, connection=conn, t0=conn.trigA)
+        nodeBProto = self.protocol(timeStep=conn.t_cycle, node=nodeB, connection=conn, t0=conn.trigB)
+
+        # Store them for retrieval by the nodes
         self.node_info = {
             nodeA.nodeID: nodeAProto,
             nodeB.nodeID: nodeBProto
         }
 
+        # Request tracking
         self.seq_num = defaultdict(int)
         self.seq_to_process = {}
 
     def get_node_proto(self, node):
+        """
+        Returns the protocol associated with the node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we want to retrieve the protocol for
+        :return:
+        """
         nodeID = node.nodeID
         if nodeID not in self.node_info:
             raise Exception
@@ -778,5 +805,13 @@ class SimulatedNodeCentricMHPService(Service):
             return self.node_info[nodeID]
 
     def _put_process(self, nodeID, request):
+        """
+        Tracks the added requests from a given node
+        :param nodeID: int
+            Node ID of the node that performed the request put
+        :param request: obj `~easysquid.services.ServiceRequest`
+            The service request object corresponding to the original node request
+        :return:
+        """
         request.seq_num = self.seq_num[nodeID]
         self.seq_num[nodeID] += 1
