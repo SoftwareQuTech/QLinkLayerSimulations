@@ -1,6 +1,7 @@
 import unittest
 import netsquid as ns
 from functools import partial
+from math import ceil
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.entanglementGenerator import NV_PairPreparation
@@ -15,11 +16,20 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 logger = create_logger("logger")
 
 
+def store_result(storage, result):
+    storage.append(result)
+
+
 class TestNodeCentricEGP(unittest.TestCase):
-    def test_create(self):
+    def setUp(self):
         ns.set_qstate_formalism(ns.DM_FORMALISM)
         pydynaa.DynAASim().reset()
+        self.alice_results = []
+        self.bob_results = []
+        self.alice_callback = partial(store_result, storage=self.alice_results)
+        self.bob_callback = partial(store_result, storage=self.bob_results)
 
+    def test_create(self):
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
@@ -28,19 +38,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
-        # Create callbacks for storing EGP results
-        alice_results = []
-        bob_results = []
-
-        def store_result(storage, result):
-            storage.append(result)
-
-        alice_callback = partial(store_result, storage=alice_results)
-        bob_callback = partial(store_result, storage=bob_results)
-
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=alice_callback, ok_callback=alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=bob_callback, ok_callback=bob_callback)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
         # Schedule egp CREATE commands mid simulation
@@ -74,19 +74,18 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         pydynaa.DynAASim().run(1000)
 
-        self.assertEqual(len(alice_results), alice_pairs + bob_pairs)
-        for resA, resB in zip(alice_results, bob_results):
-            self.assertEqual(resA, resB)
+        self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
+        self.assertEqual(self.alice_results, self.bob_results)
 
-        create_id, ent_id, _, _, _ = alice_results[0]
+        create_id, ent_id, _, _, _ = self.alice_results[0]
         self.assertEqual(create_id, alice_create_id)
         self.assertEqual(ent_id, (alice.nodeID, bob.nodeID, 0, 1))
 
-        create_id, ent_id, _, _, _ = alice_results[1]
+        create_id, ent_id, _, _, _ = self.alice_results[1]
         self.assertEqual(create_id, bob_create_id)
         self.assertEqual(ent_id, (bob.nodeID, alice.nodeID, 1, 2))
 
-        create_id, ent_id, _, _, _ = alice_results[2]
+        create_id, ent_id, _, _, _ = self.alice_results[2]
         self.assertEqual(create_id, bob_create_id)
         self.assertEqual(ent_id, (bob.nodeID, alice.nodeID, 2, 3))
 
@@ -97,9 +96,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             self.assertEqual(qA.qstate, qB.qstate)
 
     def test_multi_create(self):
-        ns.set_qstate_formalism(ns.DM_FORMALISM)
-        pydynaa.DynAASim().reset()
-
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
@@ -108,19 +104,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
-        # Create callbacks for storing EGP results
-        alice_results = []
-        bob_results = []
-
-        def store_result(storage, result):
-            storage.append(result)
-
-        alice_callback = partial(store_result, storage=alice_results)
-        bob_callback = partial(store_result, storage=bob_results)
-
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=alice_callback, ok_callback=alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=bob_callback, ok_callback=bob_callback)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
         # Schedule egp CREATE commands mid simulation
@@ -154,18 +140,15 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         pydynaa.DynAASim().run(1000)
 
-        self.assertEqual(len(alice_results), num_requests)
-        self.assertEqual(alice_results, bob_results)
+        self.assertEqual(len(self.alice_results), num_requests)
+        self.assertEqual(self.alice_results, self.bob_results)
 
         # Verify that the create id incremented for each call and was tracked for each request
-        for create_id, result in zip(alice_create_info, alice_results):
+        for create_id, result in zip(alice_create_info, self.alice_results):
             stored_id, ent_id, _, _, _ = result
             self.assertEqual(stored_id, create_id)
 
     def test_successful_simulation(self):
-        ns.set_qstate_formalism(ns.DM_FORMALISM)
-        pydynaa.DynAASim().reset()
-
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
@@ -174,19 +157,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
-        # Create callbacks for storing EGP results
-        alice_results = []
-        bob_results = []
-
-        def store_result(storage, result):
-            storage.append(result)
-
-        alice_callback = partial(store_result, storage=alice_results)
-        bob_callback = partial(store_result, storage=bob_results)
-
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=alice_callback, ok_callback=alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=bob_callback, ok_callback=bob_callback)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
         # Schedule egp CREATE commands mid simulation
@@ -223,8 +196,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
         pydynaa.DynAASim().run(400)
 
-        self.assertEqual(len(alice_results), alice_pairs + bob_pairs)
-        self.assertEqual(alice_results, bob_results)
+        self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
+        self.assertEqual(self.alice_results, self.bob_results)
 
         # Check the entangled pairs, ignore communication qubit
         for i in range(alice_pairs + bob_pairs):
@@ -233,9 +206,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             self.assertEqual(qA.qstate, qB.qstate)
 
     def test_manual_connect(self):
-        ns.set_qstate_formalism(ns.DM_FORMALISM)
-        pydynaa.DynAASim().reset()
-
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
@@ -244,19 +214,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
-        # Create callbacks for storing EGP results
-        alice_results = []
-        bob_results = []
-
-        def store_result(storage, result):
-            storage.append(result)
-
-        alice_callback = partial(store_result, storage=alice_results)
-        bob_callback = partial(store_result, storage=bob_results)
-
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=alice_callback, ok_callback=alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=bob_callback, ok_callback=bob_callback)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
 
         egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.1)
         dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.2)
@@ -305,8 +265,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
         pydynaa.DynAASim().run(20000)
 
-        self.assertEqual(len(alice_results), alice_pairs + bob_pairs)
-        self.assertEqual(alice_results, bob_results)
+        self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
+        self.assertEqual(self.alice_results, self.bob_results)
 
         # Check the entangled pairs, ignore communication qubit
         for i in range(alice_pairs + bob_pairs):
@@ -315,9 +275,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             self.assertEqual(qA.qstate, qB.qstate)
 
     def test_unresponsive_dqp(self):
-        ns.set_qstate_formalism(ns.DM_FORMALISM)
-        pydynaa.DynAASim().reset()
-
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
@@ -326,19 +283,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
-        # Create callbacks for storing EGP results
-        alice_results = []
-        bob_results = []
-
-        def store_result(storage, result):
-            storage.append(result)
-
-        alice_callback = partial(store_result, storage=alice_results)
-        bob_callback = partial(store_result, storage=bob_results)
-
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=alice_callback, ok_callback=alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=bob_callback, ok_callback=bob_callback)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
         # Schedule egp CREATE commands mid simulation
@@ -369,13 +316,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
         pydynaa.DynAASim().run(1000)
 
-        self.assertEqual(len(alice_results), 0)
-        self.assertEqual(alice_results, bob_results)
+        self.assertEqual(len(self.alice_results), 0)
+        self.assertEqual(self.alice_results, self.bob_results)
 
     def test_unresponsive_mhp(self):
-        ns.set_qstate_formalism(ns.DM_FORMALISM)
-        pydynaa.DynAASim().reset()
-
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
@@ -384,19 +328,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
-        # Create callbacks for storing EGP results
-        alice_results = []
-        bob_results = []
-
-        def store_result(storage, result):
-            storage.append(result)
-
-        alice_callback = partial(store_result, storage=alice_results)
-        bob_callback = partial(store_result, storage=bob_results)
-
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=alice_callback, ok_callback=alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=bob_callback, ok_callback=bob_callback)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
         # Schedule egp CREATE commands mid simulation
@@ -432,7 +366,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         dqp_delay = egpA.dqp.conn.channel_from_A.get_delay_mean() + egpA.dqp.conn.channel_from_B.get_delay_mean()
         egp_delay = egpA.conn.channel_from_A.get_delay_mean() + egpA.conn.channel_from_B.get_delay_mean()
-        mhp_start = max(dqp_delay, egp_delay)
+        mhp_delay = max(dqp_delay, egp_delay)
+        mhp_start = egpA.mhp.timeStep * ceil(mhp_delay / egpA.mhp.timeStep)
 
         num_timeouts = int((max_time - mhp_start) // egpA.mhp.timeStep)
 
@@ -442,17 +377,15 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Unresponsive error two times followed by a timeout of the request
         expected_results = [(expected_err_mhp, None)] * num_timeouts + [(expected_err_egp, alice_request)]
-        self.assertEqual(len(alice_results), len(expected_results))
-        self.assertEqual(alice_results[:num_timeouts], expected_results[:num_timeouts])
 
-        err, request = alice_results[-1]
+        self.assertEqual(len(self.alice_results), len(expected_results))
+        self.assertEqual(self.alice_results[:num_timeouts], expected_results[:num_timeouts])
+
+        err, request = self.alice_results[-1]
         self.assertEqual(err, expected_err_egp)
         self.assertEqual(request.create_time, alice_request.create_time)
 
     def test_unresponsive_egp(self):
-        ns.set_qstate_formalism(ns.DM_FORMALISM)
-        pydynaa.DynAASim().reset()
-
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
@@ -461,19 +394,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         bobMemory = QuantumProcessingDevice(name="BobMem", max_num=1, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
-        # Create callbacks for storing EGP results
-        alice_results = []
-        bob_results = []
-
-        def store_result(storage, result):
-            storage.append(result)
-
-        alice_callback = partial(store_result, storage=alice_results)
-        bob_callback = partial(store_result, storage=bob_results)
-
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=alice_callback, ok_callback=alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=bob_callback, ok_callback=bob_callback)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
         # Schedule egp CREATE commands mid simulation
@@ -502,13 +425,104 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
         pydynaa.DynAASim().run(160)
 
-        self.assertEqual(len(alice_results), 1)
-        self.assertEqual(alice_results, [(egpA.ERR_TIMEOUT, alice_request)])
+        self.assertEqual(len(self.alice_results), 1)
+        self.assertEqual(self.alice_results, [(egpA.ERR_TIMEOUT, alice_request)])
 
-    def test_creation_failure(self):
-        ns.set_qstate_formalism(ns.DM_FORMALISM)
-        pydynaa.DynAASim().reset()
+    def test_one_node_expires(self):
+        # Set up Alice
+        aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=10, pair_preparation=NV_PairPreparation())
+        alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
+        # Set up Bob
+        bobMemory = QuantumProcessingDevice(name="BobMem", max_num=10, pair_preparation=NV_PairPreparation())
+        bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
+
+        # Set up EGP
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
+        egpA.connect_to_peer_protocol(egpB)
+
+        # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
+        def faulty_send(node, data, conn):
+            logger.debug("Faulty send, MHP Seq {}".format(conn.mhp_seq))
+            if node.nodeID == alice.nodeID:
+                if not conn.mhp_seq == 1:
+                    logger.debug("Sending to {}".format(node.nodeID))
+                    conn.channel_M_to_A.put(data)
+
+            elif node.nodeID == bob.nodeID:
+                logger.debug("Sending to {}".format(node.nodeID))
+                conn.channel_M_to_B.put(data)
+
+        egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
+
+        alice_pairs = 4
+        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+                                   purpose_id=1, priority=10)
+
+        bob_pairs = 4
+        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=1000,
+                                 purpose_id=1, priority=10)
+
+        alice_create_id, create_time = egpA.create(alice_request)
+        egpB.create(bob_request)
+
+        # Construct a network for the simulation
+        nodes = [
+            (alice, [egpA, egpA.dqp, egpA.mhp]),
+            (bob, [egpB, egpB.dqp, egpB.mhp])
+        ]
+
+        conns = [
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
+        ]
+
+        egpA.mhp_service.start()
+
+        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network.start()
+        pydynaa.DynAASim().run(40)
+
+        # Check that we were able to get the first generation of alice's request completed
+        self.assertEqual(self.alice_results[0], self.bob_results[0])
+
+        # Check that alice only has an entanglement identifier for one of the pairs in her request
+        alice_oks = list(filter(lambda info: len(info) == 5 and info[1][:2] == (alice.nodeID, bob.nodeID),
+                                self.alice_results))
+        self.assertEqual(len(alice_oks), 1)
+        [ok_message] = alice_oks
+        create_id, ent_id, _, _, _ = ok_message
+        self.assertEqual(create_id, alice_create_id)
+        expected_mhp = 0
+
+        # We ignore the logical id that the qubit was stored in
+        self.assertEqual(ent_id[:3], (alice.nodeID, bob.nodeID, expected_mhp))
+
+        # Check that any additional entanglement identifiers bob's egp may have passed up were expired
+        # Get the issued ok's containing entanglement identifiers corresponding to alice's create
+        bob_oks = list(filter(lambda info: len(info) == 5 and info[1][:2] == (alice.nodeID, bob.nodeID),
+                              self.bob_results))
+
+        # Get the expiration message we received from alice
+        expiry_messages = list(filter(lambda info: len(info) == 2 and info[0] == egpB.ERR_EXPIRE, self.bob_results))
+
+        self.assertEqual(len(expiry_messages), 1)
+        [expiry_message] = expiry_messages
+
+        invalid_oks = set(bob_oks) - set(alice_oks)
+        uncovered_ids = [ok_message[1] for ok_message in invalid_oks]
+        expired_ent_ids = expiry_message[1]
+
+        # Verify that all entanglement identifiers bob has that alice does not have are covered within the expiry
+        for ent_id in uncovered_ids:
+            self.assertIn(ent_id[:3], expired_ent_ids)
+
+        # Check that we were able to resynchronize for bob's request
+        self.assertEqual(self.alice_results[-bob_pairs:], self.bob_results[-bob_pairs:])
+
+    def test_both_nodes_expire(self):
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
@@ -517,19 +531,72 @@ class TestNodeCentricEGP(unittest.TestCase):
         bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
-        # Create callbacks for storing EGP results
-        alice_results = []
-        bob_results = []
+        # Force the connection to "accidentally" increment MHP seq too much
+        self.inc_sequence = [2, 3, 4, 5, 6]
 
-        def store_result(storage, result):
-            storage.append(result)
-
-        alice_callback = partial(store_result, storage=alice_results)
-        bob_callback = partial(store_result, storage=bob_results)
+        def bad_inc():
+            return self.inc_sequence.pop(0)
 
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=alice_callback, ok_callback=alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=bob_callback, ok_callback=bob_callback)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
+        egpA.connect_to_peer_protocol(egpB)
+        egpA.mhp.conn._get_next_mhp_seq = bad_inc
+        alice_pairs = 3
+        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+                                   purpose_id=1, priority=10)
+
+        egpA.create(creq=alice_request)
+
+        # Construct a network for the simulation
+        nodes = [
+            (alice, [egpA, egpA.dqp, egpA.mhp]),
+            (bob, [egpB, egpB.dqp, egpB.mhp])
+        ]
+
+        conns = [
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
+        ]
+
+        egpA.mhp_service.start()
+
+        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network.start()
+        pydynaa.DynAASim().run(20)
+
+        # Verify that when both detect MHP Sequence number skip then results are the same
+        self.assertEqual(len(self.alice_results), 2)
+        self.assertEqual(self.alice_results, self.bob_results)
+        self.assertEqual(self.alice_results[0][1][:3], (alice.nodeID, bob.nodeID, 0))
+
+        # Verify that first create was successful
+        idA = self.alice_results[0][1][3]
+        idB = self.bob_results[0][1][3]
+        qA = aliceMemory.get_qubit(idA)
+        qB = bobMemory.get_qubit(idB)
+        self.assertEqual(qA.qstate, qB.qstate)
+
+        # Verify we have ERR_EXPIRE messages for individual generation requests
+        expiry_message = self.alice_results[1]
+        error_code, expired_ids = expiry_message
+        self.assertEqual(error_code, egpA.ERR_EXPIRE)
+        expected_ids = [(alice.nodeID, bob.nodeID, 1), (alice.nodeID, bob.nodeID, 2)]
+        self.assertEqual(expected_ids, expired_ids)
+
+    def test_creation_failure(self):
+        # Set up Alice
+        aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
+
+        # Set up Bob
+        bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
+
+        # Set up EGP
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
         # Schedule egp CREATE commands mid simulation
@@ -578,7 +645,7 @@ class TestNodeCentricEGP(unittest.TestCase):
                             (NodeCentricEGP.ERR_UNSUPP, None),
                             (NodeCentricEGP.ERR_UNSUPP, None)]
 
-        self.assertEqual(alice_results, expected_results)
+        self.assertEqual(self.alice_results, expected_results)
 
 
 if __name__ == "__main__":

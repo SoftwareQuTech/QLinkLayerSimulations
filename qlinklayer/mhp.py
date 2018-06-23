@@ -121,6 +121,9 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
     """
     Generic connection to be used with MHP protocols, to be overloaded
     """
+    # Production outcomes
+    VALID_OUTCOMES = [0, 1, 2]
+
     def __init__(self, *args, **kwargs):
         self.node_requests = {}
         self.mhp_seq = 0
@@ -218,26 +221,56 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
         :return: Non
         """
         logger.debug("{} sending notification to both".format(DynAASim().current_time))
+
         # Send notification messages back.
-        if outcome == self.ERR_GENERAL:
+        if outcome not in self.VALID_OUTCOMES:
             logger.debug("Sending error information to both")
-            dataA, dataB = self._get_error_data(self.ERR_GENERAL)
+            dataA, dataB = self._get_error_data(outcome)
+
         else:
             logger.debug("Sending generation outcome information to both")
             dataA, dataB = self._get_outcome_data(outcome)
 
+        # Make sure we have something to send
         if dataA is None or dataB is None:
             raise EasySquidException("Missing control data.")
 
         # Send messages back to the nodes
         logger.debug("Sending messages to A: {} and B: {}".format(dataA, dataB))
-        self.channel_M_to_A.put(dataA)
-        self.channel_M_to_B.put(dataB)
+        self._send_to_node(self.nodeA, dataA)
+        self._send_to_node(self.nodeB, dataB)
+
         if outcome in [1, 2]:
-            self.mhp_seq = (self.mhp_seq + 1) % self.max_seq
-            logger.debug("Incremented MHP Sequence Number to {}".format(self.mhp_seq))
+            self.mhp_seq = self._get_next_mhp_seq()
+            logger.debug("New MHP Sequence Number is {}".format(self.mhp_seq))
+
         else:
             logger.debug("Entanglement failed at heralding station")
+
+    def _send_to_node(self, node, data):
+        """
+        Sends data out from the heralding station to a connected end node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we want to send the data to
+        :param data: obj any
+            The data to place on the channel to the node
+        """
+        if node.nodeID == self.nodeA.nodeID:
+            self.channel_M_to_A.put(data)
+
+        elif node.nodeID == self.nodeB.nodeID:
+            self.channel_M_to_B.put(data)
+
+        else:
+            raise EasySquidException("Tried to send to unconnected node")
+
+    def _get_next_mhp_seq(self):
+        """
+        Computes the next MHP Sequence number we should be using
+        :return: int
+            The next MHP Sequence number to send for a successful entanglement result
+        """
+        return (self.mhp_seq + 1) % self.max_seq
 
     @abc.abstractmethod
     def _get_outcome_data(self, outcome):
@@ -246,7 +279,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
         :param outcome: int
             Status code of the entanglement outcome
         """
-        pass
+        return [], []
 
 
 class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
@@ -332,24 +365,44 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         return respA.channel_data(), respB.channel_data()
 
     def _get_error_data(self, err):
+        """
+        Collects error information to be propagated upwards.  If the provided err is ERR_GENERAL then we try
+        to look at the state of the heralding station to discover what the error is.  If a specific error is provided
+        then we already know what happened and simply pass this on.
+        :param err: obj any
+            Error information to pass
+        :return: Error data to send to both nodes
+        """
+        # Check if we need to analyze the station's state to discover the error
         if err == self.ERR_GENERAL:
             proto_err = self._discover_error()
+
+        # Otherwise pass whatever was discovered
         else:
             proto_err = err
 
+        # Construct the reply
         data = MHPReply(response_data=self.ERR_GENERAL, pass_data=proto_err).channel_data()
 
+        # Return the data that should go on the channel
         logger.debug("Sending error messages to A and B ({})".format(data))
         return data, data
 
     def _discover_error(self):
+        """
+        Analyzes the state of the heralding station to attempt to diagnose the error that occurred.
+        :return:
+        """
         err = []
+        # Check if we received classical information from the endnodes
         if None in self.node_requests.values():
             err.append(self.ERR_NO_CLASSICAL_OTHER)
 
+        # Default to a general error
         if not err:
             return self.ERR_GENERAL
 
+        # Return a single error if only one otherwise return a list of errors
         elif len(err) == 1:
             return err[0]
 
@@ -407,7 +460,8 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
             if not self._has_same_aid():
                 logger.debug("Absolute queue IDs don't match!")
                 self._drop_qubit(qubit)
-                self._send_notification_to_one(self.ERR_QUEUE_MISMATCH, sender)
+                self._reset_incoming()
+                self._send_notification_to_both(self.ERR_QUEUE_MISMATCH)
                 return
 
     def _has_both_qubits(self):
@@ -509,7 +563,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
         Generic protocol, either accepts incoming requests (if any) or continues processing current one
         """
         try:
-            logger.debug("{} Running protocol".format(DynAASim().current_time))
+            logger.debug("{} Node {} running protocol".format(DynAASim().current_time, self.node.nodeID))
             if self._in_progress():
                 self._continue_request_handling()
 
@@ -518,6 +572,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
                 self._handle_request(request_data)
 
         except Exception as err_data:
+            logger.exception("Exception occurred while running protocol")
             result = self._construct_error_result(err_data)
             self.callback(result=result)
 
@@ -562,8 +617,9 @@ class MHPServiceProtocol(TimedServiceProtocol):
 
     def process_data(self):
         """
-
-        :return:
+        Receives incoming messages on the connection and constructs a reply object to pass into
+        the reply processing method.
+        :return: None
         """
         try:
             [msg, deltaT] = self.conn.get_as(self.node.nodeID)
@@ -573,11 +629,17 @@ class MHPServiceProtocol(TimedServiceProtocol):
             self._process_reply(reply_message)
 
         except Exception as err_data:
+            logger.exception("Exception occurred processing data")
             result = self._construct_error_result(err_data)
             self.callback(result=result)
 
     @abc.abstractmethod
     def _process_reply(self, reply_message):
+        """
+        Processes the reply message constructed from the connection data.
+        :param reply_message: obj `~qlinklayer.mhp.MHPReply`
+            The reply message to process
+        """
         pass
 
 
@@ -677,11 +739,29 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self._wait_once(self.timeout_handler, event=self.timeout_event)
 
     def comm_timeout_handler(self, evt):
+        """
+        MHP Communication timeout handler.  Triggered after we have waited too long for a response from the midpoint.
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The event that triggered the timeout handler
+        """
         logger.debug("Timeout handler triggered!")
+
+        self.release_qubits()
         if self.status == self.STAT_BUSY:
             logger.warning("Timed out waiting for communication response!")
             self._handle_error(None, self.ERR_TIMEOUT)
             self.reset_protocol()
+
+    def release_qubits(self):
+        """
+        Releases qubits that were used for an entanglement generation attempt.  To be used in error scenarios where the
+        stored qubits are not entangled with our peer's.
+        """
+        if self.node.qmem.in_use(self.electron_physical_ID):
+            self.node.qmem.release_qubit(self.electron_physical_ID)
+
+        if self.node.qmem.in_use(self.storage_physical_ID):
+            self.node.qmem.release_qubit(self.storage_physical_ID)
 
     def init_entanglement_request(self, comm_q, storage_q):
         """
@@ -701,12 +781,12 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return: None
         """
         try:
-            logger.debug("Beginning entanglement attempt")
+            logger.debug("{} Beginning entanglement attempt".format(self.node.nodeID))
             NodeCentricMHP.run_protocol(self)
 
         except Exception as e:
-            logger.error("Error occured attempting entanglement: {}".format(e))
-            self._handle_error(0, 1)
+            logger.exception("Error occured attempting entanglement")
+            self._handle_error(None, self.ERR_LOCAL)
 
     def _process_reply(self, reply_message):
         """
@@ -734,6 +814,8 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
                 self._handle_production_reply(respM, passM)
             else:
                 logger.warning("Received unexpected production reply from midpoint!")
+                self.release_qubits()
+                self.reset_protocol()
 
     def _handle_passed_info(self, respM, passM):
         """
@@ -754,12 +836,20 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :param passM: any
             Error information to pass back to EGP
         """
-        self.node.qmem.release_qubit(self.storage_physical_ID)
+        self.release_qubits()
         result = self._construct_error_result(err_data=passM)
         self.callback(result=result)
         self.reset_protocol()
 
     def _construct_error_result(self, err_data, **kwargs):
+        """
+        Creates a result to pass up to the EGP that contains error information for errors that may have
+        occurred
+        :param err_data: obj any
+            Data related to the error that occurred
+        :return: tuple
+            Result information to be interpretted by higher layers
+        """
         result = (self.NO_GENERATION, None, -1, self.aid, err_data)
         return result
 
@@ -780,6 +870,10 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         if outcome == 0:
             logger.debug("Generation attempt failed, releasing qubit {}".format(self.storage_physical_ID))
             self.node.qmem.release_qubit(self.storage_physical_ID)
+
+        if aid != self.aid:
+            logger.warning("Received midpoint reply for aid {} while MHP has local aid {}".format(aid, self.aid))
+            self._handle_error(passM=self.ERR_LOCAL)
 
         result = (outcome, other_free_memory, mhp_seq, other_aid, self.PROTO_OK)
         logger.debug("Finished running protocol, returning results: {}".format(result))
@@ -803,8 +897,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
 
         except Exception as err_data:
+            logger.exception("Error occurred while handling photon emission")
             result = self._construct_error_result(err_data=err_data)
-            self.callback(result)
+            self._handle_error(None, result)
 
 
 class SimulatedNodeCentricMHPService(Service):

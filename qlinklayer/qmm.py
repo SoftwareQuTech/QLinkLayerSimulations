@@ -72,6 +72,13 @@ class QuantumMemoryManagement:
         self.node.qmem.release_qubit(id)
 
     def free_qubits(self, id_list):
+        """
+        Releases the provided qubits from the memory device and marks their locations as not reserved in the
+        memory manager
+        :param id_list: list of int
+            List of qubit ids in memory to free
+        """
+        logger.debug("Freeing qubits {}".format(id_list))
         for q in id_list:
             self.free_qubit(q)
 
@@ -116,7 +123,21 @@ class QuantumMemoryManagement:
         return free_mem
 
     def logical_to_physical(self, qubit_id):
+        """
+        Converts the provided logical qubit id into the corresponding physical id
+        :param qubit_id: int
+            Logical ID of the qubit we want the physical ID for
+        :return: int
+            Physical ID of the qubit
+        """
         return qubit_id
 
     def physical_to_logical(self, qubit_id):
+        """
+        Converts the provided physical qubit id into the corresponding logical id
+        :param qubit_id: int
+            Physical ID of the qubit we want the logical ID for
+        :return: int
+            Logical ID of the qubit
+        """
         return qubit_id
