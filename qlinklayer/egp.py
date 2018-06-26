@@ -628,7 +628,9 @@ class NodeCentricEGP(EGP):
 
         # Issue OK
         logger.debug("Issuing okay to caller")
-        result = (creq.create_id, ent_id, fidelity_estimate, now, now)
+        t_create = now - self.mhp.conn.channel_to_node(self.node).get_delay_mean()
+        t_goodness = t_create
+        result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
         self.issue_ok(result)
 
         # Update number of remaining pairs on request, remove if completed

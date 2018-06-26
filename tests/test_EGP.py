@@ -75,8 +75,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         self.assertEqual(len(alice_results), alice_pairs + bob_pairs)
         for resA, resB in zip(alice_results, bob_results):
-            # Currently ignore the t_create/t_goodness due to delayed communications
-            self.assertEqual(resA[:3], resB[:3])
+            self.assertEqual(resA, resB)
 
         create_id, ent_id, _, _, _ = alice_results[0]
         self.assertEqual(create_id, alice_create_id)
@@ -155,9 +154,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         pydynaa.DynAASim().run(1000)
 
         self.assertEqual(len(alice_results), num_requests)
-        for resA, resB in zip(alice_results, bob_results):
-            # Currently ignore the t_create/t_goodness due to delayed communications
-            self.assertEqual(resA[:3], resB[:3])
+        self.assertEqual(alice_results, bob_results)
 
         # Verify that the create id incremented for each call and was tracked for each request
         for create_id, result in zip(alice_create_info, alice_results):
@@ -226,9 +223,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         pydynaa.DynAASim().run(400)
 
         self.assertEqual(len(alice_results), alice_pairs + bob_pairs)
-        for resA, resB in zip(alice_results, bob_results):
-            # Currently ignore the t_create/t_goodness due to delayed communications
-            self.assertEqual(resA[:2], resB[:2])
+        self.assertEqual(alice_results, bob_results)
 
         # Check the entangled pairs, ignore communication qubit
         for i in range(alice_pairs + bob_pairs):
@@ -307,12 +302,10 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
-        pydynaa.DynAASim().run(4000)
+        pydynaa.DynAASim().run(20000)
 
         self.assertEqual(len(alice_results), alice_pairs + bob_pairs)
-        for resA, resB in zip(alice_results, bob_results):
-            # Currently ignore the t_create/t_goodness due to delayed communications
-            self.assertEqual(resA[:2], resB[:2])
+        self.assertEqual(alice_results, bob_results)
 
         # Check the entangled pairs, ignore communication qubit
         for i in range(alice_pairs + bob_pairs):
