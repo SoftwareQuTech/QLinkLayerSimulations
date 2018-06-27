@@ -71,6 +71,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
+
         pydynaa.DynAASim().run(1000)
 
         self.assertEqual(len(alice_results), alice_pairs + bob_pairs)
@@ -129,7 +130,6 @@ class TestNodeCentricEGP(unittest.TestCase):
                                      purpose_id=1, priority=10) for r in range(num_requests)]
 
         # Schedule a sequence of various create requests
-
         alice_create_info = []
         for request in alice_requests:
             alice_create_id, alice_create_time = egpA.create(request)
@@ -151,6 +151,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
+
         pydynaa.DynAASim().run(1000)
 
         self.assertEqual(len(alice_results), num_requests)

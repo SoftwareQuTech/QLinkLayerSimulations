@@ -5,7 +5,8 @@ from easysquid.simpleLink import NodeCentricMHP
 from easysquid.easyfibre import HeraldedFibreConnection
 from easysquid.toolbox import EasySquidException, create_logger
 from netsquid.qubits.qubitapi import create_qubits
-from netsquid.pydynaa import DynAASim
+from netsquid.pydynaa import DynAASim, EventType, EventHandler
+
 logger = create_logger("logger")
 
 
@@ -590,10 +591,13 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
     PROTO_OK = 0
     NO_GENERATION = 0
     ERR_LOCAL = 31
+    ERR_TIMEOUT = 32
 
     def __init__(self, timeStep, t0, node, connection):
-        super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
         self.status = self.STAT_IDLE
+        self.timeout_handler = None
+        self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
+        super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
 
     def reset_protocol(self):
         """
@@ -604,6 +608,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.storage_physical_ID = 0
         self.status = self.STAT_IDLE
         self.aid = None
+
+        if self.timeout_handler:
+            logger.debug("Clearing timeout handler!")
+            self._dismiss(self.timeout_handler)
+            self.timeout_handler = None
 
     def _has_resources(self):
         """
@@ -648,6 +657,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         if flag:
             # Set up for generating entanglement
             logger.debug("Flag set to true processing entanglement request")
+            self.schedule_comm_timeout()
             self.init_entanglement_request(comm_q, storage_q)
             self.run_entanglement_protocol()
 
@@ -655,7 +665,23 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         else:
             logger.debug("Flag set to false, passing information through heralding station")
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_INFO, self.free_memory_size], []])
-            self.status = self.STAT_IDLE
+            self.reset_protocol()
+
+    def schedule_comm_timeout(self):
+        """
+        Schedules a communication timeout event and attaches a handler that resets the protocol
+        :return:
+        """
+        self.timeout_handler = EventHandler(self.comm_timeout_handler)
+        self.timeout_event = self._schedule_after(2 * self.timeStep, self._EVT_COMM_TIMEOUT)
+        self._wait_once(self.timeout_handler, event=self.timeout_event)
+
+    def comm_timeout_handler(self, evt):
+        logger.debug("Timeout handler triggered!")
+        if self.status == self.STAT_BUSY:
+            logger.warning("Timed out waiting for communication response!")
+            self._handle_error(None, self.ERR_TIMEOUT)
+            self.reset_protocol()
 
     def init_entanglement_request(self, comm_q, storage_q):
         """
@@ -703,7 +729,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # Receiving result of production attempt
         else:
-            self._handle_production_reply(respM, passM)
+            # Only process production replies when we are expecting them
+            if self.status == self.STAT_BUSY:
+                self._handle_production_reply(respM, passM)
+            else:
+                logger.warning("Received unexpected production reply from midpoint!")
 
     def _handle_passed_info(self, respM, passM):
         """
@@ -727,6 +757,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.node.qmem.release_qubit(self.storage_physical_ID)
         result = self._construct_error_result(err_data=passM)
         self.callback(result=result)
+        self.reset_protocol()
 
     def _construct_error_result(self, err_data, **kwargs):
         result = (self.NO_GENERATION, None, -1, self.aid, err_data)
@@ -750,13 +781,12 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             logger.debug("Generation attempt failed, releasing qubit {}".format(self.storage_physical_ID))
             self.node.qmem.release_qubit(self.storage_physical_ID)
 
-        self.status = self.STAT_IDLE
-
         result = (outcome, other_free_memory, mhp_seq, other_aid, self.PROTO_OK)
         logger.debug("Finished running protocol, returning results: {}".format(result))
 
         # Call back with the results
         self.callback(result=result)
+        self.reset_protocol()
 
     def handle_photon_emission(self, photon):
         """
