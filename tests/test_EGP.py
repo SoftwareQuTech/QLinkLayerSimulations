@@ -5,6 +5,7 @@ from math import ceil
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.entanglementGenerator import NV_PairPreparation
+from easysquid.puppetMaster import PM_Controller, PM_Test
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import QuantumProcessingDevice
 from easysquid.toolbox import SimulationScheduler, create_logger
@@ -18,6 +19,37 @@ logger = create_logger("logger")
 
 def store_result(storage, result):
     storage.append(result)
+
+
+class PM_Test_Ent(PM_Test):
+    def __init__(self, name):
+        super(PM_Test_Ent, self).__init__(name=name)
+        self.stored_data = []
+        self.num_tested_items = 0
+
+    def _test(self, event):
+        egp = event.source
+        assert len(self.stored_data) == self.num_tested_items + 1
+        assert len(self.stored_data) == len(set(self.stored_data))
+
+        self.num_tested_items += 1
+        create_id, ent_id, goodness, t_goodness, t_create = self.stored_data[-1]
+        assert len(ent_id) == 4
+
+        creator, peer, mhp_seq, logical_id = ent_id
+        assert egp.node.nodeID == creator or egp.node.nodeID == peer
+
+    def store_data(self, result):
+        self.stored_data.append(result)
+
+
+class PM_Test_Req(PM_Test):
+    def __init__(self, name):
+        super(PM_Test_Req, self).__init__(name=name)
+        self.num_tested_items = 0
+
+    def _test(self, event):
+        self.num_tested_items += 1
 
 
 class TestNodeCentricEGP(unittest.TestCase):
@@ -642,6 +674,84 @@ class TestNodeCentricEGP(unittest.TestCase):
                             (NodeCentricEGP.ERR_UNSUPP, None)]
 
         self.assertEqual(self.alice_results, expected_results)
+
+    def test_events(self):
+        # Set up Alice
+        aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
+
+        # Set up Bob
+        bobMemory = QuantumProcessingDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
+
+        pm = PM_Controller()
+        alice_ent_tester = PM_Test_Ent(name="AliceEntTester")
+        bob_ent_tester = PM_Test_Ent(name="BobEntTester")
+        alice_req_tester = PM_Test_Req(name="AliceReqTester")
+        bob_req_tester = PM_Test_Req(name="BobReqTester")
+
+        # Set up EGP
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=alice_ent_tester.store_data)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=bob_ent_tester.store_data)
+        egpA.connect_to_peer_protocol(egpB)
+
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ENT_COMPLETED, ds=alice_ent_tester)
+        pm.addEvent(source=egpA, evtType=egpA._EVT_REQ_COMPLETED, ds=alice_req_tester)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ENT_COMPLETED, ds=bob_ent_tester)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_REQ_COMPLETED, ds=bob_req_tester)
+
+        # Schedule egp CREATE commands mid simulation
+        sim_scheduler = SimulationScheduler()
+        alice_pairs = 1
+        bob_pairs = 2
+        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+                                   purpose_id=1, priority=10)
+        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=2000,
+                                 purpose_id=2, priority=2)
+
+        alice_scheduled_create = partial(egpA.create, creq=alice_request)
+        bob_scheduled_create = partial(egpB.create, creq=bob_request)
+
+        # Schedule a sequence of various create requests
+        sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
+        sim_scheduler.schedule_function(func=bob_scheduled_create, t=5)
+
+        # Construct a network for the simulation
+        nodes = [
+            (alice, [egpA, egpA.dqp, egpA.mhp]),
+            (bob, [egpB, egpB.dqp, egpB.mhp])
+        ]
+
+        conns = [
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
+        ]
+
+        egpA.mhp_service.start()
+
+        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network.start()
+        pydynaa.DynAASim().run(400)
+
+        self.assertEqual(len(alice_ent_tester.stored_data), alice_pairs + bob_pairs)
+        self.assertEqual(len(bob_ent_tester.stored_data), alice_pairs + bob_pairs)
+        self.assertEqual(alice_req_tester.num_tested_items, 2)
+        self.assertEqual(bob_req_tester.num_tested_items, 2)
+        self.assertTrue(alice_ent_tester.test_passed())
+        self.assertTrue(alice_req_tester.test_passed())
+        self.assertTrue(bob_ent_tester.test_passed())
+        self.assertTrue(bob_req_tester.test_passed())
+
+        alice_results = alice_ent_tester.stored_data
+        bob_results = bob_ent_tester.stored_data
+        self.assertEqual(alice_results, bob_results)
+
+        # Check the entangled pairs, ignore communication qubit
+        for i in range(alice_pairs + bob_pairs):
+            qA = aliceMemory.get_qubit(i + 1)
+            qB = bobMemory.get_qubit(i + 1)
+            self.assertEqual(qA.qstate, qB.qstate)
 
 
 if __name__ == "__main__":

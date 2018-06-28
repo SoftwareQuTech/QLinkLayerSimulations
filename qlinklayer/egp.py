@@ -1,6 +1,6 @@
 import abc
 import netsquid as ns
-from netsquid.pydynaa import DynAASim
+from netsquid.pydynaa import DynAASim, EventType
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from qlinklayer.general import LinkLayerException
@@ -235,6 +235,10 @@ class NodeCentricEGP(EGP):
         self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
         self.my_free_memory = self.scheduler.my_free_memory
         self.other_free_memory = None
+
+        # Pydynaa events
+        self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
+        self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
 
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_conn=None, dqp_conn=None):
         """
@@ -683,12 +687,14 @@ class NodeCentricEGP(EGP):
         t_goodness = t_create
         result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
         self.issue_ok(result)
+        self._schedule_now(self._EVT_ENT_COMPLETED)
 
         # Update number of remaining pairs on request, remove if completed
         if creq.num_pairs == 1:
             logger.debug("Generated final pair, removing request")
             self.requests.pop(aid)
             self.outstanding_generations = []
+            self._schedule_now(self._EVT_REQ_COMPLETED)
 
         elif creq.num_pairs >= 2:
             logger.debug("Decrementing number of remaining pairs")
