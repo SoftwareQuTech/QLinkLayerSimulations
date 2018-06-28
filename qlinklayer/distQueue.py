@@ -7,8 +7,10 @@
 
 from copy import copy
 from collections import deque
+from functools import partial
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
+from netsquid.pydynaa import EventType, EventHandler
 from qlinklayer.localQueue import LocalQueue
 from qlinklayer.general import LinkLayerException
 from easysquid.toolbox import create_logger
@@ -98,6 +100,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Waiting for acks
         self.waitAddAcks = {}
         self.acksWaiting = 0
+        self.timeout_handler = None
+        self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
 
         # expected sequence number
         self.expectedSeq = 0
@@ -128,6 +132,34 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.setConnection(connection)
         self.otherID = self.get_otherID()
         self.master = self._establish_master(self.master)
+
+    def schedule_comm_timeout(self, ack_id):
+        """
+        Schedules a communication timeout event and attaches a handler that resets the protocol
+        :return:
+        """
+        self.timeout_handler = EventHandler(partial(self.comm_timeout_handler, ack_id=ack_id))
+        comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
+        self.timeout_event = self._schedule_after(2 * comm_delay, self._EVT_COMM_TIMEOUT)
+        self._wait_once(self.timeout_handler, event=self.timeout_event)
+
+    def comm_timeout_handler(self, evt, ack_id):
+        """
+        DQP Communication timeout handler.  Triggered after we have waited too long for a response from our peer.
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The event that triggered the timeout handler
+        """
+        logger.debug("Timeout handler triggered!")
+        if ack_id in self.waitAddAcks:
+            logger.warning("Timed out waiting for communication response for comms_seq {}!".format(ack_id))
+
+            # Remove the item from the local queue
+            qid, queue_seq, request = self.waitAddAcks.pop(ack_id)
+            self.queueList[qid].remove(queue_seq)
+
+            # Pass error information upwards
+            if self.add_callback:
+                self.add_callback(result=(self.DQ_TIMEOUT, qid, queue_seq, request))
 
     def process_data(self):
         # Fetch message from the other side
@@ -515,6 +547,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Mark that we are waiting for an ack for this
         self.waitAddAcks[self.comms_seq] = [qid, queue_seq, request]
+        self.schedule_comm_timeout(ack_id=self.comms_seq)
         logger.debug("{} Added waiting item in ADD ACKS list: {}".format(self.node.nodeID, [qid, queue_seq, request]))
 
         # Record waiting ack
@@ -536,6 +569,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Mark that we are waiting for an ack for this
         self.waitAddAcks[self.comms_seq] = [qid, 0, request]
+        self.schedule_comm_timeout(ack_id=self.comms_seq)
         logger.debug("{} Added waiting item in ADD ACKS list: {}".format(self.node.nodeID, [qid, 0, request]))
 
         # Increment acks we are waiting for

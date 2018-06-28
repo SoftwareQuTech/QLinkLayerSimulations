@@ -70,6 +70,13 @@ class LocalQueue:
         lq = _LocalQueueItem(request, seq, sa)
         self.queue[seq] = lq
 
+    def remove(self, seq):
+        if seq in self.queue:
+            self.queue.pop(seq)
+
+        if seq == self.popSeq:
+            self.popSeq = self._get_next_pop_seq()
+
     def pop(self):
         """
         Get item off the top of the queue, if it is ready to be scheduled. 
@@ -93,10 +100,15 @@ class LocalQueue:
             self.queue.pop(self.popSeq, None)
 
             # Increment lower bound of sequence numbers to return next
-            self.popSeq = (self.popSeq + 1) % self.maxSeq
+            self.popSeq = self._get_next_pop_seq()
 
             # Return item
             return q
+
+    def _get_next_pop_seq(self):
+        # Return the next item if available otherwise increment
+        inc_seq = (self.popSeq + 1) % self.maxSeq
+        return inc_seq if not self.queue.keys() else min(self.queue.keys())
 
     def peek(self):
         """

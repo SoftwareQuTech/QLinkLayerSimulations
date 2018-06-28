@@ -232,6 +232,51 @@ class TestDistributedQueue(unittest.TestCase):
             self.assertEqual(qA[k].seq, count)
             count = count + 1
 
+    def test_comm_timeout(self):
+        self.callback_storage = []
+
+        def add_callback(result):
+            self.callback_storage.append(result)
+
+        pydynaa.DynAASim().reset()
+        alice = QuantumNode("Alice", 1)
+        bob = QuantumNode("Bob", 2)
+
+        conn = ClassicalFibreConnection(alice, bob, length=0.01)
+        aliceDQ = DistributedQueue(alice, conn)
+
+        aliceDQ.add_callback = add_callback
+
+        aliceProto = TestProtocol(alice, aliceDQ, 1)
+
+        nodes = [alice, bob]
+
+        conns = [
+            (conn, "dqp_conn", [aliceProto])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        pydynaa.DynAASim().run(5000)
+
+        expected_qid = 0
+        num_adds = 100
+        expected_results = [(aliceDQ.DQ_TIMEOUT, expected_qid, qseq, [alice.name, qseq]) for qseq in range(num_adds)]
+
+        # Check that all attempted add's timed out
+        self.assertEqual(self.callback_storage, expected_results)
+
+        # Check that alice's distributed queue has no outstanding add acks
+        self.assertEqual(aliceDQ.waitAddAcks, {})
+
+        # Check that all of the local queues are empty
+        for local_queue in aliceDQ.queueList:
+            self.assertEqual(local_queue.queue, {})
+
+        # Check that we incremented the comms_seq
+        self.assertEqual(aliceDQ.comms_seq, num_adds)
+
 
 if __name__ == "__main__":
     unittest.main()

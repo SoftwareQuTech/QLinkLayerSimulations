@@ -502,13 +502,13 @@ class NodeCentricEGP(EGP):
 
             # Handle errors that may have occurred while adding the request
             elif status == self.dqp.DQ_TIMEOUT:
-                self.issue_err(self.ERR_NOTIME)
+                self.issue_err(err=self.ERR_NOTIME, err_data=creq)
 
             elif status == self.dqp.DQ_REJECT:
-                self.issue_err(self.ERR_REJECTED)
+                self.issue_err(err=self.ERR_REJECTED, err_data=creq)
 
             else:
-                self.issue_err(self.ERR_OTHER)
+                self.issue_err(err=self.ERR_OTHER, err_data=creq)
 
         except Exception as err_data:
             logger.exception("Error occurred processing DQP add callback!")
@@ -679,7 +679,7 @@ class NodeCentricEGP(EGP):
 
         # Issue OK
         logger.debug("Issuing okay to caller")
-        t_create = now - self.mhp.conn.channel_to_node(self.node).get_delay_mean()
+        t_create = now - self.mhp.conn.channel_to_node(self.node).compute_delay()
         t_goodness = t_create
         result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
         self.issue_ok(result)
