@@ -21,6 +21,11 @@ def store_result(storage, result):
     storage.append(result)
 
 
+def count_errors(storage):
+    errors = list(filter(lambda item: len(item) == 2, storage))
+    return len(errors)
+
+
 class PM_Test_Ent(PM_Test):
     def __init__(self, name):
         super(PM_Test_Ent, self).__init__(name=name)
@@ -78,8 +83,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm = PM_Controller()
         alice_create_counter = PM_Test_Counter(name="AliceCreateCounter")
         bob_create_counter = PM_Test_Counter(name="BobCreateCounter")
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
         pm.addEvent(source=egpA, evtType=egpA._EVT_CREATE, ds=alice_create_counter)
         pm.addEvent(source=egpB, evtType=egpB._EVT_CREATE, ds=bob_create_counter)
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # Schedule egp CREATE commands mid simulation
         alice_pairs = 1
@@ -138,6 +147,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertTrue(bob_create_counter.test_passed())
         self.assertEqual(alice_create_counter.num_tested_items, 1)
         self.assertEqual(bob_create_counter.num_tested_items, 1)
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
 
     def test_multi_create(self):
         # Set up Alice
@@ -156,8 +167,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm = PM_Controller()
         alice_create_counter = PM_Test_Counter(name="AliceCreateCounter")
         bob_create_counter = PM_Test_Counter(name="BobCreateCounter")
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
         pm.addEvent(source=egpA, evtType=egpA._EVT_CREATE, ds=alice_create_counter)
         pm.addEvent(source=egpB, evtType=egpB._EVT_CREATE, ds=bob_create_counter)
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # Schedule egp CREATE commands mid simulation
         alice_pairs = 1
@@ -203,6 +218,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertTrue(bob_create_counter.test_passed())
         self.assertEqual(alice_create_counter.num_tested_items, num_requests)
         self.assertEqual(bob_create_counter.num_tested_items, 0)
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
 
     def test_successful_simulation(self):
         # Set up Alice
@@ -344,6 +361,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
+
         num_requests = 3
         alice_requests = [EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1000,
                                      purpose_id=1, priority=10) for _ in range(num_requests)]
@@ -376,6 +399,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(self.alice_results, expected_results)
         self.assertEqual(self.bob_results, [])
 
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
     def test_unresponsive_mhp(self):
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
@@ -389,6 +416,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
@@ -442,6 +475,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(err, expected_err_egp)
         self.assertEqual(request.create_time, alice_request.create_time)
 
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
     def test_unresponsive_egp(self):
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
@@ -455,6 +492,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=100,
                                    purpose_id=1, priority=10)
@@ -480,6 +523,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(len(self.alice_results), 1)
         self.assertEqual(self.alice_results, [(egpA.ERR_TIMEOUT, alice_request)])
 
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
     def test_one_node_expires(self):
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=10, pair_preparation=NV_PairPreparation())
@@ -493,6 +540,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
         def faulty_send(node, data, conn):
@@ -574,6 +627,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Check that we were able to resynchronize for bob's request
         self.assertEqual(self.alice_results[-bob_pairs:], self.bob_results[-bob_pairs:])
 
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
     def test_both_nodes_expire(self):
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
@@ -593,6 +650,13 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
+
         egpA.mhp.conn._get_next_mhp_seq = bad_inc
         alice_pairs = 3
         alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
@@ -637,6 +701,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         expected_ids = [(alice.nodeID, bob.nodeID, 1), (alice.nodeID, bob.nodeID, 2)]
         self.assertEqual(expected_ids, expired_ids)
 
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
     def test_creation_failure(self):
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
@@ -650,6 +718,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
@@ -698,6 +772,10 @@ class TestNodeCentricEGP(unittest.TestCase):
                             (NodeCentricEGP.ERR_UNSUPP, None)]
 
         self.assertEqual(self.alice_results, expected_results)
+
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
 
     def test_events(self):
         # Set up Alice
