@@ -43,9 +43,9 @@ class PM_Test_Ent(PM_Test):
         self.stored_data.append(result)
 
 
-class PM_Test_Req(PM_Test):
+class PM_Test_Counter(PM_Test):
     def __init__(self, name):
-        super(PM_Test_Req, self).__init__(name=name)
+        super(PM_Test_Counter, self).__init__(name=name)
         self.num_tested_items = 0
 
     def _test(self, event):
@@ -74,6 +74,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
+
+        pm = PM_Controller()
+        alice_create_counter = PM_Test_Counter(name="AliceCreateCounter")
+        bob_create_counter = PM_Test_Counter(name="BobCreateCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_CREATE, ds=alice_create_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_CREATE, ds=bob_create_counter)
 
         # Schedule egp CREATE commands mid simulation
         alice_pairs = 1
@@ -127,6 +133,12 @@ class TestNodeCentricEGP(unittest.TestCase):
             qB = bobMemory.get_qubit(i + 1)
             self.assertEqual(qA.qstate, qB.qstate)
 
+        # Verify that the pydynaa create events were scheduled correctly
+        self.assertTrue(alice_create_counter.test_passed())
+        self.assertTrue(bob_create_counter.test_passed())
+        self.assertEqual(alice_create_counter.num_tested_items, 1)
+        self.assertEqual(bob_create_counter.num_tested_items, 1)
+
     def test_multi_create(self):
         # Set up Alice
         aliceMemory = QuantumProcessingDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
@@ -140,6 +152,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
+
+        pm = PM_Controller()
+        alice_create_counter = PM_Test_Counter(name="AliceCreateCounter")
+        bob_create_counter = PM_Test_Counter(name="BobCreateCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_CREATE, ds=alice_create_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_CREATE, ds=bob_create_counter)
 
         # Schedule egp CREATE commands mid simulation
         alice_pairs = 1
@@ -179,6 +197,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         for create_id, result in zip(alice_create_info, self.alice_results):
             stored_id, ent_id, _, _, _ = result
             self.assertEqual(stored_id, create_id)
+
+        # Verify that the pydynaa create events were scheduled correctly
+        self.assertTrue(alice_create_counter.test_passed())
+        self.assertTrue(bob_create_counter.test_passed())
+        self.assertEqual(alice_create_counter.num_tested_items, num_requests)
+        self.assertEqual(bob_create_counter.num_tested_items, 0)
 
     def test_successful_simulation(self):
         # Set up Alice
@@ -687,8 +711,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm = PM_Controller()
         alice_ent_tester = PM_Test_Ent(name="AliceEntTester")
         bob_ent_tester = PM_Test_Ent(name="BobEntTester")
-        alice_req_tester = PM_Test_Req(name="AliceReqTester")
-        bob_req_tester = PM_Test_Req(name="BobReqTester")
+        alice_req_tester = PM_Test_Counter(name="AliceReqCounter")
+        bob_req_tester = PM_Test_Counter(name="BobReqCounter")
 
         # Set up EGP
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=alice_ent_tester.store_data)
@@ -734,6 +758,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
         pydynaa.DynAASim().run(400)
 
+        # Verify that the pydynaa ent and req events were scheduled correctly
         self.assertEqual(len(alice_ent_tester.stored_data), alice_pairs + bob_pairs)
         self.assertEqual(len(bob_ent_tester.stored_data), alice_pairs + bob_pairs)
         self.assertEqual(alice_req_tester.num_tested_items, 2)
