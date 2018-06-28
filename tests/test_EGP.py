@@ -288,15 +288,15 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
-        # Schedule egp CREATE commands mid simulation
+        num_requests = 3
+        alice_requests = [EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1000,
+                                     purpose_id=1, priority=10) for _ in range(num_requests)]
+
+        # Schedule egp CREATE commands mid simulation to ensure timeout order when checking results
         sim_scheduler = SimulationScheduler()
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1000,
-                                   purpose_id=1, priority=10)
-
-        alice_scheduled_create = partial(egpA.create, creq=alice_request)
-
-        # Schedule a sequence of various create requests
-        sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
+        for t, request in enumerate(alice_requests):
+            alice_scheduled_create = partial(egpA.create, creq=request)
+            sim_scheduler.schedule_function(func=alice_scheduled_create, t=t)
 
         # Construct a network for the simulation
         nodes = [
@@ -314,10 +314,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
-        pydynaa.DynAASim().run(1000)
+        pydynaa.DynAASim().run(10)
 
-        self.assertEqual(len(self.alice_results), 0)
-        self.assertEqual(self.alice_results, self.bob_results)
+        expected_results = [(egpA.ERR_NOTIME, req) for req in alice_requests]
+        self.assertEqual(self.alice_results, expected_results)
+        self.assertEqual(self.bob_results, [])
 
     def test_unresponsive_mhp(self):
         # Set up Alice
@@ -364,8 +365,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         pydynaa.DynAASim().run(max_time + 2)
 
-        dqp_delay = egpA.dqp.conn.channel_from_A.get_delay_mean() + egpA.dqp.conn.channel_from_B.get_delay_mean()
-        egp_delay = egpA.conn.channel_from_A.get_delay_mean() + egpA.conn.channel_from_B.get_delay_mean()
+        dqp_delay = egpA.dqp.conn.channel_from_A.compute_delay() + egpA.dqp.conn.channel_from_B.compute_delay()
+        egp_delay = egpA.conn.channel_from_A.compute_delay() + egpA.conn.channel_from_B.compute_delay()
         mhp_delay = max(dqp_delay, egp_delay)
         mhp_start = egpA.mhp.timeStep * ceil(mhp_delay / egpA.mhp.timeStep)
 
@@ -399,15 +400,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
         egpA.connect_to_peer_protocol(egpB)
 
-        # Schedule egp CREATE commands mid simulation
-        sim_scheduler = SimulationScheduler()
         alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=100,
                                    purpose_id=1, priority=10)
 
-        alice_scheduled_create = partial(egpA.create, creq=alice_request)
-
-        # Schedule a sequence of various create requests
-        sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
+        egpA.create(alice_request)
 
         # Construct a network for the simulation
         nodes = [
