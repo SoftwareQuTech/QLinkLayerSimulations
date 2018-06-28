@@ -80,6 +80,7 @@ class EGP(EasyProtocol):
         self.ok_callback = ok_callback
         self.next_creation_id = 0
         self.max_creation_id = 2**32 - 1
+        self._EVT_ERROR = EventType("ERROR", "An error occurred in the EGP")
 
     @abc.abstractmethod
     def connect_to_peer_protocol(self, other_egp):
@@ -157,7 +158,9 @@ class EGP(EasyProtocol):
         """
         if self.err_callback:
             self.err_callback(result=(err, err_data))
+            self._schedule_now(self._EVT_ERROR)
         else:
+            self._schedule_now(self._EVT_ERROR)
             return err
 
     def issue_ok(self, result):
@@ -606,7 +609,7 @@ class NodeCentricEGP(EGP):
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
-                    self.issue_err(proto_err)
+                    self.issue_err(err=proto_err)
 
                 # No entanglement generation
                 if r == 0:
@@ -652,7 +655,7 @@ class NodeCentricEGP(EGP):
         # Check if an error occurred while processing a request
         if proto_err:
             logger.error("Protocol error occured in MHP: {}".format(proto_err))
-            self.issue_err(proto_err)
+            self.issue_err(err=proto_err)
 
     def _handle_generation_reply(self, r, mhp_seq, aid):
         """
