@@ -237,6 +237,7 @@ class NodeCentricEGP(EGP):
         self.other_free_memory = None
 
         # Pydynaa events
+        self._EVT_CREATE = EventType("CREATE", "Call to create has completed")
         self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
         self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
 
@@ -428,6 +429,7 @@ class NodeCentricEGP(EGP):
 
             # Add the request to the DQP
             self._add_to_queue(creq)
+            self._schedule_now(self._EVT_CREATE)
             return (creq.create_id, creq.create_time)
 
         except Exception as err:
