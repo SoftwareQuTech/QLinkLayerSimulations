@@ -193,6 +193,7 @@ class NodeCentricEGP(EGP):
     ERR_REJECTED = 44
     ERR_OTHER = 45
     ERR_EXPIRE = 46
+    ERR_CREATE = 47
 
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None):
         """
@@ -416,14 +417,14 @@ class NodeCentricEGP(EGP):
             information for use with the EGP
         """
         try:
-            self._assign_creation_information(creq)
-
             # Check if we can support this request
             err = self.check_supported_request(creq)
             if err:
                 logger.error("Create request failed {}".format(err))
-                self.issue_err(err)
+                self.issue_err(err=err, err_data=creq)
                 return
+
+            self._assign_creation_information(creq)
 
             # Track our peer's available memory
             logger.debug("EGP at node {} processing request: {}".format(self.node.nodeID, creq.__dict__))
@@ -437,7 +438,7 @@ class NodeCentricEGP(EGP):
 
         except Exception as err:
             logger.exception("Failed to issue create")
-            self.issue_err(self.ERR_OTHER, err_data=err)
+            self.issue_err(self.ERR_CREATE, err_data=err)
 
     def _assign_creation_information(self, creq):
         """
@@ -459,20 +460,28 @@ class NodeCentricEGP(EGP):
             The EGP Request that we want to check
         :return: Error code if request fails a check, otherwise 0
         """
+        if creq.otherID == self.node.nodeID:
+            logger.error("Attempted to submit request for entanglement with self!")
+            return self.ERR_CREATE
+
+        if creq.otherID != self.conn.nodeA.nodeID and creq.otherID != self.conn.nodeB.nodeID:
+            logger.error("Attempted to submit request for entanglement with unknown ID!")
+            return self.ERR_CREATE
+
         # Check if we have the resources for this request
         if self.qmm.get_free_mem_ad() < creq.num_pairs:
-            logger.debug("Not enough free qubits to satisfy request")
+            logger.error("Not enough free qubits to satisfy request")
             return self.ERR_NORES
 
         # Check if we can achieve the minimum fidelity
         if self.feu.estimate_fidelity(alpha=self.mhp.alpha) < creq.min_fidelity:
-            logger.debug("Requested fidelity is too high to be satisfied")
+            logger.error("Requested fidelity is too high to be satisfied")
             return self.ERR_UNSUPP
 
         # Check if we can satisfy the request within the given time frame
         expected_time = self.mhp.timeStep * creq.num_pairs
         if expected_time > creq.max_time:
-            logger.debug("Requested max time is too short")
+            logger.error("Requested max time is too short")
             return self.ERR_UNSUPP
 
         return 0

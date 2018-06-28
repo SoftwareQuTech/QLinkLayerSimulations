@@ -725,8 +725,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
-        # Schedule egp CREATE commands mid simulation
-        sim_scheduler = SimulationScheduler()
+        # EGP Request that requests entanglement with self
+        node_self_request = EGPRequest(otherID=alice.nodeID, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
+                                       priority=10)
+
+        # EGP Request that requests entanglement with unknown node
+        unknown_id = 100
+        node_unknown_request = EGPRequest(otherID=unknown_id, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
+                                          priority=10)
 
         # EGP Request that requests more pairs than memory can contain
         noresmem_request = EGPRequest(otherID=bob.nodeID, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
@@ -740,14 +746,11 @@ class TestNodeCentricEGP(unittest.TestCase):
         unsupptime_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=0, purpose_id=1,
                                         priority=10)
 
-        noresmem_scheduled_create = partial(egpA.create, creq=noresmem_request)
-        unsuppfid_scheduled_create = partial(egpA.create, creq=unsuppfid_requet)
-        unsupptime_scheduled_create = partial(egpA.create, creq=unsupptime_request)
-
-        # Schedule a sequence of various create requests
-        sim_scheduler.schedule_function(func=noresmem_scheduled_create, t=0)
-        sim_scheduler.schedule_function(func=unsuppfid_scheduled_create, t=0)
-        sim_scheduler.schedule_function(func=unsupptime_scheduled_create, t=0)
+        egpA.create(creq=node_self_request)
+        egpA.create(creq=node_unknown_request)
+        egpA.create(creq=noresmem_request)
+        egpA.create(creq=unsuppfid_requet)
+        egpA.create(creq=unsupptime_request)
 
         # Construct a network for the simulation
         nodes = [
@@ -767,9 +770,11 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
         pydynaa.DynAASim().run(0.01)
 
-        expected_results = [(NodeCentricEGP.ERR_NORES, None),
-                            (NodeCentricEGP.ERR_UNSUPP, None),
-                            (NodeCentricEGP.ERR_UNSUPP, None)]
+        expected_results = [(NodeCentricEGP.ERR_CREATE, node_self_request),
+                            (NodeCentricEGP.ERR_CREATE, node_unknown_request),
+                            (NodeCentricEGP.ERR_NORES, noresmem_request),
+                            (NodeCentricEGP.ERR_UNSUPP, unsuppfid_requet),
+                            (NodeCentricEGP.ERR_UNSUPP, unsupptime_request)]
 
         self.assertEqual(self.alice_results, expected_results)
 
