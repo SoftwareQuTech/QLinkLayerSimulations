@@ -549,8 +549,15 @@ class NodeCentricEGP(EGP):
         if there are any requests and to receive a request to process
         """
         try:
+            if self.qmm.is_busy():
+                logger.debug("Processing device is busy.")
+                free_memory_size = self.qmm.get_free_mem_ad()
+                request = (False, None, None, None, None, free_memory_size)
+                logger.debug("Constructed INFO request {} for MHP_NC".format(request))
+                self.mhp_service.put_ready_data(self.node.nodeID, request)
+
             # Process any currently outstanding generations
-            if self.outstanding_generations:
+            elif self.outstanding_generations:
                 generation_request = self.outstanding_generations[self.curr_gen]
                 logger.debug("Have outstanding generation, passing {} to MHP".format(generation_request))
                 self.mhp_service.put_ready_data(self.node.nodeID, generation_request)

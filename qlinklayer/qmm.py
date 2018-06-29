@@ -18,6 +18,9 @@ class QuantumMemoryManagement:
         self.node = node
         self.reserved_qubits = [self.qubit_in_use(i) for i in range(self.node.qmem.max_num)]
 
+    def is_busy(self):
+        return self.node.qmem.busy
+
     def qubit_in_use(self, id):
         """
         Tells us if a qubit is in use within the quantum memory device
