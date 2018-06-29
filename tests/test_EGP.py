@@ -395,7 +395,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
         pydynaa.DynAASim().run(10)
 
-        expected_results = [(egpA.ERR_NOTIME, req) for req in alice_requests]
+        expected_results = [(egpA.dqp.DQ_TIMEOUT, req) for req in alice_requests]
         self.assertEqual(self.alice_results, expected_results)
         self.assertEqual(self.bob_results, [])
 
@@ -430,7 +430,6 @@ class TestNodeCentricEGP(unittest.TestCase):
                                    purpose_id=1, priority=10)
 
         alice_scheduled_create = partial(egpA.create, creq=alice_request)
-
         # Schedule a sequence of various create requests
         t0 = 0
         sim_scheduler.schedule_function(func=alice_scheduled_create, t=t0)
@@ -518,10 +517,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.mhp_service.start()
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
-        pydynaa.DynAASim().run(160)
+        pydynaa.DynAASim().run(110)
 
         self.assertEqual(len(self.alice_results), 1)
-        self.assertEqual(self.alice_results, [(egpA.ERR_TIMEOUT, alice_request)])
+        self.assertEqual(self.alice_results, [(egpA.ERR_NOTIME, alice_request)])
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))

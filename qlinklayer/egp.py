@@ -156,12 +156,13 @@ class EGP(EasyProtocol):
         :return: obj any
             The error info
         """
+        logger.debug("Issuing error {} with data {}".format(err, err_data))
         if self.err_callback:
             self.err_callback(result=(err, err_data))
             self._schedule_now(self._EVT_ERROR)
         else:
             self._schedule_now(self._EVT_ERROR)
-            return err
+            return err, err_data
 
     def issue_ok(self, result):
         """
@@ -172,7 +173,7 @@ class EGP(EasyProtocol):
         :return: obj any
             OK Info
         """
-
+        logger.debug("Issuing OK with data {}".format(result))
         if self.ok_callback:
             self.ok_callback(result=result)
         else:
@@ -234,6 +235,9 @@ class NodeCentricEGP(EGP):
         # Create local share of distributed queue
         self.dqp = DistributedQueue(node=self.node)
         self.dqp.add_callback = self._add_to_queue_callback
+        from netsquid.pydynaa import EventHandler
+        self.dqp_timeout_handler = EventHandler(self._queue_timeout_handler)
+        self._wait(self.dqp_timeout_handler, entity=self.dqp, event_type=self.dqp._EVT_QUEUE_TIMEOUT)
 
         # Create the request scheduler
         self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
@@ -464,7 +468,7 @@ class NodeCentricEGP(EGP):
             logger.error("Attempted to submit request for entanglement with self!")
             return self.ERR_CREATE
 
-        if creq.otherID != self.conn.nodeA.nodeID and creq.otherID != self.conn.nodeB.nodeID:
+        if creq.otherID != self.get_otherID():
             logger.error("Attempted to submit request for entanglement with unknown ID!")
             return self.ERR_CREATE
 
@@ -518,19 +522,25 @@ class NodeCentricEGP(EGP):
             if status == self.dqp.DQ_OK:
                 self.requests[(qid, qseq)] = creq
 
-            # Handle errors that may have occurred while adding the request
-            elif status == self.dqp.DQ_TIMEOUT:
-                self.issue_err(err=self.ERR_NOTIME, err_data=creq)
-
-            elif status == self.dqp.DQ_REJECT:
-                self.issue_err(err=self.ERR_REJECTED, err_data=creq)
-
+            # Otherwise bubble up the DQP error
             else:
-                self.issue_err(err=self.ERR_OTHER, err_data=creq)
+                logger.error("Error occurred adding request to distributed queue!")
+                self.issue_err(err=status, err_data=creq)
 
         except Exception as err_data:
             logger.exception("Error occurred processing DQP add callback!")
             self.issue_err(err=self.ERR_OTHER, err_data=err_data)
+
+    def _queue_timeout_handler(self, evt):
+        """
+        Handler for items that have timed out in the distributed queue.
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The event that triggered this handler
+        """
+        # Retrieve the item from the distributed queue and propagate it to higher layers
+        dist_queue = evt.source
+        queue_item = dist_queue.timed_out_items.pop()
+        self.issue_err(err=self.ERR_NOTIME, err_data=queue_item.request)
 
     # Handler to be given to MHP as a stateProvider
     def trigger_pair_mhp(self):
@@ -539,11 +549,6 @@ class NodeCentricEGP(EGP):
         if there are any requests and to receive a request to process
         """
         try:
-            # Pass request information back up to higher layer protocol
-            stale_requests = self.scheduler.timeout_stale_requests()
-            for request in stale_requests:
-                self.issue_err(err=self.ERR_TIMEOUT, err_data=request)
-
             # Process any currently outstanding generations
             if self.outstanding_generations:
                 generation_request = self.outstanding_generations[self.curr_gen]
@@ -552,6 +557,7 @@ class NodeCentricEGP(EGP):
 
             else:
                 incoming_generations = self.scheduler.next()
+                logger.debug("Scheduler produced incoming generations: {}".format(incoming_generations))
                 if incoming_generations:
                     self.outstanding_generations = incoming_generations
                     self.curr_gen = 0
@@ -755,6 +761,15 @@ class NodeCentricEGP(EGP):
             logger.debug("Incrementing our expected MHP SEQ to {}".format(self.expected_seq))
             return True
 
+    def _apply_correction_to_qubit(self, storage_qubit):
+        """
+        Applies a Z gate to specified storage qubit in the case that the entanglement generation
+        result was 2
+        :return:
+        """
+        logger.debug("Applying correction to storage_qubit {}".format(storage_qubit))
+        self.node.qmem.apply_unitary(ns.Z, [storage_qubit])
+
     def _gather_expired_entanglement_ids(self, aid):
         """
         Constructs a sequence of entanglement IDs that have not been serviced or need to be removed by higher layer
@@ -767,7 +782,8 @@ class NodeCentricEGP(EGP):
             Entanglement IDs containing the (request_creator_nodeID, peer_nodeID, MHP_Seq) we need to expire
         """
         creq = self.requests[aid]
-        creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
+        peerID = self.get_otherID()
+        creatorID = self.node.nodeID if peerID == creq.otherID else peerID
 
         # Construct entanglement IDs for all remaining generations
         num_ids = creq.num_pairs - self.curr_gen
@@ -819,12 +835,3 @@ class NodeCentricEGP(EGP):
             # Clear outstanding generations
             logger.debug("Clearing outsanding generations {} for request".format(self.outstanding_generations))
             self._prune_request_generations(aid=aid)
-
-    def _apply_correction_to_qubit(self, storage_qubit):
-        """
-        Applies a Z gate to specified storage qubit in the case that the entanglement generation
-        result was 2
-        :return:
-        """
-        logger.debug("Applying correction to storage_qubit {}".format(storage_qubit))
-        self.node.qmem.apply_unitary(ns.Z, [storage_qubit])

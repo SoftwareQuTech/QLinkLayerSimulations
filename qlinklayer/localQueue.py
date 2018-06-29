@@ -4,10 +4,14 @@
 # 
 
 import netsquid.pydynaa as pydynaa
+from netsquid.pydynaa import Entity, EventType, EventHandler
 from qlinklayer.general import LinkLayerException
+from easysquid.toolbox import create_logger
+
+logger = create_logger("logger")
 
 
-class LocalQueue:
+class LocalQueue(Entity):
     """
     Local queue of items ordered by sequence number, incl some additional features
     keeping 
@@ -133,7 +137,6 @@ class LocalQueue:
         return self.queue[self.popSeq].scheduleAt
 
     def contains(self, seq):
-
         if seq in self.queue:
             return True
         else:
@@ -156,6 +159,80 @@ class LocalQueue:
         item.scheduleAt = scheduleAt + pydynaa.DynAASim().current_time
 
 
+class TimeoutLocalQueue(LocalQueue):
+    def __init__(self, wsize=None, maxSeq=None, scheduleAfter=0.0):
+        """
+        Implements a local queue that supports timing out queue items asynchronously
+        :param wsize: int
+            Number of items that this queue holds at any given time
+        :param maxSeq: int
+            Maximum sequence number for items in the queue
+        :param scheduleAfter: float
+            Default schedule delay for added queue items
+        """
+        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter)
+        self._EVT_PROC_TIMEOUT = EventType("QUEUE ITEM REMOVED", "Triggers when an item has successfully been removed")
+        self.timed_out_items = []
+
+    def add_with_id(self, originID, seq, request):
+        """
+        Adds an item to the queue.
+        :param originID: int
+            ID of the source that instructed the addition of this queue item
+        :param seq: int
+            Sequence location to add this item into the queue
+        :param request: obj any
+            The item to store in the queue
+        """
+        # Compute the minimum time at which this request can be served
+        now = pydynaa.DynAASim().current_time
+        sa = now + self.scheduleAfter
+
+        # Check if the item specifies a max queue time
+        lifetime = getattr(request, 'max_time', 0.0)
+
+        # Store the item and attach the timeout event
+        lq = _TimeoutLocalQueueItem(request, seq, sa, lifetime=lifetime)
+        self.queue[seq] = lq
+        lq.prepare()
+
+    def add_timeout_event(self, qseq):
+        """
+        Configures a handler to catch the timeout event of the queue item
+        :param qseq: int
+            Sequence number of the item we want to add a handler to
+        """
+        queue_item = self.queue[qseq]
+
+        # Only attach a handler if the item supports the timeout event
+        if isinstance(queue_item, _TimeoutLocalQueueItem):
+            logger.debug("TimedLocalQueue has queue item {}".format(vars(queue_item)))
+            timeout_evt_handler = EventHandler(self._timeout_handler)
+            self._wait_once(timeout_evt_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
+
+    def _timeout_handler(self, evt):
+        """
+        Timeout handler for queue item timeout event
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The event that triggered this handler
+        """
+        # Grab the item that timed out
+        queue_item = evt.source
+        logger.debug("Timeout Triggered")
+
+        # Check if the item is still stored locally
+        if self.contains(queue_item.seq):
+            logger.debug("Removing item from queue")
+            self.queue.pop(queue_item.seq)
+
+            # Store the item for retrieval by higher layers
+            self.timed_out_items.append(queue_item)
+            self._schedule_now(self._EVT_PROC_TIMEOUT)
+
+        else:
+            logger.debug("Item already removed!")
+
+
 class _LocalQueueItem:
     def __init__(self, request, seq, scheduleAt):
         self.request = request
@@ -164,3 +241,33 @@ class _LocalQueueItem:
 
         # Flag whether this queue item is ready to be executed
         self.ready = False
+
+    def prepare(self):
+        pass
+
+
+class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
+    def __init__(self, request, seq, scheduleAt, lifetime=0.0):
+        """
+        Local queue item that supports time outs
+        :param request: obj any
+            The request information to store with this queue item
+        :param seq: int
+            The sequence number of this item in the containing queue
+        :param scheduleAt: float
+            Delay time before queue item is officially scheduled
+        :param lifetime: float
+            The maximum amount of time this item can sit in the queue before timing out
+        """
+        super(_TimeoutLocalQueueItem, self).__init__(request=request, seq=seq, scheduleAt=scheduleAt)
+        self.lifetime = lifetime
+        self._EVT_TIMEOUT = EventType("QUEUE ITEM TIMEOUT", "Triggers when a queue item is stale")
+
+    def prepare(self):
+        """
+        Sets up the timeout event into the future
+        """
+        if self.lifetime:
+            now = pydynaa.DynAASim().current_time
+            deadline = now + self.lifetime
+            self._schedule_after(deadline, self._EVT_TIMEOUT)

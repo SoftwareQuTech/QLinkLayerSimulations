@@ -11,10 +11,9 @@ from functools import partial
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
 from netsquid.pydynaa import EventType, EventHandler
-from qlinklayer.localQueue import LocalQueue
+from qlinklayer.localQueue import TimeoutLocalQueue
 from qlinklayer.general import LinkLayerException
 from easysquid.toolbox import create_logger
-
 
 logger = create_logger("logger")
 
@@ -85,11 +84,17 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.myWsize = myWsize
         self.otherWsize = otherWsize
 
+        # Queue item management
+        self.timed_out_items = []
+        self.queue_item_timeout_handler = EventHandler(self._queue_item_timeout_handler)
+        self._EVT_QUEUE_TIMEOUT = EventType("DIST QUEUE TIMEOUT", "Triggers when queue item times out")
+
         # Initialize queues
         self.queueList = []
         for j in range(numQueues):
-            q = LocalQueue()
+            q = TimeoutLocalQueue()
             self.queueList.append(q)
+            self._wait(self.queue_item_timeout_handler, entity=q, event_type=q._EVT_PROC_TIMEOUT)
 
         # Backlog of requests
         self.backlogAdd = deque()
@@ -100,7 +105,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Waiting for acks
         self.waitAddAcks = {}
         self.acksWaiting = 0
-        self.timeout_handler = None
+        self.comm_timeout_handler = None
         self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
 
         # expected sequence number
@@ -112,6 +117,14 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.otherTrig = 0
 
     def _establish_master(self, master):
+        """
+        Establishes the role of master/slave for the local DQP based on info about the other DQP.  If a user
+        has defined their DQP to be the master then use this, otherwise rely on lowest nodeID.
+        :param master: bool or None
+            User defined assignment for master role
+        :return: bool
+            Whether we are master or not
+        """
         if master is None and self.otherID:
             # Lowest ID gets to be master
             return self.myID < self.otherID
@@ -120,6 +133,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             return master
 
     def connect_to_peer_protocol(self, other_distQueue, conn=None):
+        """
+        Connects to a peer DQP.  Sets up a default connection if none specified to be used.
+        :param other_distQueue: obj `~qlinklayer.distQueue.DistributedQueue`
+            The peer distributed queue that we want to connect with
+        :param conn: obj `~easysquid.connection.Connection`
+            The connection to use for communication
+        """
         if not conn:
             # Create a common connection
             conn = ClassicalFibreConnection(self.node, other_distQueue.node, length=1e-5)
@@ -129,6 +149,11 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         other_distQueue.establish_connection(conn)
 
     def establish_connection(self, connection):
+        """
+        Sets up the internal connection and configures the master/slave relationship for the queue
+        :param connection: obj `~easysquid.connection.Connection`
+            The communication connection used by the distributed queue
+        """
         self.setConnection(connection)
         self.otherID = self.get_otherID()
         self.master = self._establish_master(self.master)
@@ -138,12 +163,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         Schedules a communication timeout event and attaches a handler that resets the protocol
         :return:
         """
-        self.timeout_handler = EventHandler(partial(self.comm_timeout_handler, ack_id=ack_id))
+        self.comm_timeout_handler = EventHandler(partial(self._comm_timeout_handler, ack_id=ack_id))
         comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
-        self.timeout_event = self._schedule_after(2 * comm_delay, self._EVT_COMM_TIMEOUT)
-        self._wait_once(self.timeout_handler, event=self.timeout_event)
+        self.comm_timeout_event = self._schedule_after(2 * comm_delay, self._EVT_COMM_TIMEOUT)
+        self._wait_once(self.comm_timeout_handler, event=self.comm_timeout_event)
 
-    def comm_timeout_handler(self, evt, ack_id):
+    def _comm_timeout_handler(self, evt, ack_id):
         """
         DQP Communication timeout handler.  Triggered after we have waited too long for a response from our peer.
         :param evt: obj `~netsquid.pydynaa.Event`
@@ -161,7 +186,29 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             if self.add_callback:
                 self.add_callback(result=(self.DQ_TIMEOUT, qid, queue_seq, request))
 
+    def _queue_item_timeout_handler(self, evt):
+        """
+        DQP Queue Item timeout handler.  Triggered when an underlying TimedLocalQueue has expired a queue item
+        due to it not being serviced within it's max time period.
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The event that triggered this handler
+        """
+        # Get the local queue that triggered the event
+        queue = evt.source
+        logger.debug("Handling local queue item timeout")
+
+        # Pull the timed out item from the local queue's internal storage
+        queue_item = queue.timed_out_items.pop()
+        logger.debug("Got timed out queue item {}".format(queue_item))
+
+        # Set up a timeout event for passing to higher layers
+        self.timed_out_items.append(queue_item)
+        self._schedule_now(self._EVT_QUEUE_TIMEOUT)
+
     def process_data(self):
+        """
+        Processes incoming messages and forwards them to the appropriate handlers
+        """
         # Fetch message from the other side
         [content, t] = self.conn.get_as(self.myID)
         if isinstance(content, tuple):
@@ -177,7 +224,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self._process_cmd(cmd, data)
 
     def _process_cmd(self, cmd, data):
-
+        """
+        Processes commands received from our peer
+        :param cmd: int
+            The identifier for the command our peer wants us to execute
+        :param data: obj any
+            Data associated for execution of the requested command
+        """
         # First, let's check its of the right form, which is [message type, more data]
         if cmd is None or data is None:
             self.send_error(self.CMD_ERR)
@@ -334,10 +387,14 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         logger.debug("Distributed queue readying item ({}, {})".format(qid, qseq))
         self.queueList[qid].ready(qseq, 0)
 
+        # Schedule the item to be ready
         conn_delay = self.conn.channel_from_node(self.node).compute_delay()
         scheduleAfter = max(0, conn_delay + self.myTrig - self.otherTrig)
         logger.debug("{} Scheduling after {}".format(self.node.nodeID, scheduleAfter))
         self.queueList[qid].modify_schedule(qseq, scheduleAfter)
+
+        # Add a timeout on the queue item
+        self.queueList[qid].add_timeout_event(qseq)
 
         if self.add_callback:
             self.add_callback((self.DQ_OK, qid, qseq, copy(request)))
@@ -375,7 +432,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # We are in control
             logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, rec_qseq))
             # Mark this item as ready
-            # TODO add time to be scheduled
             logger.debug("Distributed queue readying item ({}, {})".format(qid, rec_qseq))
             self.queueList[qid].ready(rec_qseq, 0)
             agreed_qseq = rec_qseq
@@ -387,15 +443,18 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.queueList[qid].add_with_id(nodeID, qseq, request)
 
             # Mark this item as ready
-            # TODO add time to be scheduled
             logger.debug("Distributed queue readying item ({}, {})".format(qid, qseq))
             self.queueList[qid].ready(qseq, 0)
             agreed_qseq = qseq
 
+        # Schedule the item
         conn_delay = self.conn.channel_from_node(self.node).compute_delay()
         scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
         logger.debug("{} Scheduling after {}".format(self.node.nodeID, scheduleAfter))
         self.queueList[qid].modify_schedule(agreed_qseq, scheduleAfter)
+
+        # Add a timeout on the queue item
+        self.queueList[qid].add_timeout_event(agreed_qseq)
 
         # Return the results if told to
         if self.add_callback:
@@ -458,10 +517,24 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         return self.queueList[qid].peek()
 
     def set_triggers(self, myTrig, otherTrig):
+        """
+        Sets delay triggers to be used for coordinating queue item scheduling.  Allows higher protocols
+        to have queue items synchronized.
+        :param myTrig: float
+            Time offset of protocols on our end
+        :param otherTrig: float
+            Time offset of protocols on the peer's end
+        """
         self.myTrig = myTrig
         self.otherTrig = otherTrig
 
     def get_min_schedule(self, qid=0):
+        """
+        Returns the min_schedule for the specified local queue
+        :param qid: int
+            Queue ID of the local queue to get the min_schedule for
+        :return:
+        """
         return self.queueList[qid].get_min_schedule()
 
     # Internal helpers
