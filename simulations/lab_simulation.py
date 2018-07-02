@@ -1,4 +1,5 @@
 import netsquid as ns
+from os.path import abspath, dirname
 from easysquid.easynetwork import Connections, setup_physical_network
 from netsquid.pydynaa import DynAASim
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
@@ -7,7 +8,8 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibre_connection"
 Connections._CONN_BY_NAME[Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION] = NodeCentricMHPHeraldedConnection
 
-config = '../EasySquid/util/NV_configs/network_configs/lab_config.json'
+dir_path = dirname(abspath(__file__))
+config = "{}/configs/lab_config.json".format(dir_path)
 DynAASim().reset()
 
 SECOND = 1e9
@@ -27,9 +29,9 @@ dqp_conn = network.get_connection(alice.nodeID, bob.nodeID, "dqp_conn")
 
 egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn)
 
-alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=3, min_fidelity=0.5, max_time=2*SECOND, purpose_id=1, priority=10)
+request = EGPRequest(otherID=bob.nodeID, num_pairs=3, min_fidelity=0.5, max_time=2 * SECOND, purpose_id=1, priority=10)
 
-egpA.create(alice_request)
+egpA.create(request)
 
 network.add_node_protocol(alice.nodeID, egpA.dqp)
 network.add_connection_protocol(dqp_conn, egpA.dqp)
@@ -49,11 +51,4 @@ egpA.mhp_service.start()
 
 network.start()
 
-import pdb
-pdb.set_trace()
-
-
-DynAASim().run(2*SECOND)
-
-import pdb
-pdb.set_trace()
+DynAASim().run(request.max_time + 1)
