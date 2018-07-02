@@ -174,7 +174,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :param evt: obj `~netsquid.pydynaa.Event`
             The event that triggered the timeout handler
         """
-        logger.debug("Timeout handler triggered!")
         if ack_id in self.waitAddAcks:
             logger.warning("Timed out waiting for communication response for comms_seq {}!".format(ack_id))
 
