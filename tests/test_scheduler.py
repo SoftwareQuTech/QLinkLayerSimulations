@@ -55,80 +55,51 @@ class TestRequestScheduler(unittest.TestCase):
 
         test_size = 3
         test_scheduler.update_other_mem_size(mem=test_size)
-        self.assertEqual(test_scheduler.other_mem, test_size)
-
-    def test_request_ready(self):
-        pydynaa.DynAASim().reset()
-        qmmA = QuantumMemoryManagement(node=self.nodeA)
-        qmmB = QuantumMemoryManagement(node=self.nodeB)
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmmA)
-        test_scheduler.other_mem = qmmB.get_free_mem_ad()
-        request = EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=10, purpose_id=0,
-                             priority=0)
-
-        conn = self.dqpA.conn
-        self.network = EasyNetwork(name="DQPNetwork",
-                                   nodes=[(self.nodeA, [self.dqpA]), (self.nodeB, [self.dqpB])],
-                                   connections=[(conn, "dqp_conn", [self.dqpA, self.dqpB])])
-        self.network.start()
-
-        # Check that an empty queue has no ready requests
-        self.assertFalse(test_scheduler.request_ready())
-
-        # Check that without agreement from dqp peer the request is not ready
-        self.dqpA.add(request)
-        ready_delay = self.dqpA.conn.channel_from_A.get_delay_mean() + self.dqpA.conn.channel_from_B.get_delay_mean()
-        pydynaa.DynAASim().run(ready_delay - 1)
-        self.assertFalse(test_scheduler.request_ready())
-
-        # Check that when enough time has passed for queue agreement then the item is ready
-        pydynaa.DynAASim().run(ready_delay + 1)
-        self.assertTrue(test_scheduler.request_ready())
-
-        # Verify that the next request is the one we submitted
-        generations = test_scheduler.next()
-        self.assertEqual(generations, [(True, (0, 0), 0, 1, None, 0)])
 
     def test_next(self):
         pydynaa.DynAASim().reset()
+        dqpA = DistributedQueue(node=self.nodeA)
+        dqpB = DistributedQueue(node=self.nodeB)
+        dqpA.connect_to_peer_protocol(dqpB)
         qmmA = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmmA)
-        request = EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=10, purpose_id=0,
+        test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
+
+        request = EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=12, purpose_id=0,
                              priority=0)
 
-        conn = self.dqpA.conn
+        conn = dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",
-                                   nodes=[(self.nodeA, [self.dqpA]), (self.nodeB, [self.dqpB])],
-                                   connections=[(conn, "dqp_conn", [self.dqpA, self.dqpB])])
+                                   nodes=[(self.nodeA, [dqpA]), (self.nodeB, [dqpB])],
+                                   connections=[(conn, "dqp_conn", [dqpA, dqpB])])
         self.network.start()
 
-        # Check that an empty queue has no next requests
-        self.assertIsNone(test_scheduler.next())
+        # Check that an empty queue has a default request
+        self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
 
-        # Check that an item not agreed upon also yields no requests
-        self.dqpA.add(request)
-        self.assertIsNone(test_scheduler.next())
+        # Check that an item not agreed upon also yields a default request
+        dqpA.add(request)
+        self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
 
-        pydynaa.DynAASim().run(10)
+        pydynaa.DynAASim().run(11)
 
-        # Check that QMM reserve failure yields no next request
+        # Check that QMM reserve failure yields a default request
         comm_q, storage_q = qmmA.reserve_entanglement_pair(n=request.num_pairs)
-        self.assertIsNone(test_scheduler.next())
+        self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
 
         # Return the reserved resources
         qmmA.free_qubit(comm_q)
         for q in storage_q:
             qmmA.free_qubit(q)
 
-        # Check that lack of peer resources causes no next request
-        self.assertIsNone(test_scheduler.next())
+        # Check that lack of peer resources causes a default request
+        self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
 
         # Verify that now we can obtain the next request
         test_scheduler.other_mem = request.num_pairs
 
         # Verify that the next request is the one we submitted
-        generations = test_scheduler.next()
-        self.assertEqual(generations, [(True, (0, 0), 0, 1, None, 0)])
+        gen = test_scheduler.next()
+        self.assertEqual(gen, (True, (0, 0), 0, 1, None, 0))
 
 
 if __name__ == "__main__":
