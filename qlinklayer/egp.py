@@ -1,5 +1,4 @@
 import abc
-import netsquid as ns
 from netsquid.pydynaa import DynAASim, EventType
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
@@ -775,7 +774,7 @@ class NodeCentricEGP(EGP):
         :return:
         """
         logger.debug("Applying correction to storage_qubit {}".format(storage_qubit))
-        self.node.qmem.apply_unitary(ns.Z, [storage_qubit])
+        self.node.qmem.apply_Z([storage_qubit])
 
     def _gather_expired_entanglement_ids(self, aid):
         """
