@@ -144,7 +144,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
         logger.debug("Handling CQ from {}, got classical: {} and qubit {}".format(sender, classical, qubit))
 
         # Check whether we are in time window
-        if not self._in_window:
+        if not self._in_window and qubit:
             logger.warning("Received CQ out of detection time window")
             # Outside window, drop qubit
             self._drop_qubit(qubit)
