@@ -516,9 +516,9 @@ class NodeCentricEGP(EGP):
         """
         try:
             # Store the request locally if DQP ADD was successful
-            logger.debug("Completed adding item to Distributed Queue, got result: {}".format(result))
             status, qid, qseq, creq = result
             if status == self.dqp.DQ_OK:
+                logger.debug("Completed adding item to Distributed Queue, got result: {}".format(result))
                 self.requests[(qid, qseq)] = creq
 
             # Otherwise bubble up the DQP error
