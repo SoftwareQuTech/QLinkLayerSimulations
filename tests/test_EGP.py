@@ -141,6 +141,8 @@ class TestNodeCentricEGP(unittest.TestCase):
             qA = aliceMemory.get_qubit(i + 1)
             qB = bobMemory.get_qubit(i + 1)
             self.assertEqual(qA.qstate, qB.qstate)
+            self.assertIn(qB, qA.qstate._qubits)
+            self.assertIn(qA, qB.qstate._qubits)
 
         # Verify that the pydynaa create events were scheduled correctly
         self.assertTrue(alice_create_counter.test_passed())
@@ -267,6 +269,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
+
         pydynaa.DynAASim().run(400)
 
         self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
@@ -277,6 +280,8 @@ class TestNodeCentricEGP(unittest.TestCase):
             qA = aliceMemory.get_qubit(i + 1)
             qB = bobMemory.get_qubit(i + 1)
             self.assertEqual(qA.qstate, qB.qstate)
+            self.assertIn(qB, qA.qstate._qubits)
+            self.assertIn(qA, qB.qstate._qubits)
 
     def test_manual_connect(self):
         # Set up Alice
@@ -346,6 +351,8 @@ class TestNodeCentricEGP(unittest.TestCase):
             qA = aliceMemory.get_qubit(i + 1)
             qB = bobMemory.get_qubit(i + 1)
             self.assertEqual(qA.qstate, qB.qstate)
+            self.assertIn(qB, qA.qstate._qubits)
+            self.assertIn(qA, qB.qstate._qubits)
 
     def test_unresponsive_dqp(self):
         # Set up Alice
@@ -393,6 +400,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
+
         pydynaa.DynAASim().run(10)
 
         expected_results = [(egpA.dqp.DQ_TIMEOUT, req) for req in alice_requests]
@@ -517,10 +525,15 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.mhp_service.start()
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
+
         pydynaa.DynAASim().run(110)
 
         self.assertEqual(len(self.alice_results), 1)
-        self.assertEqual(self.alice_results, [(egpA.ERR_NOTIME, alice_request)])
+
+        # Check that we got the correct error and that the requests are the same
+        [(error, request)] = self.alice_results
+        self.assertEqual(error, egpA.ERR_TIMEOUT)
+        self.assertEqual(vars(alice_request), vars(request))
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
@@ -587,6 +600,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
+
         pydynaa.DynAASim().run(40)
 
         # Check that we were able to get the first generation of alice's request completed
@@ -617,14 +631,32 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         invalid_oks = set(bob_oks) - set(alice_oks)
         uncovered_ids = [ok_message[1] for ok_message in invalid_oks]
-        expired_ent_ids = expiry_message[1]
+        seq_start, seq_end = expiry_message[1]
+        expired_seq_range = list(range(seq_start, seq_end))
 
         # Verify that all entanglement identifiers bob has that alice does not have are covered within the expiry
         for ent_id in uncovered_ids:
-            self.assertIn(ent_id[:3], expired_ent_ids)
+            self.assertIn(ent_id[2], expired_seq_range)
 
         # Check that we were able to resynchronize for bob's request
-        self.assertEqual(self.alice_results[-bob_pairs:], self.bob_results[-bob_pairs:])
+        # Get the gen ok's corresponding to bob's request after the error
+        alice_gens_post_error = list(filter(lambda info: len(info) == 5 and info[1][:2] == (bob.nodeID, alice.nodeID),
+                                            self.alice_results))
+        bob_gens_post_error = list(filter(lambda info: len(info) == 5 and info[1][:2] == (bob.nodeID, alice.nodeID),
+                                          self.bob_results))
+
+        # Check that we were able to complete the request
+        self.assertEqual(len(alice_gens_post_error), bob_pairs)
+        self.assertEqual(len(alice_gens_post_error), len(bob_gens_post_error))
+
+        # Check that the sequence numbers match
+        for alice_gen, bob_gen in zip(alice_gens_post_error, bob_gens_post_error):
+            self.assertEqual(alice_gen[1][2], bob_gen[1][2])
+            qA = alice.qmem.get_qubit(alice_gen[1][3])
+            qB = bob.qmem.get_qubit(bob_gen[1][3])
+            self.assertEqual(qA.qstate, qB.qstate)
+            self.assertIn(qB, qA.qstate._qubits)
+            self.assertIn(qA, qB.qstate._qubits)
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
@@ -692,13 +724,18 @@ class TestNodeCentricEGP(unittest.TestCase):
         qA = aliceMemory.get_qubit(idA)
         qB = bobMemory.get_qubit(idB)
         self.assertEqual(qA.qstate, qB.qstate)
+        self.assertIn(qA, qB.qstate._qubits)
+        self.assertIn(qB, qA.qstate._qubits)
 
         # Verify we have ERR_EXPIRE messages for individual generation requests
         expiry_message = self.alice_results[1]
-        error_code, expired_ids = expiry_message
+        error_code, (seq_start, seq_end) = expiry_message
+        expired_seq_range = list(range(seq_start, seq_end))
         self.assertEqual(error_code, egpA.ERR_EXPIRE)
         expected_ids = [(alice.nodeID, bob.nodeID, 1), (alice.nodeID, bob.nodeID, 2)]
-        self.assertEqual(expected_ids, expired_ids)
+        self.assertEqual(len(expected_ids), seq_end - seq_start)
+        for expired_id in expected_ids:
+            self.assertIn(expired_id[2], expired_seq_range)
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
@@ -859,6 +896,8 @@ class TestNodeCentricEGP(unittest.TestCase):
             qA = aliceMemory.get_qubit(i + 1)
             qB = bobMemory.get_qubit(i + 1)
             self.assertEqual(qA.qstate, qB.qstate)
+            self.assertIn(qB, qA.qstate._qubits)
+            self.assertIn(qA, qB.qstate._qubits)
 
 
 if __name__ == "__main__":

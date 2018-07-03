@@ -88,6 +88,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.timed_out_items = []
         self.queue_item_timeout_handler = EventHandler(self._queue_item_timeout_handler)
         self._EVT_QUEUE_TIMEOUT = EventType("DIST QUEUE TIMEOUT", "Triggers when queue item times out")
+        self.schedule_item_handler = EventHandler(self._schedule_item_handler)
+        self._EVT_SCHEDULE = EventType("DIST QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
 
         # Initialize queues
         self.queueList = []
@@ -95,6 +97,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             q = TimeoutLocalQueue()
             self.queueList.append(q)
             self._wait(self.queue_item_timeout_handler, entity=q, event_type=q._EVT_PROC_TIMEOUT)
+            self._wait(self.schedule_item_handler, entity=q, event_type=q._EVT_SCHEDULE)
 
         # Backlog of requests
         self.backlogAdd = deque()
@@ -203,6 +206,15 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Set up a timeout event for passing to higher layers
         self.timed_out_items.append(queue_item)
         self._schedule_now(self._EVT_QUEUE_TIMEOUT)
+
+    def _schedule_item_handler(self, evt):
+        """
+        Handler for queue items that are ready to be scheduled.  Bubbles the event up to higher layers.
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The schedule event that triggered this handler
+        """
+        logger.debug("Schedule handler triggered in dist queue")
+        self._schedule_now(self._EVT_SCHEDULE)
 
     def process_data(self):
         """
@@ -387,10 +399,10 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.queueList[qid].ready(qseq, 0)
 
         # Schedule the item to be ready
-        conn_delay = self.conn.channel_from_node(self.node).compute_delay()
+        conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
         scheduleAfter = max(0, conn_delay + self.myTrig - self.otherTrig)
         logger.debug("{} Scheduling after {}".format(self.node.nodeID, scheduleAfter))
-        self.queueList[qid].modify_schedule(qseq, scheduleAfter)
+        self.queueList[qid].schedule_item(qseq, scheduleAfter)
 
         # Add a timeout on the queue item
         self.queueList[qid].add_timeout_event(qseq)
@@ -447,10 +459,10 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             agreed_qseq = qseq
 
         # Schedule the item
-        conn_delay = self.conn.channel_from_node(self.node).compute_delay()
+        conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
         scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
         logger.debug("{} Scheduling after {}".format(self.node.nodeID, scheduleAfter))
-        self.queueList[qid].modify_schedule(agreed_qseq, scheduleAfter)
+        self.queueList[qid].schedule_item(agreed_qseq, scheduleAfter)
 
         # Add a timeout on the queue item
         self.queueList[qid].add_timeout_event(agreed_qseq)
@@ -636,7 +648,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
 
         # Send an add message to the other side
-        self.send_msg(self.CMD_ADD, [self.myID, self.comms_seq, qid, 0, request])
+        self.send_msg(self.CMD_ADD, [self.myID, self.comms_seq, qid, 0, copy(request)])
         logger.debug("{} Sent ADD request to master".format(self.node.nodeID))
 
         # Mark that we are waiting for an ack for this

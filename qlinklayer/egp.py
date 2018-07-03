@@ -1,5 +1,5 @@
 import abc
-from netsquid.pydynaa import DynAASim, EventType
+from netsquid.pydynaa import DynAASim, EventType, EventHandler
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from qlinklayer.general import LinkLayerException
@@ -218,10 +218,6 @@ class NodeCentricEGP(EGP):
 
         # Request tracking
         self.expected_seq = 0
-        self.requests = {}
-        self.outstanding_generations = []
-        self.curr_gen = 0
-        self.curr_request = None
 
         # Communication handlers
         self.commandHandlers = {
@@ -234,14 +230,13 @@ class NodeCentricEGP(EGP):
         # Create local share of distributed queue
         self.dqp = DistributedQueue(node=self.node)
         self.dqp.add_callback = self._add_to_queue_callback
-        from netsquid.pydynaa import EventHandler
         self.dqp_timeout_handler = EventHandler(self._queue_timeout_handler)
         self._wait(self.dqp_timeout_handler, entity=self.dqp, event_type=self.dqp._EVT_QUEUE_TIMEOUT)
 
         # Create the request scheduler
         self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
-        self.my_free_memory = self.scheduler.my_free_memory
-        self.other_free_memory = None
+        self.request_timeout_handler = EventHandler(self._request_timeout_handler)
+        self._wait(self.request_timeout_handler, entity=self.scheduler, event_type=self.scheduler._EVT_REQ_TIMEOUT)
 
         # Pydynaa events
         self._EVT_CREATE = EventType("CREATE", "Call to create has completed")
@@ -334,14 +329,14 @@ class NodeCentricEGP(EGP):
         my_free_mem = self.qmm.get_free_mem_ad()
         self.conn.put_from(self.node.nodeID, [[self.CMD_REQ_E, my_free_mem]])
 
-    def send_expire_notification(self, aid, ent_ids, new_seq):
+    def send_expire_notification(self, aid, old_seq, new_seq):
         """
         Sends and expiration notification to our peer if MHP Sequence ordering becomes inconsistent
         :param aid: tuple (int, int)
             Absolute queue ID corresponding to the request we were handling when sequence numbers became inconsistent
         """
         logger.error("Sending EXPIRE notification to peer")
-        self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE, (aid, ent_ids, new_seq)]])
+        self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE, (aid, old_seq, new_seq)]])
 
     def cmd_EXPIRE(self, data):
         """
@@ -352,24 +347,22 @@ class NodeCentricEGP(EGP):
             The absolute queue id of the request in which the error occurred and expected mhp sequence number of peer
         :return:
         """
-        aid, ent_ids, new_seq = data
         logger.error("Got EXPIRE command from peer for request {}".format(data))
+        aid, old_seq, new_seq = data
 
         # If our peer is ahead of us we should update
         if new_seq > self.expected_seq:
             logger.debug("Updated expected sequence to {}".format(new_seq))
             self.expected_seq = new_seq
 
-        self.mhp.reset_protocol()
-
         # If we are still processing the expired request clear it
-        self._clear_request(aid)
+        self.scheduler.clear_request(aid)
 
         # Let our peer know we expired
         self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE_ACK, self.expected_seq]])
 
         # Alert higher layer protocols
-        self.issue_err(err=self.ERR_EXPIRE, err_data=ent_ids)
+        self.issue_err(err=self.ERR_EXPIRE, err_data=(old_seq, new_seq))
 
     def cmd_EXPIRE_ACK(self, data):
         """
@@ -394,7 +387,6 @@ class NodeCentricEGP(EGP):
         :param data: obj
             Data associated with command
         """
-        self.other_free_memory = data
         self.scheduler.update_other_mem_size(data)
         free_memory_size = self.qmm.get_free_mem_ad()
         logger.debug("{} Got request for free memory advertisement, sending: {}".format(self.node.nodeID,
@@ -408,8 +400,7 @@ class NodeCentricEGP(EGP):
             Free memory information from our peer
         """
         logger.debug("Got acknowledgement for free memory ad request, storing: {}".format(data))
-        self.other_free_memory = data
-        self.scheduler.update_other_mem_size(self.other_free_memory)
+        self.scheduler.update_other_mem_size(data)
 
     # Primary EGP Protocol Methods
     def create(self, creq):
@@ -431,7 +422,7 @@ class NodeCentricEGP(EGP):
 
             # Track our peer's available memory
             logger.debug("EGP at node {} processing request: {}".format(self.node.nodeID, creq.__dict__))
-            if self.other_free_memory is None:
+            if not self.scheduler.other_mem:
                 self.request_other_free_memory()
 
             # Add the request to the DQP
@@ -519,7 +510,6 @@ class NodeCentricEGP(EGP):
             status, qid, qseq, creq = result
             if status == self.dqp.DQ_OK:
                 logger.debug("Completed adding item to Distributed Queue, got result: {}".format(result))
-                self.requests[(qid, qseq)] = creq
 
             # Otherwise bubble up the DQP error
             else:
@@ -548,36 +538,11 @@ class NodeCentricEGP(EGP):
         if there are any requests and to receive a request to process
         """
         try:
-            if self.qmm.is_busy():
-                logger.debug("Processing device is busy.")
-                free_memory_size = self.qmm.get_free_mem_ad()
-                request = (False, None, None, None, None, free_memory_size)
-                logger.debug("Constructed INFO request {} for MHP_NC".format(request))
-                self.mhp_service.put_ready_data(self.node.nodeID, request)
+            # Get scheduler's next gen task
+            gen = self.scheduler.next()
 
-            # Process any currently outstanding generations
-            elif self.outstanding_generations:
-                generation_request = self.outstanding_generations[self.curr_gen]
-                logger.debug("Have outstanding generation, passing {} to MHP".format(generation_request))
-                self.mhp_service.put_ready_data(self.node.nodeID, generation_request)
-
-            else:
-                incoming_generations = self.scheduler.next()
-                logger.debug("Scheduler produced incoming generations: {}".format(incoming_generations))
-                if incoming_generations:
-                    self.outstanding_generations = incoming_generations
-                    self.curr_gen = 0
-                    generation_request = self.outstanding_generations[self.curr_gen]
-                    logger.debug("Have outstanding generation, passing {} to MHP".format(generation_request))
-                    self.mhp_service.put_ready_data(self.node.nodeID, generation_request)
-
-                # Otherwise have the MHP send free memory advertisement
-                else:
-                    logger.debug("Scheduler has no requests ready")
-                    free_memory_size = self.qmm.get_free_mem_ad()
-                    request = (False, None, None, None, None, free_memory_size)
-                    logger.debug("Constructed INFO request {} for MHP_NC".format(request))
-                    self.mhp_service.put_ready_data(self.node.nodeID, request)
+            # Store the gen for pickup by mhp
+            self.mhp_service.put_ready_data(self.node.nodeID, gen)
 
             return True
 
@@ -609,24 +574,11 @@ class NodeCentricEGP(EGP):
                 self._handle_reply_without_aid(proto_err)
 
             # Check if this aid may have been expired while waiting for a reply from midpoint
-            elif aid not in self.requests:
+            elif not self.scheduler.get_request(aid=aid):
                 logger.warning("Got MHP Reply containing aid {} for no local request!".format(aid))
 
             # Otherwise this response is associated with a generation attempt
             else:
-                # Check if we need to time out this request
-                now = self.get_current_time()
-                creq = self.requests[aid]
-                deadline = creq.create_time + creq.max_time
-
-                # Check if we need to timeout this request
-                if now > deadline:
-                    logger.error("Timeout occurred processing request!")
-                    self._remove_request_qubits(aid)
-                    self._clear_request(aid)
-                    self.issue_err(err=self.ERR_TIMEOUT, err_data=creq)
-                    return
-
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
@@ -691,7 +643,7 @@ class NodeCentricEGP(EGP):
         :return:
         """
         now = self.get_current_time()
-        creq = self.requests[aid]
+        creq = self.scheduler.get_request(aid=aid)
 
         # Check if we need to correct the qubit
         if r == 2 and self.node.nodeID == creq.otherID:
@@ -713,19 +665,18 @@ class NodeCentricEGP(EGP):
         t_goodness = t_create
         result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
         self.issue_ok(result)
+        self.scheduler.mark_gen_completed(gen_id=(aid, self.mhp.electron_physical_ID, self.mhp.storage_physical_ID))
         self._schedule_now(self._EVT_ENT_COMPLETED)
 
         # Update number of remaining pairs on request, remove if completed
         if creq.num_pairs == 1:
             logger.debug("Generated final pair, removing request")
-            self.requests.pop(aid)
-            self.outstanding_generations = []
+            self.scheduler.clear_request(aid=aid)
             self._schedule_now(self._EVT_REQ_COMPLETED)
 
         elif creq.num_pairs >= 2:
             logger.debug("Decrementing number of remaining pairs")
             creq.num_pairs -= 1
-            self.curr_gen += 1
 
         else:
             raise LinkLayerException("Request has invalid number of remaining pairs!")
@@ -746,11 +697,10 @@ class NodeCentricEGP(EGP):
 
             # Collect expiration information to send to our peer
             new_mhp_seq = (mhp_seq + 1) % self.mhp.conn.max_seq
-            expired_ids = self._gather_expired_entanglement_ids(aid=aid)
-            self.send_expire_notification(aid=aid, ent_ids=expired_ids, new_seq=new_mhp_seq)
+            self.send_expire_notification(aid=aid, old_seq=self.expected_seq, new_seq=new_mhp_seq)
 
             # Clear the request
-            self._clear_request(aid=aid)
+            self.scheduler.clear_request(aid=aid)
 
             # Free the qubits used by the MHP
             self.mhp.release_qubits()
@@ -776,68 +726,13 @@ class NodeCentricEGP(EGP):
         logger.debug("Applying correction to storage_qubit {}".format(storage_qubit))
         self.node.qmem.apply_Z([storage_qubit])
 
-    def _gather_expired_entanglement_ids(self, aid):
+    def _request_timeout_handler(self, evt):
         """
-        Constructs a sequence of entanglement IDs that have not been serviced or need to be removed by higher layer
-        protocols due to communication issues that have occurred with the midpoint.
-        :param aid: tuple of (int, int)
-            The absolute queue ID of the request that we are collecting expired entanglement IDs for
-        :param max_mhp_seq: int
-            The new MHP Sequence number that we need to expire entanglement IDs up to
-        :return: list of tuples of (int, int, int)
-            Entanglement IDs containing the (request_creator_nodeID, peer_nodeID, MHP_Seq) we need to expire
+        Handler for requests that were not serviced within their alotted time.  Passes an error along with the
+        request up to higher layers.
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The event that triggered this handler
         """
-        creq = self.requests[aid]
-        peerID = self.get_otherID()
-        creatorID = self.node.nodeID if peerID == creq.otherID else peerID
-
-        # Construct entanglement IDs for all remaining generations
-        num_ids = creq.num_pairs - self.curr_gen
-        expired_ids = []
-        for mhp_seq in range(self.expected_seq, self.expected_seq + num_ids + 1):
-            ent_id = (creatorID, creq.otherID, mhp_seq)
-            expired_ids.append(ent_id)
-
-        return expired_ids
-
-    def _remove_request_qubits(self, aid):
-        """
-        Frees all qubits that were reserved for a request.  To be used when clearing out a request whose requirements
-        we were unable to fulfill.
-        :param aid: tuple of (int, int)
-            The absolute queue ID of the request that qubits were reserved for
-        :return:
-        """
-        # Iterate through all outstanding generations for the request
-        for gen in self.outstanding_generations[self.curr_gen:]:
-            flag, gen_aid, comm_q, storage_q, param, free_memory_size = gen
-
-            # Only free the qubit if the aid on the generation matches the one provided
-            if gen_aid == aid:
-                self.qmm.free_qubit(id=storage_q)
-
-    def _prune_request_generations(self, aid):
-        """
-        Filters the oustanding generations list of any generation requests corresponding to the provided absolute queue
-        id.  To be used when clearing a request
-        :param aid: tuple of (int, int)
-            Absolute queue ID of the request we want to filter generations for
-        """
-        logger.debug("Pruning remaining generations for aid {}".format(aid))
-        removed = list(filter(lambda gen: gen[1] == aid, self.outstanding_generations))
-        self.outstanding_generations = list(filter(lambda gen: gen[1] != aid, self.outstanding_generations))
-        logger.debug("Removed generations {}".format(removed))
-
-    def _clear_request(self, aid):
-        """
-        Clears out request state in the case of a failure.  Removes the stored request and outstanding generations.
-        :param aid: tuple of (int, int)
-            The absolute queue ID corresponding to the request we are clearing
-        """
-        logger.error("Clearing request {}".format(aid))
-        if aid in self.requests:
-            self.requests.pop(aid)
-
-            # Clear outstanding generations
-            logger.debug("Clearing outsanding generations {} for request".format(self.outstanding_generations))
-            self._prune_request_generations(aid=aid)
+        scheduler = evt.source
+        request = scheduler.timed_out_requests.pop(0)
+        self.issue_err(err=self.ERR_TIMEOUT, err_data=request)

@@ -154,9 +154,17 @@ class LocalQueue(Entity):
             # Not in queue, TODO error handling
             return
 
-    def modify_schedule(self, seq, scheduleAt):
+    def schedule_item(self, seq, scheduleAt):
+        """
+        Schedules the service time of an item in the queue
+        :param seq: int
+            Sequence number of the item
+        :param scheduleAt: float
+            Time to set the item for servicing
+        """
         item = self.queue[seq]
         item.scheduleAt = scheduleAt + pydynaa.DynAASim().current_time
+        item.schedule()
 
 
 class TimeoutLocalQueue(LocalQueue):
@@ -172,6 +180,7 @@ class TimeoutLocalQueue(LocalQueue):
         """
         super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter)
         self._EVT_PROC_TIMEOUT = EventType("QUEUE ITEM REMOVED", "Triggers when an item has successfully been removed")
+        self._EVT_SCHEDULE = EventType("LOCAL QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
         self.timed_out_items = []
 
     def add_with_id(self, originID, seq, request):
@@ -207,8 +216,12 @@ class TimeoutLocalQueue(LocalQueue):
         # Only attach a handler if the item supports the timeout event
         if isinstance(queue_item, _TimeoutLocalQueueItem):
             logger.debug("TimedLocalQueue has queue item {}".format(vars(queue_item)))
+
             timeout_evt_handler = EventHandler(self._timeout_handler)
             self._wait_once(timeout_evt_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
+
+            schedule_evt_handler = EventHandler(self._schedule_handler)
+            self._wait_once(schedule_evt_handler, entity=queue_item, event_type=queue_item._EVT_SCHEDULE)
 
     def _timeout_handler(self, evt):
         """
@@ -231,6 +244,15 @@ class TimeoutLocalQueue(LocalQueue):
 
         else:
             logger.debug("Item already removed!")
+
+    def _schedule_handler(self, evt):
+        """
+        Handler that is triggered when an item is ready to be scheduled, bubbles up to the distributed queue
+        :param evt: obj `~netsquid,pydynaa.Event`
+            The event that triggered the handler
+        """
+        logger.debug("Schedule handler triggered in local queue")
+        self._schedule_now(self._EVT_SCHEDULE)
 
 
 class _LocalQueueItem:
@@ -262,6 +284,7 @@ class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
         super(_TimeoutLocalQueueItem, self).__init__(request=request, seq=seq, scheduleAt=scheduleAt)
         self.lifetime = lifetime
         self._EVT_TIMEOUT = EventType("QUEUE ITEM TIMEOUT", "Triggers when a queue item is stale")
+        self._EVT_SCHEDULE = EventType("QUEUE ITEM SCHEDULE", "Triggers when a queue item is ready to be scheduled")
 
     def prepare(self):
         """
@@ -271,3 +294,9 @@ class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
             now = pydynaa.DynAASim().current_time
             deadline = now + self.lifetime
             self._schedule_after(deadline, self._EVT_TIMEOUT)
+
+    def schedule(self):
+        """
+        Schedules the item's schedule event for triggering pickup by the local queue
+        """
+        self._schedule_at(self.scheduleAt, self._EVT_SCHEDULE)
