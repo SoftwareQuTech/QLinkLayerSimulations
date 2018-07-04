@@ -50,7 +50,9 @@
               }
             },
             "operation_time": 20000.0
-          }
+          },
+          "move_gate": {},
+          "release_qubit_op": {}
         },
         "gates_electron": {
           "single_qubit_gate": {
@@ -76,7 +78,9 @@
               }
             },
             "operation_time": 3700.0
-          }
+          },
+          "move_gate": {},
+          "release_qubit_op": {}
         },
         "gates_two_qubit": {
           "crotx_gate": {
@@ -86,7 +90,8 @@
               }
             },
             "operation_time": 500000.0
-          }
+          },
+          "move_gate": {}
         }
       },
       "photon_emission": {

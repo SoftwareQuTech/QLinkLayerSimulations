@@ -586,7 +586,7 @@ class NodeCentricEGP(EGP):
 
                 # No entanglement generation
                 if r == 0:
-                    logger.warning("Failed to produce entanglement with other node")
+                    logger.debug("Failed to produce entanglement with other node")
                     return
 
                 # Check if we need to time out this request
@@ -670,12 +670,12 @@ class NodeCentricEGP(EGP):
 
         # Update number of remaining pairs on request, remove if completed
         if creq.num_pairs == 1:
-            logger.debug("Generated final pair, removing request")
+            logger.info("Generated final pair, removing request")
             self.scheduler.clear_request(aid=aid)
             self._schedule_now(self._EVT_REQ_COMPLETED)
 
         elif creq.num_pairs >= 2:
-            logger.debug("Decrementing number of remaining pairs")
+            logger.info("Decrementing number of remaining pairs")
             creq.num_pairs -= 1
 
         else:
