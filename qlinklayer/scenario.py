@@ -41,6 +41,7 @@ class MeasureImmediatelyScenario(EGPSimulationScenario):
         self.qmm = egp.qmm
 
         self.ok_storage = []
+        self.
         self.measurement_results = []
         self.err_storage = []
 
@@ -54,7 +55,19 @@ class MeasureImmediatelyScenario(EGPSimulationScenario):
         self.measurement_results.append((mhp_seq, outcome))
         self.qmm.free_qubit(logical_id)
 
+    def get_ok(self, remove=True):
+        ok = self.ok_storage.pop(0) if remove else self.ok_storage[0]
+        return ok
+
+    def get_measurement(self, remove=True):
+        measurement = self.measurement_results.pop(0) if remove else self.measurement_results[0]
+        return measurement
+
     def err_callback(self, result):
         now = DynAASim().current_time
         logger.debug("{} got error {} at time {}".format(self.node.nodeID, result, now))
         self.err_storage.append(result)
+
+    def get_error(self, remove=True):
+        err = self.err_storage.pop(0) if remove else self.err_storage[0]
+        return err

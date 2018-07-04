@@ -3,6 +3,7 @@ from os.path import abspath, dirname
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.toolbox import create_logger
 from netsquid.pydynaa import DynAASim
+from qlinklayer.datacollection import EGPErrorSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureImmediatelyScenario
