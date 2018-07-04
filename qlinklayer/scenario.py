@@ -1,0 +1,60 @@
+import abc
+from functools import partial
+from easysquid.toolbox import create_logger, SimulationScheduler
+from netsquid.pydynaa import DynAASim, Entity
+
+
+logger = create_logger("logger")
+
+
+class SimulationScenario(Entity, metaclass=abc.ABCMeta):
+    def __init__(self):
+        self.sim_scheduler = SimulationScheduler()
+
+    def _schedule_action(self, func, sim_time):
+        self.sim_scheduler.schedule_function(func=func, t=sim_time)
+
+
+class EGPSimulationScenario(SimulationScenario):
+    def __init__(self, egp):
+        super(EGPSimulationScenario, self).__init__()
+        self.egp = egp
+        self.egp.ok_callback = self.ok_callback
+        self.egp.err_callback = self.err_callback
+
+    def schedule_create(self, request, t):
+        func_create = partial(self.egp.create, creq=request)
+        self._schedule_action(func_create, sim_time=t)
+
+    def ok_callback(self, result):
+        pass
+
+    def err_callback(self, result):
+        pass
+
+
+class MeasureImmediatelyScenario(EGPSimulationScenario):
+    def __init__(self, egp):
+        super(MeasureImmediatelyScenario, self).__init__(egp=egp)
+        self.egp = egp
+        self.node = egp.node
+        self.qmm = egp.qmm
+
+        self.ok_storage = []
+        self.measurement_results = []
+        self.err_storage = []
+
+    def ok_callback(self, result):
+        self.ok_storage.append(result)
+        create_id, ent_id, f_goodness, t_create, t_goodness = result
+        creator_id, peer_id, mhp_seq, logical_id = ent_id
+        [outcome] = self.node.qmem.measure_subset([logical_id])
+        now = DynAASim().current_time
+        logger.info("{} measured {} for ent_id {} at time {}".format(self.node.nodeID, outcome, ent_id, now))
+        self.measurement_results.append((mhp_seq, outcome))
+        self.qmm.free_qubit(logical_id)
+
+    def err_callback(self, result):
+        now = DynAASim().current_time
+        logger.debug("{} got error {} at time {}".format(self.node.nodeID, result, now))
+        self.err_storage.append(result)

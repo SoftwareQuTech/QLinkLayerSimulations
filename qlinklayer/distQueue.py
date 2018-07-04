@@ -626,7 +626,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         queue_seq = self.queueList[qid].add(self.myID, request)
 
         # Send an add message to the other side
-        self.send_msg(self.CMD_ADD, [self.myID, self.comms_seq, qid, queue_seq, request])
+        self.send_msg(self.CMD_ADD, [self.myID, self.comms_seq, qid, queue_seq, copy(request)])
         logger.debug("{} Communicated absolute queue id ({}, {}) to slave".format(self.node.nodeID, qid, queue_seq))
 
         # Mark that we are waiting for an ack for this
