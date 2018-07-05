@@ -23,10 +23,22 @@ class EGPSimulationScenario(SimulationScenario):
         self._EVT_OK = EventType("EGP OK", "Triggers when egp has issued an ok message")
         self.egp.err_callback = self.err_callback
         self._EVT_ERR = EventType("EGP ERR", "Triggers when egp has issued an err message")
+        self.create_storage = []
+        self._EVT_CREATE = EventType("EGP CREATE", "Triggers when create was called")
 
     def schedule_create(self, request, t):
-        func_create = partial(self.egp.create, creq=request)
+        func_create = partial(self._create, request=request)
         self._schedule_action(func_create, sim_time=t)
+
+    def _create(self, request):
+        create_id, create_timestamp = self.egp.create(creq=request)
+        create_info = (self.egp.node.nodeID, create_id, create_timestamp)
+        self.create_storage.append(create_info)
+        self._schedule_now(self._EVT_CREATE)
+
+    def get_create_info(self, remove=True):
+        create_info = self.create_storage.pop(0) if remove else self.create_storage[0]
+        return create_info
 
     def ok_callback(self, result):
         self._ok_callback(result)

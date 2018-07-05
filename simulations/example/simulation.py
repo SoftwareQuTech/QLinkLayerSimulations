@@ -6,7 +6,7 @@ from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
 from netsquid.pydynaa import DynAASim
-from qlinklayer.datacollection import EGPErrorSequence
+from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureImmediatelyScenario
@@ -32,6 +32,7 @@ def run_simulation():
     data_dir = "{}/{}".format(dir_path, timestamp)
     setup_data_directory(data_dir)
     err_log = "{}/error.log".format(data_dir)
+    req_log = "{}/request.log".format(data_dir)
 
     SECOND = 1e9
     ns.set_qstate_formalism(ns.DM_FORMALISM)
@@ -84,9 +85,15 @@ def run_simulation():
     sim_time = num_seconds * SECOND + 1
 
     pm = PM_Controller()
-    err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, ylabel="Error Code", ymin=0, ymax=255,
-                              maxSteps=sim_time)
 
+    err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, maxSteps=sim_time)
+
+    ok_ds = EGPOKSequence(name="EGP OKs", recFile=req_log, maxSteps=sim_time)
+
+    pm.addEvent(source=alice_scenario, evtType=alice_scenario._EVT_CREATE, ds=ok_ds)
+    pm.addEvent(source=alice_scenario, evtType=alice_scenario._EVT_OK, ds=ok_ds)
+    pm.addEvent(source=bob_scenario, evtType=bob_scenario._EVT_CREATE, ds=ok_ds)
+    pm.addEvent(source=bob_scenario, evtType=bob_scenario._EVT_OK, ds=ok_ds)
     pm.addEvent(source=alice_scenario, evtType=alice_scenario._EVT_ERR, ds=err_ds)
     pm.addEvent(source=bob_scenario, evtType=bob_scenario._EVT_ERR, ds=err_ds)
 
