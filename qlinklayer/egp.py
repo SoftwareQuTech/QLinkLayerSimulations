@@ -194,6 +194,7 @@ class NodeCentricEGP(EGP):
     ERR_OTHER = 45
     ERR_EXPIRE = 46
     ERR_CREATE = 47
+    ERR_NOGEN = 50
 
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None):
         """
