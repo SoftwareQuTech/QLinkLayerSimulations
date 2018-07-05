@@ -15,7 +15,7 @@ Connections._CONN_BY_NAME[Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION] = 
 
 def run_simulation():
     dir_path = dirname(abspath(__file__))
-    config = "{}/configs/lab_config.json".format(dir_path)
+    config = "{}/configs/qlink_configs/network_with_cav_with_conv.json".format(dir_path)
 
     SECOND = 1e9
     ns.set_qstate_formalism(ns.DM_FORMALISM)
@@ -35,9 +35,12 @@ def run_simulation():
 
     egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn)
 
-    num_seconds = 4
-    request = EGPRequest(otherID=bob.nodeID, num_pairs=3, min_fidelity=0.5, max_time=num_seconds * SECOND, purpose_id=1,
-                         priority=10)
+    num_seconds = 10
+    alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=3, min_fidelity=0.5, max_time=num_seconds * SECOND,
+                               purpose_id=1, priority=10)
+
+    bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=3, min_fidelity=0.5, max_time=num_seconds * SECOND,
+                             purpose_id=1, priority=10)
 
     network.add_node_protocol(alice.nodeID, egpA.dqp)
     network.add_connection_protocol(dqp_conn, egpA.dqp)
@@ -58,14 +61,14 @@ def run_simulation():
     network.start()
 
     alice_scenario = MeasureImmediatelyScenario(egp=egpA)
-    alice_scenario.schedule_create(request=request, t=0)
+    bob_scenario = MeasureImmediatelyScenario(egp=egpB)
+    alice_scenario.schedule_create(request=alice_request, t=0)
+    bob_scenario.schedule_create(request=bob_request, t=0)
 
     logger.info("Beginning simulation")
-    DynAASim().run(request.max_time + 1)
+    sim_time = num_seconds * SECOND + 1
+    DynAASim().run(sim_time)
     logger.info("Finished simulation")
-
-    import pdb
-    pdb.set_trace()
 
 
 if __name__ == '__main__':
