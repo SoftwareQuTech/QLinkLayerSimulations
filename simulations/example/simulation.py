@@ -1,8 +1,12 @@
 import netsquid as ns
-from os.path import abspath, dirname
+from time import time
+from os import makedirs
+from os.path import abspath, dirname, exists
 from easysquid.easynetwork import Connections, setup_physical_network
+from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
 from netsquid.pydynaa import DynAASim
+from qlinklayer.datacollection import EGPErrorSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureImmediatelyScenario
@@ -13,9 +17,21 @@ Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibr
 Connections._CONN_BY_NAME[Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION] = NodeCentricMHPHeraldedConnection
 
 
+def setup_data_directory(dir_path):
+    if exists(dir_path):
+        raise Exception("Simulation data directory {} already exists!".format(dir_path))
+    else:
+        makedirs(dir_path)
+
+
 def run_simulation():
     dir_path = dirname(abspath(__file__))
-    config = "{}/configs/qlink_configs/network_with_cav_with_conv.json".format(dir_path)
+    config = "{}/../configs/qlink_configs/network_with_cav_with_conv.json".format(dir_path)
+
+    timestamp = time()
+    data_dir = "{}/{}".format(dir_path, timestamp)
+    setup_data_directory(data_dir)
+    err_log = "{}/error.log".format(data_dir)
 
     SECOND = 1e9
     ns.set_qstate_formalism(ns.DM_FORMALISM)
@@ -65,8 +81,16 @@ def run_simulation():
     alice_scenario.schedule_create(request=alice_request, t=0)
     bob_scenario.schedule_create(request=bob_request, t=0)
 
-    logger.info("Beginning simulation")
     sim_time = num_seconds * SECOND + 1
+
+    pm = PM_Controller()
+    err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, ylabel="Error Code", ymin=0, ymax=255,
+                              maxSteps=sim_time)
+
+    pm.addEvent(source=alice_scenario, evtType=alice_scenario._EVT_ERR, ds=err_ds)
+    pm.addEvent(source=bob_scenario, evtType=bob_scenario._EVT_ERR, ds=err_ds)
+
+    logger.info("Beginning simulation")
     DynAASim().run(sim_time)
     logger.info("Finished simulation")
 
