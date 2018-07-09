@@ -3,6 +3,9 @@ from netsquid.pydynaa import DynAASim
 
 
 class EGPErrorSequence(PM_MultiDataSequence):
+    """
+    Collects error events and their error codes thrown by an EGP
+    """
     def getData(self, time, sourceList):
         error_source = sourceList[0]
         error_code, error_info = error_source.get_error()
@@ -13,6 +16,9 @@ class EGPErrorSequence(PM_MultiDataSequence):
 
 
 class EGPOKSequence(PM_MultiDataSequence):
+    """
+    Collects OK events from an EGP including the CREATE events
+    """
     def gather(self, event):
         now = DynAASim().current_time
         if event.type == event.source._EVT_CREATE:
@@ -22,7 +28,6 @@ class EGPOKSequence(PM_MultiDataSequence):
             [val, succ] = self.getOKData(time=now, source=event.source)
 
         else:
-            print("???????")
             raise Exception
 
         self._commonGather(now, val, succ)
