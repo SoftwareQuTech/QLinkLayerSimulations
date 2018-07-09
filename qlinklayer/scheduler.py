@@ -38,6 +38,30 @@ class RequestScheduler(pydynaa.Entity):
         self.outstanding_gens = []
         self.outstanding_items = {}
         self.timed_out_requests = []
+        self._suspend = False
+
+    def suspend_generation(self, t):
+        """
+        Instructs the scheduler to suspend generation for some specified time.
+        :param t: float
+            The amount of simulation time to suspend entanglement generation for
+        """
+        self._suspend = True
+
+        # Set up an event handler to resume entanglement generation
+        resume_handler = pydynaa.EventHandler(self._resume_generation)
+        EVT_RESUME = pydynaa.EventType("RESUME", "Triggers when we believe peer finished correction")
+        self._wait_once(resume_handler, entity=self, event_type=EVT_RESUME)
+        self._schedule_after(t, EVT_RESUME)
+
+    def _resume_generation(self, evt):
+        """
+        Callback handler to flip the suspend flag and allow the scheduler to resume entanglement generation
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The event that triggered this handler
+        """
+        logger.debug("Resuming generation")
+        self._suspend = False
 
     def update_other_mem_size(self, mem):
         """
@@ -71,14 +95,14 @@ class RequestScheduler(pydynaa.Entity):
         # Get our available memory
         self.my_free_memory = self.qmm.get_free_mem_ad()
 
-        # Default to an information request
-        next_gen = self.default_gen
+        if self.qmm.is_busy() or self._suspend:
+            next_gen = self.default_gen
 
-        if self.curr_gen:
+        elif self.curr_gen:
             next_gen = self.curr_gen
 
         # If there are outstanding generations and we have memory, overwrite with a request
-        elif self.outstanding_gens and not self.qmm.is_busy() and self._has_resources_for_gen():
+        elif self.outstanding_gens and self._has_resources_for_gen():
             logger.debug("Filling next available gen template")
 
             # Obtain the next template
@@ -86,6 +110,8 @@ class RequestScheduler(pydynaa.Entity):
 
             # Reserve resources in the quantum memory
             comm_q, [storage_q] = self.qmm.reserve_entanglement_pair(1)
+            if comm_q == -1 or storage_q == -1:
+                return self.default_gen
 
             # Compute our new free memory after reservation
             new_free_memory = self.qmm.get_free_mem_ad()
@@ -98,6 +124,9 @@ class RequestScheduler(pydynaa.Entity):
 
             logger.debug("Created gen request {}".format(next_gen))
             self.curr_gen = next_gen
+
+        else:
+            next_gen = self.default_gen
 
         return next_gen
 
@@ -135,6 +164,8 @@ class RequestScheduler(pydynaa.Entity):
         if self.curr_gen and self.curr_gen[1] == aid:
             logger.debug("Cleared current gen")
             removed_gens.append(self.curr_gen)
+            self.qmm.free_qubit(self.curr_gen[2])
+            self.qmm.free_qubit(self.curr_gen[3])
             self.curr_gen = None
 
         logger.debug("Removed remaining generations for {}: {}".format(aid, removed_gens))

@@ -65,7 +65,7 @@ def run_simulation():
     egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn)
 
     # Create requests to simulate
-    num_seconds = 10
+    num_seconds = 60
     alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=3, min_fidelity=0.5, max_time=num_seconds * SECOND,
                                purpose_id=1, priority=10)
 
@@ -121,8 +121,15 @@ def run_simulation():
 
     # Start the simulation
     logger.info("Beginning simulation")
+    start_time = time()
+
     DynAASim().run(sim_time)
-    logger.info("Finished simulation")
+    stop_time = time()
+    logger.info("Finished simulation, took {}".format(stop_time - start_time))
+
+    # Set a trace to allow inspection
+    import pdb
+    pdb.set_trace()
 
 
 if __name__ == '__main__':

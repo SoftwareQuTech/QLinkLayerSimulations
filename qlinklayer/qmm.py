@@ -21,6 +21,29 @@ class QuantumMemoryManagement:
     def is_busy(self):
         return self.node.qmem.busy
 
+    def get_move_delay(self):
+        """
+        Gets the delay time for a move operation in the memory device.
+        #TODO: Refacotr this to not perform the operation when it is easier to get the total time
+        :return: float
+            The amount of time it takes to move the electron state to the carbon
+        """
+        # If we are storing the entangled pair into the electron then the move time is 0
+        if self.node.qmem.max_num > 1:
+            return self.node.qmem.get_move_time(0, 1)
+
+        else:
+            return 0.0
+
+    def get_correction_delay(self):
+        """
+        Gets the delay time for applying a Z gate onto the electron.
+        #TODO: Refactor this to not perform the operation when it is easier to get the gate time
+        :return: float
+            The amount of time it takes to apply the z gate to the electron
+        """
+        return self.node.qmem.get_z_time(0)
+
     def qubit_in_use(self, id):
         """
         Tells us if a qubit is in use within the quantum memory device
@@ -96,12 +119,12 @@ class QuantumMemoryManagement:
         # Obtain a communication qubit
         comm_q = self.reserve_communication_qubit()
         if comm_q == -1:
-            return -1, -1
+            return -1, [-1]
 
         # Obtain n storage qubits
         storage_q = self.reserve_storage_qubit(n)
         if storage_q == -1:
-            return -1, -1
+            return -1, [-1]
 
         # Mark the obtained qubits as reserved
         self.reserved_qubits[comm_q] = True
