@@ -241,9 +241,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=10000,
                                    purpose_id=1, priority=10)
-        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=2000,
+        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=20000,
                                  purpose_id=2, priority=2)
 
         alice_scheduled_create = partial(egpA.create, creq=alice_request)

@@ -666,6 +666,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         Resets the protocol to an unitialized state so that we don't produce entanglement
         :return:
         """
+        logger.debug("{} Resetting MHP".format(self.node.nodeID))
         self.electron_physical_ID = 0
         self.storage_physical_ID = 0
         self.status = self.STAT_IDLE
@@ -745,23 +746,10 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             The event that triggered the timeout handler
         """
         logger.debug("Timeout handler triggered!")
-
-        self.release_qubits()
         if self.status == self.STAT_BUSY:
             logger.warning("Timed out waiting for communication response!")
             self._handle_error(None, self.ERR_TIMEOUT)
             self.reset_protocol()
-
-    def release_qubits(self):
-        """
-        Releases qubits that were used for an entanglement generation attempt.  To be used in error scenarios where the
-        stored qubits are not entangled with our peer's.
-        """
-        if self.node.qmem.in_use(self.electron_physical_ID):
-            self.node.qmem.release_qubit(self.electron_physical_ID)
-
-        if self.node.qmem.in_use(self.storage_physical_ID):
-            self.node.qmem.release_qubit(self.storage_physical_ID)
 
     def init_entanglement_request(self, comm_q, storage_q):
         """
@@ -797,6 +785,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         # Extract info from the message
         respM, passM = reply_message.response_data, reply_message.pass_data
 
+        if self.timeout_handler:
+            logger.debug("Clearing timeout handler!")
+            self._dismiss(self.timeout_handler)
+            self.timeout_handler = None
+
         # Got some kind of command
         if isinstance(respM, int):
             # Handle INFO passing, otherwise report an error
@@ -814,7 +807,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
                 self._handle_production_reply(respM, passM)
             else:
                 logger.warning("Received unexpected production reply from midpoint!")
-                self.release_qubits()
                 self.reset_protocol()
 
     def _handle_passed_info(self, respM, passM):
@@ -827,6 +819,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         result = (self.NO_GENERATION, passM, -1, self.aid, self.PROTO_OK)
         self.callback(result=result)
+        self.reset_protocol()
 
     def _handle_error(self, respM, passM):
         """
@@ -836,7 +829,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :param passM: any
             Error information to pass back to EGP
         """
-        self.release_qubits()
         result = self._construct_error_result(err_data=passM)
         self.callback(result=result)
         self.reset_protocol()
@@ -869,31 +861,31 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         # Clear used qubit ID if we failed, otherwise increment our successful generatoin
         if outcome == 0:
             logger.debug("Generation attempt failed, releasing qubit {}".format(self.storage_physical_ID))
-            self.node.qmem.release_qubit(self.storage_physical_ID)
 
         if aid != self.aid:
             logger.warning("Received midpoint reply for aid {} while MHP has local aid {}".format(aid, self.aid))
-            self._handle_error(passM=self.ERR_LOCAL)
+            self._handle_error(respM=None, passM=self.ERR_LOCAL)
 
-        result = (outcome, other_free_memory, mhp_seq, other_aid, self.PROTO_OK)
-        logger.debug("Finished running protocol, returning results: {}".format(result))
+        self.result = (outcome, other_free_memory, mhp_seq, other_aid, self.PROTO_OK)
+        logger.debug("Finished running protocol, returning results: {}".format(self.result))
 
         # Call back with the results
-        self.callback(result=result)
+        self.callback(result=self.result)
         self.reset_protocol()
 
-    def handle_photon_emission(self, photon):
+    def _transmit_photon(self, photon):
         """
-        Handles the photon when created.
+        Handler for the photon emission that occurs in the underlying MHP protocol.  Sends the photon along
+        with the corresponding absolute queue id for this generation attempt and free memory advertisement
+        :param photon: obj `~netsquid.qubits.qubit.Qubit`
+            The photon to send to the heralding station
         """
         try:
-            logger.debug("{} Storing entangled qubit into location {}".format(self.node.nodeID,
-                                                                              self.storage_physical_ID))
-            if self.electron_physical_ID != self.storage_physical_ID:
-                self.node.qmem.move_qubit(self.electron_physical_ID, self.storage_physical_ID)
-
+            # Construct the information to pass to our peer
             pass_info = (self.free_memory_size, self.aid)
             logger.debug("Sending pass info: {}".format(pass_info))
+
+            # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
 
         except Exception as err_data:

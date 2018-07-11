@@ -88,8 +88,7 @@
               }
             },
             "operation_time": 500000.0
-          },
-          "move_gate": {}
+          }
         }
       },
       "photon_emission": {
@@ -160,21 +159,24 @@
           "qubit_id2": 1,
           "gates_ids": [
             "gates_two_qubit"
-          ]
+          ],
+          "bidirectional": true
         },
         {
           "qubit_id1": 0,
           "qubit_id2": 2,
           "gates_ids": [
             "gates_two_qubit"
-          ]
+          ],
+          "bidirectional": true
         },
         {
           "qubit_id1": 0,
           "qubit_id2": 3,
           "gates_ids": [
             "gates_two_qubit"
-          ]
+          ],
+          "bidirectional": true
         }
       ]
     }

@@ -2,6 +2,7 @@ import abc
 from netsquid.pydynaa import DynAASim, EventType, EventHandler
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
+from easysquid.quantumProgram import QuantumProgram
 from qlinklayer.general import LinkLayerException
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.distQueue import DistributedQueue
@@ -214,6 +215,10 @@ class NodeCentricEGP(EGP):
         # Quantum Memory Management, track our own free memory
         self.qmm = QuantumMemoryManagement(node=self.node)
 
+        # Peer move/correction delay to allow for resynchronization
+        self.peer_move_delay = 0
+        self.peer_corr_delay = 0
+
         # Fidelity Estimation Unit used to estimate the fidelity of produced entangled pairs
         self.feu = FidelityEstimationUnit()
 
@@ -321,10 +326,15 @@ class NodeCentricEGP(EGP):
         self.setConnection(egp_conn)
         other_egp.setConnection(egp_conn)
 
+        # Store the peer's delay information
+        self.peer_move_delay = other_egp.qmm.get_move_delay()
+        self.peer_corr_delay = other_egp.qmm.get_correction_delay()
+        other_egp.peer_move_delay = self.qmm.get_move_delay()
+        other_egp.peer_corr_delay = self.qmm.get_correction_delay()
+
     def request_other_free_memory(self):
         """
         Requests our peer for their QMM's free memory
-        :return:
         """
         logger.debug("Requesting other node's free memory advertisement")
         my_free_mem = self.qmm.get_free_mem_ad()
@@ -577,26 +587,29 @@ class NodeCentricEGP(EGP):
             # Check if this aid may have been expired while waiting for a reply from midpoint
             elif not self.scheduler.get_request(aid=aid):
                 logger.warning("Got MHP Reply containing aid {} for no local request!".format(aid))
+                self.qmm.free_qubit(self.mhp.electron_physical_ID)
 
             # Otherwise this response is associated with a generation attempt
             else:
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
+                    comm_q = self.scheduler.curr_gen[2]
+                    self.qmm.free_qubit(comm_q)
                     self.issue_err(err=proto_err)
 
                 # No entanglement generation
                 if r == 0:
                     logger.debug("Failed to produce entanglement with other node")
-                    return
 
-                # Check if we need to time out this request
-                logger.debug("Processing MHP SEQ {}".format(mhp_seq))
-                valid_mhp = self._process_mhp_seq(mhp_seq, aid)
+                else:
+                    # Check if we need to time out this request
+                    logger.debug("Processing MHP SEQ {}".format(mhp_seq))
+                    valid_mhp = self._process_mhp_seq(mhp_seq, aid)
 
-                if valid_mhp:
-                    logger.debug("Handling reply corresponding to absolute queue id {}".format(aid))
-                    self._handle_generation_reply(r, mhp_seq, aid)
+                    if valid_mhp:
+                        logger.debug("Handling reply corresponding to absolute queue id {}".format(aid))
+                        self._handle_generation_reply(r, mhp_seq, aid)
 
             logger.debug("Finished handling MHP Reply")
 
@@ -643,44 +656,19 @@ class NodeCentricEGP(EGP):
             Absolute Queue ID corresponding to the request this generation attempt belongs to
         :return:
         """
-        now = self.get_current_time()
         creq = self.scheduler.get_request(aid=aid)
-
         # Check if we need to correct the qubit
-        if r == 2 and self.node.nodeID == creq.otherID:
-            logger.debug("Applying correction to qubit")
-            self._apply_correction_to_qubit(self.mhp.storage_physical_ID)
+        if r == 2:
+            if self.node.nodeID != creq.otherID:
+                self._apply_correction_and_move(mhp_seq, aid)
 
-        # Get the fidelity estimate from FEU
-        logger.debug("Estimating fidelity")
-        fidelity_estimate = self.feu.estimate_fidelity(alpha=self.mhp.alpha)
-
-        # Create entanglement identifier
-        logical_id = self.qmm.physical_to_logical(self.mhp.storage_physical_ID)
-        creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
-        ent_id = (creatorID, creq.otherID, mhp_seq, logical_id)
-
-        # Issue OK
-        logger.debug("Issuing okay to caller")
-        t_create = now - self.mhp.conn.channel_to_node(self.node).compute_delay()
-        t_goodness = t_create
-        result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
-        self.issue_ok(result)
-        self.scheduler.mark_gen_completed(gen_id=(aid, self.mhp.electron_physical_ID, self.mhp.storage_physical_ID))
-        self._schedule_now(self._EVT_ENT_COMPLETED)
-
-        # Update number of remaining pairs on request, remove if completed
-        if creq.num_pairs == 1:
-            logger.info("Generated final pair, removing request")
-            self.scheduler.clear_request(aid=aid)
-            self._schedule_now(self._EVT_REQ_COMPLETED)
-
-        elif creq.num_pairs >= 2:
-            logger.info("Decrementing number of remaining pairs")
-            creq.num_pairs -= 1
+            else:
+                logger.debug("Peer applying correction, suspending generation")
+                self.scheduler.suspend_generation(t=self.peer_move_delay + self.peer_corr_delay)
+                self._move_comm_to_storage(mhp_seq, aid)
 
         else:
-            raise LinkLayerException("Request has invalid number of remaining pairs!")
+            self._move_comm_to_storage(mhp_seq, aid)
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """
@@ -703,9 +691,6 @@ class NodeCentricEGP(EGP):
             # Clear the request
             self.scheduler.clear_request(aid=aid)
 
-            # Free the qubits used by the MHP
-            self.mhp.release_qubits()
-
             self.expected_seq = new_mhp_seq
             return False
 
@@ -718,14 +703,105 @@ class NodeCentricEGP(EGP):
             logger.debug("Incrementing our expected MHP SEQ to {}".format(self.expected_seq))
             return True
 
-    def _apply_correction_to_qubit(self, storage_qubit):
+    def _apply_correction_and_move(self, mhp_seq, aid):
         """
         Applies a Z gate to specified storage qubit in the case that the entanglement generation
-        result was 2
-        :return:
+        result was 2 and moves it into the destination location
+        :param mhp_seq: int
+            The MHP Sequence number of the reply (to pass to the callback)
+        :param aid: tuple of (int, int)
+            Absolute queue identifier corresponding to this generation (to pass to the callback)
         """
-        logger.debug("Applying correction to storage_qubit {}".format(storage_qubit))
-        self.node.qmem.apply_Z([storage_qubit])
+
+        # Grab the current generation information
+        comm_q, storage_q = self.scheduler.curr_gen[2:4]
+        logger.debug("Applying correction to comm_q {} and moving to {}".format(comm_q, storage_q))
+
+        # Construct a quantum program to correct and move
+        prgm = QuantumProgram()
+        qs = prgm.load_mem_qubits(self.node.qmem)
+        qs[comm_q].Z()
+        qs[comm_q].move(new_id=storage_q)
+
+        # Set the callback of the program
+        prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
+        self.node.qmem.execute_program(prgm)
+
+    def _move_comm_to_storage(self, mhp_seq, aid):
+        """
+        Moves communication qubit from entanglement generation attempt to a storage location in the memory.
+        Calls back to complete MHP reply handling
+        :param mhp_seq: int
+            The MHP Sequence number corresponding to the generation (to pass to callback)
+        :param aid: tuple of (int, int)
+            The absolute queue ID corresponding to the generation (to pass to callback)
+        """
+        # Grab the current generation information
+        comm_q, storage_q = self.scheduler.curr_gen[2:4]
+        logger.debug("Moving comm_q {} to storage {}".format(comm_q, storage_q))
+
+        # Construct a quantum program to move the qubit
+        prgm = QuantumProgram()
+        qs = prgm.load_mem_qubits(qmem=self.node.qmem)
+        qs[comm_q].move(new_id=storage_q)
+
+        # Set the callback
+        prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
+        self.node.qmem.execute_program(prgm)
+
+    def _return_ok(self, mhp_seq, aid):
+        """
+        Constructs the OK message corresponding to the generation attempt and passes it to higher layer
+        protocols
+        :param mhp_seq: int
+            The MHP Sequence number corresponding to this generation
+        :param aid: tuple of (int, int)
+            The absolute queue ID corresponding to this generation attempt
+        """
+        logger.debug("Returning okay")
+
+        # Get the current request
+        creq = self.scheduler.get_request(aid=aid)
+
+        # Make the communication qubit available for subsequent attempts
+        comm_q, storage_q = self.scheduler.curr_gen[2:4]
+        if comm_q != storage_q:
+            self.qmm.free_qubit(comm_q)
+
+        # Get the fidelity estimate from FEU
+        logger.debug("Estimating fidelity")
+        fidelity_estimate = self.feu.estimate_fidelity(alpha=self.mhp.alpha)
+
+        # Create entanglement identifier
+        logical_id = self.qmm.physical_to_logical(storage_q)
+        creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
+        ent_id = (creatorID, creq.otherID, mhp_seq, logical_id)
+
+        logger.debug("Issuing okay to caller")
+
+        # Construct result information
+        now = self.get_current_time()
+        t_create = now - self.mhp.conn.channel_to_node(self.node).compute_delay()
+        t_goodness = t_create
+        result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
+
+        # Pass back the okay and clean up
+        self.issue_ok(result)
+        self.scheduler.mark_gen_completed(gen_id=(aid, comm_q, storage_q))
+        self._schedule_now(self._EVT_ENT_COMPLETED)
+
+        # Update number of remaining pairs on request, remove if completed
+        if creq.num_pairs == 1:
+            logger.info("Generated final pair, removing request")
+            self.scheduler.clear_request(aid=aid)
+            self._schedule_now(self._EVT_REQ_COMPLETED)
+
+        elif creq.num_pairs >= 2:
+            logger.info("Decrementing number of remaining pairs")
+            creq.num_pairs -= 1
+
+        else:
+            raise LinkLayerException("Request has invalid number of remaining pairs!")
 
     def _request_timeout_handler(self, evt):
         """
