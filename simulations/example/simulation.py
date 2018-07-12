@@ -5,7 +5,7 @@ from os.path import abspath, dirname, exists
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
-from netsquid.pydynaa import DynAASim
+from netsquid.simutil import SECOND, sim_reset, sim_run
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
@@ -20,6 +20,11 @@ Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibr
 Connections._CONN_BY_NAME[Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION] = NodeCentricMHPHeraldedConnection
 
 
+def setup_simulation():
+    ns.set_qstate_formalism(ns.DM_FORMALISM)
+    sim_reset()
+
+
 def setup_data_directory(dir_path):
     """
     Creates a directory for storing symulation data
@@ -32,98 +37,99 @@ def setup_data_directory(dir_path):
         makedirs(dir_path)
 
 
+def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
+    # Create simulation data directory (simple timestamp) containing data collected by the datasequences
+    timestamp = time()
+    data_dir = "{}/{}".format(dir_path, timestamp)
+    setup_data_directory(data_dir)
+
+    # Prepare our data collection (this should be made a lot nicer especially the addEvent calls)
+    pm = PM_Controller()
+    err_log = "{}/error.log".format(data_dir)
+    req_log = "{}/request.log".format(data_dir)
+
+    # DataSequence for error collection
+    err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, maxSteps=collection_duration)
+
+    # DataSequence for ok/create collection
+    ok_ds = EGPOKSequence(name="EGP OKs", recFile=req_log, maxSteps=collection_duration)
+
+    # Hook up the datasequences to the events in that occur
+    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=ok_ds)
+    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=ok_ds)
+    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_ERR, ds=err_ds)
+
+    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=ok_ds)
+    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=ok_ds)
+    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
+
+
+def schedule_scenario_actions(scenarioA, scenarioB):
+    idA = scenarioA.egp.node.nodeID
+    idB = scenarioB.egp.node.nodeID
+    max_time = 60 * SECOND
+
+    requestA = EGPRequest(otherID=idB, num_pairs=3, min_fidelity=0.5, max_time=max_time, purpose_id=1, priority=10)
+    requestB = EGPRequest(otherID=idA, num_pairs=3, min_fidelity=0.5, max_time=max_time, purpose_id=1, priority=10)
+
+    scenarioA.schedule_create(request=requestA, t=0)
+    scenarioB.schedule_create(request=requestB, t=0)
+
+
+def setup_network_protocols(network):
+    # Grab the nodes and connections
+    nodeA = network.get_node_by_id(0)
+    nodeB = network.get_node_by_id(1)
+    egp_conn = network.get_connection(nodeA, nodeB, "egp_conn")
+    mhp_conn = network.get_connection(nodeA, nodeB, "mhp_conn")
+    dqp_conn = network.get_connection(nodeA, nodeB, "dqp_conn")
+
+    # Create our EGP instances and connect them
+    egpA = NodeCentricEGP(nodeA)
+    egpB = NodeCentricEGP(nodeB)
+    egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn)
+
+    # Attach the protocols to the nodes and connections
+    network.add_network_protocol(egpA.dqp, nodeA, dqp_conn)
+    network.add_network_protocol(egpA.mhp, nodeA, mhp_conn)
+    network.add_network_protocol(egpA, nodeA, egp_conn)
+    network.add_network_protocol(egpB.dqp, nodeB, dqp_conn)
+    network.add_network_protocol(egpB.mhp, nodeB, mhp_conn)
+    network.add_network_protocol(egpB, nodeB, egp_conn)
+
+    return egpA, egpB
+
+
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation():
     # Grab the config we want to set the netowrk up with
     dir_path = dirname(abspath(__file__))
     config = "{}/../configs/qlink_configs/network_with_cav_with_conv.json".format(dir_path)
 
-    # Create simulation data directory (simple timestamp) containing data collected by the datasequences
-    timestamp = time()
-    data_dir = "{}/{}".format(dir_path, timestamp)
-    setup_data_directory(data_dir)
-    err_log = "{}/error.log".format(data_dir)
-    req_log = "{}/request.log".format(data_dir)
-
-    SECOND = 1e9    # Since we are using real world parameters we need to simulate on larger timescale than ns
-    ns.set_qstate_formalism(ns.DM_FORMALISM)
-    DynAASim().reset()
+    # Set up the simulation
+    setup_simulation()
 
     # Create the network
     network = setup_physical_network(config)
-
-    # Grab the nodes and connections
-    alice = network.get_node(0)
-    bob = network.get_node(1)
-    egp_conn = network.get_connection(alice.nodeID, bob.nodeID, "egp_conn")
-    mhp_conn = network.get_connection(alice.nodeID, bob.nodeID, "mhp_conn")
-    dqp_conn = network.get_connection(alice.nodeID, bob.nodeID, "dqp_conn")
-
-    # Create our EGP instances and connect them
-    egpA = NodeCentricEGP(alice)
-    egpB = NodeCentricEGP(bob)
-    egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn)
-
-    # Create requests to simulate
-    num_seconds = 60
-    alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=3, min_fidelity=0.5, max_time=num_seconds * SECOND,
-                               purpose_id=1, priority=10)
-
-    bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=3, min_fidelity=0.5, max_time=num_seconds * SECOND,
-                             purpose_id=1, priority=10)
-
-    # Configure the nodes and connections to contain all of the protocols we have set up (this is kind of painful and
-    # should be refactored into something nicer)
-    network.add_node_protocol(alice.nodeID, egpA.dqp)
-    network.add_connection_protocol(dqp_conn, egpA.dqp)
-    network.add_node_protocol(alice.nodeID, egpA.mhp)
-    network.add_connection_protocol(mhp_conn, egpA.mhp)
-    network.add_node_protocol(alice.nodeID, egpA)
-    network.add_connection_protocol(egp_conn, egpA)
-
-    # Do it for Bob as well
-    network.add_node_protocol(bob.nodeID, egpB.dqp)
-    network.add_connection_protocol(dqp_conn, egpB.dqp)
-    network.add_node_protocol(bob.nodeID, egpB.mhp)
-    network.add_connection_protocol(mhp_conn, egpB.mhp)
-    network.add_node_protocol(bob.nodeID, egpB)
-    network.add_connection_protocol(egp_conn, egpB)
-
-    # Start up the mhp and node/connection protocols
-    egpA.mhp_service.start()
-    network.start()
+    egpA, egpB = setup_network_protocols(network)
 
     # Set up the Measure Immediately scenarios at nodes alice and bob
     alice_scenario = MeasureImmediatelyScenario(egp=egpA)
     bob_scenario = MeasureImmediatelyScenario(egp=egpB)
+    schedule_scenario_actions(alice_scenario, bob_scenario)
 
-    # Schedule the calls to the EGP "create"
-    alice_scenario.schedule_create(request=alice_request, t=0)
-    bob_scenario.schedule_create(request=bob_request, t=0)
-
-    # Prepare our data collection (this should be made a lot nicer especially the addEvent calls)
-    sim_time = num_seconds * SECOND + 1
-    pm = PM_Controller()
-
-    # DataSequence for error collection
-    err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, maxSteps=sim_time)
-
-    # DataSequence for ok/create collection
-    ok_ds = EGPOKSequence(name="EGP OKs", recFile=req_log, maxSteps=sim_time)
-
-    # Hook up the datasequences to the events in the EGP
-    pm.addEvent(source=alice_scenario, evtType=alice_scenario._EVT_CREATE, ds=ok_ds)
-    pm.addEvent(source=alice_scenario, evtType=alice_scenario._EVT_OK, ds=ok_ds)
-    pm.addEvent(source=bob_scenario, evtType=bob_scenario._EVT_CREATE, ds=ok_ds)
-    pm.addEvent(source=bob_scenario, evtType=bob_scenario._EVT_OK, ds=ok_ds)
-    pm.addEvent(source=alice_scenario, evtType=alice_scenario._EVT_ERR, ds=err_ds)
-    pm.addEvent(source=bob_scenario, evtType=bob_scenario._EVT_ERR, ds=err_ds)
+    # Hook up data collectors to the scenarios
+    sim_duration = 60 * SECOND + 1
+    setup_data_collection(alice_scenario, bob_scenario, sim_duration, dir_path)
 
     # Start the simulation
+    network.start()
+
     logger.info("Beginning simulation")
     start_time = time()
 
-    DynAASim().run(sim_time)
+    sim_run(sim_duration)
+
     stop_time = time()
     logger.info("Finished simulation, took {}".format(stop_time - start_time))
 
