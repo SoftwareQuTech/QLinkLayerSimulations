@@ -454,10 +454,11 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp])
         ]
 
-        egpA.mhp.start()
-
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
+
+        # Make the MHP at the peer unresponsive
+        egpB.mhp.stop()
 
         pydynaa.DynAASim().run(max_time + 2)
 

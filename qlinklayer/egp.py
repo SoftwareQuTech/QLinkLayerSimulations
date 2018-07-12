@@ -332,6 +332,10 @@ class NodeCentricEGP(EGP):
         other_egp.peer_move_delay = self.qmm.get_move_delay()
         other_egp.peer_corr_delay = self.qmm.get_correction_delay()
 
+    def start(self):
+        super(NodeCentricEGP, self).start()
+        self.mhp_service.start()
+
     def request_other_free_memory(self):
         """
         Requests our peer for their QMM's free memory
