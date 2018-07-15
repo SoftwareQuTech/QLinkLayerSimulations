@@ -85,8 +85,8 @@ def schedule_scenario_actions(scenarioA, scenarioB):
     idB = scenarioB.egp.node.nodeID
     max_time = 60 * SECOND
 
-    requestA = EGPRequest(otherID=idB, num_pairs=3, min_fidelity=0.5, max_time=max_time, purpose_id=1, priority=10)
-    requestB = EGPRequest(otherID=idA, num_pairs=3, min_fidelity=0.5, max_time=max_time, purpose_id=1, priority=10)
+    requestA = EGPRequest(otherID=idB, num_pairs=3, min_fidelity=0.2, max_time=max_time, purpose_id=1, priority=10)
+    requestB = EGPRequest(otherID=idA, num_pairs=3, min_fidelity=0.2, max_time=max_time, purpose_id=1, priority=10)
 
     scenarioA.schedule_create(request=requestA, t=0)
     scenarioB.schedule_create(request=requestB, t=0)
@@ -150,8 +150,8 @@ def run_simulation():
     logger.info("Finished simulation, took {}".format(stop_time - start_time))
 
     # Set a trace to allow inspection
-    import pdb
-    pdb.set_trace()
+    # import pdb
+    # pdb.set_trace()
 
 
 if __name__ == '__main__':

@@ -114,8 +114,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
-        egpA.mhp_service.start()
-
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
@@ -140,7 +138,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         for i in range(alice_pairs + bob_pairs):
             qA = aliceMemory.get_qubit(i + 1)
             qB = bobMemory.get_qubit(i + 1)
-            self.assertEqual(qA.qstate, qB.qstate)
+            self.assertEqual(qA.qstate.dm.shape, (4, 4))
+            self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
             self.assertIn(qA, qB.qstate._qubits)
 
@@ -199,8 +198,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.conn, "egp_conn", [egpA, egpB]),
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
-
-        egpA.mhp_service.start()
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
@@ -265,8 +262,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
-        egpA.mhp_service.start()
-
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
@@ -279,7 +274,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         for i in range(alice_pairs + bob_pairs):
             qA = aliceMemory.get_qubit(i + 1)
             qB = bobMemory.get_qubit(i + 1)
-            self.assertEqual(qA.qstate, qB.qstate)
+            self.assertEqual(qA.qstate.dm.shape, (4, 4))
+            self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
             self.assertIn(qA, qB.qstate._qubits)
 
@@ -337,8 +333,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
-        egpA.mhp_service.start()
-
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
         pydynaa.DynAASim().run(20000)
@@ -395,8 +389,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.conn, "egp_conn", [egpA, egpB]),
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
-
-        egpA.mhp_service.start()
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
@@ -523,7 +515,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
-        egpA.mhp_service.start()
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
@@ -597,8 +588,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
-        egpA.mhp_service.start()
-
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
@@ -655,7 +644,8 @@ class TestNodeCentricEGP(unittest.TestCase):
             self.assertEqual(alice_gen[1][2], bob_gen[1][2])
             qA = alice.qmem.get_qubit(alice_gen[1][3])
             qB = bob.qmem.get_qubit(bob_gen[1][3])
-            self.assertEqual(qA.qstate, qB.qstate)
+            self.assertEqual(qA.qstate.dm.shape, (4, 4))
+            self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
             self.assertIn(qA, qB.qstate._qubits)
 
@@ -708,8 +698,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
-        egpA.mhp_service.start()
-
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
         pydynaa.DynAASim().run(20)
@@ -724,9 +712,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         idB = self.bob_results[0][1][3]
         qA = aliceMemory.get_qubit(idA)
         qB = bobMemory.get_qubit(idB)
-        self.assertEqual(qA.qstate, qB.qstate)
-        self.assertIn(qA, qB.qstate._qubits)
+        self.assertEqual(qA.qstate.dm.shape, (4, 4))
+        self.assertTrue(qA.qstate.compare(qB.qstate))
         self.assertIn(qB, qA.qstate._qubits)
+        self.assertIn(qA, qB.qstate._qubits)
 
         # Verify we have ERR_EXPIRE messages for individual generation requests
         expiry_message = self.alice_results[1]
@@ -801,8 +790,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
-        egpA.mhp_service.start()
-
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
         pydynaa.DynAASim().run(0.01)
@@ -872,8 +859,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
         ]
 
-        egpA.mhp_service.start()
-
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
         pydynaa.DynAASim().run(400)
@@ -896,7 +881,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         for i in range(alice_pairs + bob_pairs):
             qA = aliceMemory.get_qubit(i + 1)
             qB = bobMemory.get_qubit(i + 1)
-            self.assertEqual(qA.qstate, qB.qstate)
+            self.assertEqual(qA.qstate.dm.shape, (4, 4))
+            self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
             self.assertIn(qA, qB.qstate._qubits)
 
