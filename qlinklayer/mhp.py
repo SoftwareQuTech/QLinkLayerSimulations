@@ -294,6 +294,7 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
     # Errors
     ERR_QUEUE_MISMATCH = 11
+    _EVT_ENTANGLE_ATTEMPT = EventType("ENTANGLE ATTEMPT", "Triggered when an attempt at entanglement production occurs")
 
     def _construct_request(self, sender, classical, qubit):
         """
@@ -533,6 +534,8 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
                 self.qubits[id] = q
 
         outcome = self.midPoint.measure(self.qubits[self.idA], self.qubits[self.idB])
+        self.last_outcome = outcome
+        self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         # Check current classical messages
         present = self._check_current_messages()
