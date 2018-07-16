@@ -5,7 +5,8 @@ from easysquid.simpleLink import NodeCentricMHP
 from easysquid.easyfibre import HeraldedFibreConnection
 from easysquid.toolbox import EasySquidException, create_logger
 from netsquid.qubits.qubitapi import create_qubits
-from netsquid.pydynaa import DynAASim, EventType, EventHandler
+from netsquid.pydynaa import EventType, EventHandler
+from netsquid.simutil import sim_time
 
 logger = create_logger("logger")
 
@@ -220,7 +221,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
             Outcome result of performing the entanglement
         :return: Non
         """
-        logger.debug("{} sending notification to both".format(DynAASim().current_time))
+        logger.debug("{} sending notification to both".format(sim_time()))
 
         # Send notification messages back.
         if outcome not in self.VALID_OUTCOMES:
@@ -563,7 +564,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
         Generic protocol, either accepts incoming requests (if any) or continues processing current one
         """
         try:
-            logger.debug("{} Node {} running protocol".format(DynAASim().current_time, self.node.nodeID))
+            logger.debug("{} Node {} running protocol".format(sim_time(), self.node.nodeID))
             if self._in_progress():
                 self._continue_request_handling()
 
@@ -623,7 +624,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
         """
         try:
             [msg, deltaT] = self.conn.get_as(self.node.nodeID)
-            logger.debug("{} Received message {}".format(DynAASim().current_time, msg))
+            logger.debug("{} Received message {}".format(sim_time(), msg))
             respM, passM = msg
             reply_message = MHPReply(response_data=respM, pass_data=passM)
             self._process_reply(reply_message)

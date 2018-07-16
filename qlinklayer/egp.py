@@ -1,5 +1,6 @@
 import abc
-from netsquid.pydynaa import DynAASim, EventType, EventHandler
+from netsquid.pydynaa import EventType, EventHandler
+from netsquid.simutil import sim_time
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid.quantumProgram import QuantumProgram
@@ -107,7 +108,7 @@ class EGP(EasyProtocol):
         :return: float
             The current time
         """
-        return DynAASim().current_time
+        return sim_time()
 
     def process_data(self):
         """

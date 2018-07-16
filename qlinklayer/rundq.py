@@ -6,12 +6,12 @@
 # Author: Stephanie Wehner
 
 import logging
-import netsquid.pydynaa as pydynaa
 from collections import deque
 from easysquid.connection import ClassicalConnection
 from easysquid.qnode import QuantumNode
 from easysquid.easyprotocol import EasyProtocol
 from easysquid.toolbox import EasySquidException, setup_logging
+from netsquid.simutil import sim_reset, sim_run
 from qlinklayer.localQueue import LocalQueue
 
 
@@ -411,7 +411,7 @@ class DistributedQueue(EasyProtocol):
         self.comms_seq = (self.comms_seq + 1) % self.maxSeq
 
 
-pydynaa.DynAASim().reset()
+sim_reset()
 logger = setup_logging("GLOBAL", "logFile", level=logging.DEBUG)
 alice = QuantumNode("Alice", 1, logger=logger)
 bob = QuantumNode("Bob", 2, logger=logger)
@@ -429,4 +429,4 @@ aliceProto.send_hello()
 
 aliceProto.add("Foo")
 
-pydynaa.DynAASim().run(500)
+sim_run(500)

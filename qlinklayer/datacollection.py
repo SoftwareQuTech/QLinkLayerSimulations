@@ -1,5 +1,5 @@
 from easysquid.puppetMaster import PM_MultiDataSequence
-from netsquid.pydynaa import DynAASim
+from netsquid.simutil import sim_time
 
 
 class EGPErrorSequence(PM_MultiDataSequence):
@@ -20,7 +20,7 @@ class EGPOKSequence(PM_MultiDataSequence):
     Collects OK events from an EGP including the CREATE events
     """
     def gather(self, event):
-        now = DynAASim().current_time
+        now = sim_time()
         if event.type == event.source._EVT_CREATE:
             [val, succ] = self.getCreateData(time=now, source=event.source)
 
