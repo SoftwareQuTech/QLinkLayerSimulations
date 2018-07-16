@@ -1,4 +1,4 @@
-from easysquid.puppetMaster import PM_MultiDataSequence
+from easysquid.puppetMaster import PM_DataSequence, PM_MultiDataSequence
 from netsquid.simutil import sim_time
 
 
@@ -42,3 +42,17 @@ class EGPOKSequence(PM_MultiDataSequence):
 
     def sumData(self, val, succ):
         pass
+
+
+class MHPEntanglementAttemptSequence(PM_DataSequence):
+    """
+    Collects entanglement attempts that occur at the midpoint
+    """
+    def getData(self, time, source=None):
+        [midpoint] = source
+        outcome = midpoint.last_outcome
+        success = False
+        if outcome in [1, 2]:
+            success = True
+
+        return [outcome, success]

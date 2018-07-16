@@ -6,7 +6,7 @@ from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
 from netsquid.simutil import SECOND, sim_reset, sim_run
-from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence
+from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, MHPEntanglementAttemptSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureImmediatelyScenario
@@ -47,12 +47,17 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     pm = PM_Controller()
     err_log = "{}/error.log".format(data_dir)
     req_log = "{}/request.log".format(data_dir)
+    attempt_log = "{}/attempt.log".format(data_dir)
 
     # DataSequence for error collection
     err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, maxSteps=collection_duration)
 
     # DataSequence for ok/create collection
     ok_ds = EGPOKSequence(name="EGP OKs", recFile=req_log, maxSteps=collection_duration)
+
+    # DataSequence for attempt tracking
+    attempt_ds = MHPEntanglementAttemptSequence(name="EGP Attempts", recFile=attempt_log, ylabel="Outcome",
+                                                maxSteps=collection_duration)
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=ok_ds)
@@ -62,6 +67,8 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=ok_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=ok_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
+
+    pm.addEvent(source=scenarioA.egp.mhp.conn, evtType=scenarioA.egp.mhp.conn._EVT_ENTANGLE_ATTEMPT, ds=attempt_ds)
 
 
 def schedule_scenario_actions(scenarioA, scenarioB):
