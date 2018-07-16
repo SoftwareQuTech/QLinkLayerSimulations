@@ -1,8 +1,8 @@
 import abc
 from functools import partial
 from easysquid.toolbox import create_logger, SimulationScheduler
-from netsquid.pydynaa import DynAASim, Entity, EventType
-
+from netsquid.pydynaa import Entity, EventType
+from netsquid.simutil import sim_time
 
 logger = create_logger("logger")
 
@@ -149,7 +149,7 @@ class MeasureImmediatelyScenario(EGPSimulationScenario):
         # Measure the logical qubit in the result
         [outcome] = self.node.qmem.measure_subset([logical_id])
 
-        now = DynAASim().current_time
+        now = sim_time()
         logger.info("{} measured {} for ent_id {} at time {}".format(self.node.nodeID, outcome, ent_id, now))
 
         # Store the measurement result for data collection
@@ -182,7 +182,7 @@ class MeasureImmediatelyScenario(EGPSimulationScenario):
         :param result: tuple
             Contains the error information from the EGP
         """
-        now = DynAASim().current_time
+        now = sim_time()
         logger.error("{} got error {} at time {}".format(self.node.nodeID, result, now))
         self.err_storage.append(result)
 

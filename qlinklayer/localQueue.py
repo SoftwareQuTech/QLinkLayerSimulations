@@ -3,7 +3,7 @@
 #
 # 
 
-import netsquid.pydynaa as pydynaa
+from netsquid.simutil import sim_time
 from netsquid.pydynaa import Entity, EventType, EventHandler
 from qlinklayer.general import LinkLayerException
 from easysquid.toolbox import create_logger
@@ -67,7 +67,7 @@ class LocalQueue(Entity):
     def add_with_id(self, originID, seq, request):
 
         # Compute the minimum time at which this request can be served
-        now = pydynaa.DynAASim().current_time
+        now = sim_time()
         sa = now + self.scheduleAfter
 
         # TODO Needs fixing
@@ -95,7 +95,7 @@ class LocalQueue(Entity):
         q = self.queue[self.popSeq]
 
         # Check if it's ready to be scheduled
-        now = pydynaa.DynAASim().current_time
+        now = sim_time()
 
         if q.scheduleAt <= now:
             # Item ready
@@ -163,7 +163,7 @@ class LocalQueue(Entity):
             Time to set the item for servicing
         """
         item = self.queue[seq]
-        item.scheduleAt = scheduleAt + pydynaa.DynAASim().current_time
+        item.scheduleAt = scheduleAt + sim_time()
         item.schedule()
 
 
@@ -194,7 +194,7 @@ class TimeoutLocalQueue(LocalQueue):
             The item to store in the queue
         """
         # Compute the minimum time at which this request can be served
-        now = pydynaa.DynAASim().current_time
+        now = sim_time()
         sa = now + self.scheduleAfter
 
         # Check if the item specifies a max queue time
@@ -291,7 +291,7 @@ class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
         Sets up the timeout event into the future
         """
         if self.lifetime:
-            now = pydynaa.DynAASim().current_time
+            now = sim_time()
             deadline = now + self.lifetime
             self._schedule_after(deadline, self._EVT_TIMEOUT)
 
