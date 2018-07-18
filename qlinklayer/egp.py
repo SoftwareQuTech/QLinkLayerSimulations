@@ -8,7 +8,7 @@ from qlinklayer.general import LinkLayerException
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.distQueue import DistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement
-from qlinklayer.feu import FidelityEstimationUnit
+from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import create_logger
 
@@ -61,6 +61,9 @@ class EGPRequest:
         """
         self.create_id = create_id
         self.create_time = create_time
+
+    def get_create_info(self):
+        return self.create_id, self.create_time
 
 
 class EGP(EasyProtocol):
@@ -220,9 +223,6 @@ class NodeCentricEGP(EGP):
         self.peer_move_delay = 0
         self.peer_corr_delay = 0
 
-        # Fidelity Estimation Unit used to estimate the fidelity of produced entangled pairs
-        self.feu = FidelityEstimationUnit()
-
         # Request tracking
         self.expected_seq = 0
 
@@ -296,6 +296,10 @@ class NodeCentricEGP(EGP):
 
         # Add the protocol to the service
         self.mhp_service.add_node(node=self.node, defaultProtocol=self.mhp, stateProvider=self.trigger_pair_mhp)
+
+        # Fidelity Estimation Unit used to estimate the fidelity of produced entangled pairs
+        self.feu = SingleClickFidelityEstimationUnit(node=self.node, mhp_conn=self.mhp.conn,
+                                                     mhp_service=self.mhp_service)
 
     def _connect_dqp(self, other_egp, dqp_conn=None):
         """
@@ -484,7 +488,7 @@ class NodeCentricEGP(EGP):
             return self.ERR_NORES
 
         # Check if we can achieve the minimum fidelity
-        if self.feu.estimate_fidelity(alpha=self.mhp.alpha) < creq.min_fidelity:
+        if self.feu.estimated_fidelity < creq.min_fidelity:
             logger.error("Requested fidelity is too high to be satisfied")
             return self.ERR_UNSUPP
 
@@ -764,7 +768,6 @@ class NodeCentricEGP(EGP):
             The absolute queue ID corresponding to this generation attempt
         """
         logger.debug("Returning okay")
-
         # Get the current request
         creq = self.scheduler.get_request(aid=aid)
 
@@ -775,7 +778,7 @@ class NodeCentricEGP(EGP):
 
         # Get the fidelity estimate from FEU
         logger.debug("Estimating fidelity")
-        fidelity_estimate = self.feu.estimate_fidelity(alpha=self.mhp.alpha)
+        fidelity_estimate = self.feu.estimated_fidelity
 
         # Create entanglement identifier
         logical_id = self.qmm.physical_to_logical(storage_q)

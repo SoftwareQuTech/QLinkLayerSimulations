@@ -520,7 +520,9 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
         # Error if we only received on qubit during this cycle
         if num_missing_qubits == 1:
-
+            for _, qubit in self.qubits.items():
+                if qubit:
+                    self._drop_qubit(qubit)
             raise EasySquidException("Missing qubit from one node!")
 
         # If missing both qubits then nodes may have passed information between each other

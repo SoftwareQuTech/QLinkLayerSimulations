@@ -34,8 +34,9 @@ class EGPOKSequence(PM_MultiDataSequence):
         self._commonGather(now, val, succ)
 
     def getCreateData(self, time, source=None):
-        create_info = source.get_create_info()
-        return [create_info, True]
+        nodeID, request = source.get_create_info()
+        create_info = request.get_create_info()
+        return [(nodeID, vars(request)), create_info != (None, None)]
 
     def getOKData(self, time, source=None):
         ok = source.get_ok()

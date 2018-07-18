@@ -60,9 +60,9 @@ class EGPSimulationScenario(SimulationScenario):
         :param request: obj `~qlinklayer.egp.EGPRequest`
             The request we are creating
         """
-        create_id, create_timestamp = self.egp.create(creq=request)
-        create_info = (self.egp.node.nodeID, create_id, create_timestamp)
-        self.create_storage.append(create_info)
+        # Only extract result information if the create was successfully submitted
+        self.egp.create(creq=request)
+        self.create_storage.append((self.egp.node.nodeID, request))
         self._schedule_now(self._EVT_CREATE)
 
     def get_create_info(self, remove=True):
