@@ -47,7 +47,8 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     pm = PM_Controller()
     err_log = "{}/error.log".format(data_dir)
     req_log = "{}/request.log".format(data_dir)
-    attempt_log = "{}/attempt.log".format(data_dir)
+    midpoint_attempt_log = "{}/midpoint_attempt.log".format(data_dir)
+    node_attempt_log = "{}/node_attempt.log".format(data_dir)
 
     # DataSequence for error collection
     err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, maxSteps=collection_duration)
@@ -55,9 +56,12 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     # DataSequence for ok/create collection
     ok_ds = EGPOKSequence(name="EGP OKs", recFile=req_log, maxSteps=collection_duration)
 
-    # DataSequence for attempt tracking
-    attempt_ds = MHPEntanglementAttemptSequence(name="EGP Attempts", recFile=attempt_log, ylabel="Outcome",
-                                                maxSteps=collection_duration)
+    # DataSequences for attempt tracking
+    midpoint_attempt_ds = MHPEntanglementAttemptSequence(name="Midpoint EGP Attempts", recFile=midpoint_attempt_log,
+                                                         ylabel="Outcome", maxSteps=collection_duration)
+
+    node_attempt_ds = MHPEntanglementAttemptSequence(name="Node EGP Attempts", recFile=node_attempt_log,
+                                                     ylabel="nodeID", maxSteps=collection_duration)
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=ok_ds)
@@ -68,7 +72,12 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=ok_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
 
-    pm.addEvent(source=scenarioA.egp.mhp.conn, evtType=scenarioA.egp.mhp.conn._EVT_ENTANGLE_ATTEMPT, ds=attempt_ds)
+    pm.addEvent(source=scenarioA.egp.mhp.conn, evtType=scenarioA.egp.mhp.conn._EVT_ENTANGLE_ATTEMPT,
+                ds=midpoint_attempt_ds)
+
+    pm.addEvent(source=scenarioA.egp.mhp, evtType=scenarioA.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
+
+    pm.addEvent(source=scenarioB.egp.mhp, evtType=scenarioB.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
 
 
 def schedule_scenario_actions(scenarioA, scenarioB):

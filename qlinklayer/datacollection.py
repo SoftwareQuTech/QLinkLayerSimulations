@@ -1,4 +1,5 @@
 from easysquid.puppetMaster import PM_DataSequence, PM_MultiDataSequence
+from qlinklayer.mhp import MHPHeraldedConnection, MHPServiceProtocol
 from netsquid.simutil import sim_time
 
 
@@ -49,10 +50,15 @@ class MHPEntanglementAttemptSequence(PM_DataSequence):
     Collects entanglement attempts that occur at the midpoint
     """
     def getData(self, time, source=None):
-        [midpoint] = source
-        outcome = midpoint.last_outcome
-        success = False
-        if outcome in [1, 2]:
-            success = True
+        [event_source] = source
+        if isinstance(event_source, MHPHeraldedConnection):
+            outcome = event_source.last_outcome
+            success = False
+            if outcome in [1, 2]:
+                success = True
 
-        return [outcome, success]
+            return [outcome, success]
+
+        elif isinstance(event_source, MHPServiceProtocol):
+            nodeID = event_source.node.nodeID
+            return [nodeID, True]
