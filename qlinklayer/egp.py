@@ -62,6 +62,9 @@ class EGPRequest:
         self.create_id = create_id
         self.create_time = create_time
 
+    def get_create_info(self):
+        return self.create_id, self.create_time
+
 
 class EGP(EasyProtocol):
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None):
