@@ -6,7 +6,7 @@ from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
 from netsquid.simutil import SECOND, sim_reset, sim_run
-from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, MHPEntanglementAttemptSequence
+from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, MHPEntanglementAttemptSequence, EGPStateSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureImmediatelyScenario
@@ -49,6 +49,7 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     req_log = "{}/request.log".format(data_dir)
     midpoint_attempt_log = "{}/midpoint_attempt.log".format(data_dir)
     node_attempt_log = "{}/node_attempt.log".format(data_dir)
+    state_log = "{}/states.log".format(data_dir)
 
     # DataSequence for error collection
     err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, maxSteps=collection_duration)
@@ -63,13 +64,18 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     node_attempt_ds = MHPEntanglementAttemptSequence(name="Node EGP Attempts", recFile=node_attempt_log,
                                                      ylabel="nodeID", maxSteps=collection_duration)
 
+    # DataSequence for entangled state collection
+    state_ds = EGPStateSequence(name="EGP Qubit States", recFile=state_log, maxSteps=collection_duration)
+
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=ok_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=ok_ds)
+    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=state_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_ERR, ds=err_ds)
 
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=ok_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=ok_ds)
+    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=state_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
 
     pm.addEvent(source=scenarioA.egp.mhp.conn, evtType=scenarioA.egp.mhp.conn._EVT_ENTANGLE_ATTEMPT,

@@ -46,6 +46,19 @@ class EGPOKSequence(PM_MultiDataSequence):
         pass
 
 
+class EGPStateSequence(PM_MultiDataSequence):
+    """
+    Collects qubit states of generated entangled pairs
+    """
+    def getData(self, time, source=None):
+        state = source[0].get_qstate()
+        nodeID = source[0].egp.node.nodeID
+        return [(nodeID, state), True]
+
+    def sumData(self, val, succ):
+        pass
+
+
 class MHPEntanglementAttemptSequence(PM_DataSequence):
     """
     Collects entanglement attempts that occur at the midpoint
