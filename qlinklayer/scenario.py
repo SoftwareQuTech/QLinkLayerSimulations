@@ -3,6 +3,7 @@ from functools import partial
 from easysquid.toolbox import create_logger, SimulationScheduler
 from netsquid.pydynaa import Entity, EventType
 from netsquid.simutil import sim_time
+from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FORMALISM
 
 logger = create_logger("logger")
 
@@ -129,6 +130,7 @@ class MeasureImmediatelyScenario(EGPSimulationScenario):
 
         # Data storage from collected info
         self.ok_storage = []
+        self.entangled_qstates = []
         self.measurement_results = []
         self.err_storage = []
 
@@ -146,6 +148,9 @@ class MeasureImmediatelyScenario(EGPSimulationScenario):
         create_id, ent_id, f_goodness, t_create, t_goodness = result
         creator_id, peer_id, mhp_seq, logical_id = ent_id
 
+        # Store the qubit state for collection
+        self.store_qstate(logical_id)
+
         # Measure the logical qubit in the result
         [outcome] = self.node.qmem.measure_subset([logical_id])
 
@@ -158,11 +163,45 @@ class MeasureImmediatelyScenario(EGPSimulationScenario):
         # Free the qubit for the EGP
         self.qmm.free_qubit(logical_id)
 
+    def store_qstate(self, qubit_id):
+        """
+        Extracts the qubit state based on the used formalism and stores it locally for collection
+        :param qubit_id: int
+            The qubit ID in memory that we want the state of
+        """
+        qstate = self.node.qmem.get_qubit(qubit_id).qstate
+        formalism = get_qstate_formalism()
+
+        if formalism == DM_FORMALISM and qstate.dm.shape == (4, 4):
+            self.entangled_qstates.append(qstate.dm)
+
+        elif formalism == KET_FORMALISM and qstate.ket.shape == (4, 1):
+            self.entangled_qstates.append(qstate.ket)
+
+        elif formalism == STAB_FORMALISM:
+            self.entangled_qstates.append(qstate.stab)
+
+        else:
+            self.entangled_qstates.append(None)
+
+    def get_qstate(self, remove=True):
+        """
+        Returns the entangled state of the oldest generated pair
+        :param remove: bool
+            Whether to remove the state info from the scenario's storage
+        :return: obj `~numpy.matrix`
+            The matrix representation of the qubit state
+        """
+        state = self.entangled_qstates.pop(0) if remove else self.entangled_qstates[0]
+        return state
+
     def get_ok(self, remove=True):
         """
         Returns the oldest ok message that we received during the simulation
         :param remove: bool
             Whether to remove the ok from the scenario's storage
+        :return: tuple
+            Ok information
         """
         ok = self.ok_storage.pop(0) if remove else self.ok_storage[0]
         return ok
