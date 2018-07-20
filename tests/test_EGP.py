@@ -9,7 +9,7 @@ from easysquid.puppetMaster import PM_Controller, PM_Test
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import QuantumProcessingDevice
 from easysquid.toolbox import SimulationScheduler, create_logger
-from netsquid import pydynaa
+from netsquid.simutil import sim_reset, sim_run
 from qlinklayer.egp import NodeCentricEGP, EGPRequest
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 
@@ -60,7 +60,7 @@ class PM_Test_Counter(PM_Test):
 class TestNodeCentricEGP(unittest.TestCase):
     def setUp(self):
         ns.set_qstate_formalism(ns.DM_FORMALISM)
-        pydynaa.DynAASim().reset()
+        sim_reset()
         self.alice_results = []
         self.bob_results = []
         self.alice_callback = partial(store_result, storage=self.alice_results)
@@ -117,7 +117,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(1000)
+        sim_run(1000)
 
         self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
         self.assertEqual(self.alice_results, self.bob_results)
@@ -202,7 +202,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(1000)
+        sim_run(1000)
 
         self.assertEqual(len(self.alice_results), num_requests)
         self.assertEqual(self.alice_results, self.bob_results)
@@ -265,7 +265,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(400)
+        sim_run(400)
 
         self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
         self.assertEqual(self.alice_results, self.bob_results)
@@ -335,18 +335,20 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
-        pydynaa.DynAASim().run(20000)
 
-        self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
+        sim_run(20000)
+
         self.assertEqual(self.alice_results, self.bob_results)
 
         # Check the entangled pairs, ignore communication qubit
-        for i in range(alice_pairs + bob_pairs):
-            qA = aliceMemory.get_qubit(i + 1)
-            qB = bobMemory.get_qubit(i + 1)
-            self.assertEqual(qA.qstate, qB.qstate)
-            self.assertIn(qB, qA.qstate._qubits)
-            self.assertIn(qA, qB.qstate._qubits)
+        for resA, resB in zip(self.alice_results, self.bob_results):
+            self.assertEqual(len(resA), len(resB))
+            if len(resA) > 2:
+                qA = aliceMemory.get_qubit(resA[1][3])
+                qB = bobMemory.get_qubit(resB[1][3])
+                self.assertEqual(qA.qstate, qB.qstate)
+                self.assertIn(qB, qA.qstate._qubits)
+                self.assertIn(qA, qB.qstate._qubits)
 
     def test_unresponsive_dqp(self):
         # Set up Alice
@@ -393,7 +395,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(10)
+        sim_run(10)
 
         expected_results = [(egpA.dqp.DQ_TIMEOUT, req) for req in alice_requests]
         self.assertEqual(self.alice_results, expected_results)
@@ -452,7 +454,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Make the MHP at the peer unresponsive
         egpB.mhp.stop()
 
-        pydynaa.DynAASim().run(max_time + 2)
+        sim_run(max_time + 2)
 
         dqp_delay = egpA.dqp.conn.channel_from_A.compute_delay() + egpA.dqp.conn.channel_from_B.compute_delay()
         egp_delay = egpA.conn.channel_from_A.compute_delay() + egpA.conn.channel_from_B.compute_delay()
@@ -518,7 +520,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(110)
+        sim_run(110)
 
         self.assertEqual(len(self.alice_results), 1)
 
@@ -591,7 +593,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(40)
+        sim_run(40)
 
         # Check that we were able to get the first generation of alice's request completed
         self.assertEqual(self.alice_results[0], self.bob_results[0])
@@ -700,7 +702,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
-        pydynaa.DynAASim().run(20)
+        sim_run(20)
 
         # Verify that when both detect MHP Sequence number skip then results are the same
         self.assertEqual(len(self.alice_results), 2)
@@ -760,10 +762,6 @@ class TestNodeCentricEGP(unittest.TestCase):
         node_unknown_request = EGPRequest(otherID=unknown_id, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
                                           priority=10)
 
-        # EGP Request that requests more pairs than memory can contain
-        noresmem_request = EGPRequest(otherID=bob.nodeID, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
-                                      priority=10)
-
         # EGP Request that requets more fidelity than we
         unsuppfid_requet = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=1, max_time=10, purpose_id=1,
                                       priority=10)
@@ -774,7 +772,6 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         egpA.create(creq=node_self_request)
         egpA.create(creq=node_unknown_request)
-        egpA.create(creq=noresmem_request)
         egpA.create(creq=unsuppfid_requet)
         egpA.create(creq=unsupptime_request)
 
@@ -792,11 +789,10 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
-        pydynaa.DynAASim().run(0.01)
+        sim_run(0.01)
 
         expected_results = [(NodeCentricEGP.ERR_CREATE, node_self_request),
                             (NodeCentricEGP.ERR_CREATE, node_unknown_request),
-                            (NodeCentricEGP.ERR_NORES, noresmem_request),
                             (NodeCentricEGP.ERR_UNSUPP, unsuppfid_requet),
                             (NodeCentricEGP.ERR_UNSUPP, unsupptime_request)]
 
@@ -861,7 +857,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
-        pydynaa.DynAASim().run(400)
+        sim_run(400)
 
         # Verify that the pydynaa ent and req events were scheduled correctly
         self.assertEqual(len(alice_ent_tester.stored_data), alice_pairs + bob_pairs)

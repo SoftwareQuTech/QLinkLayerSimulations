@@ -236,8 +236,6 @@ class NodeCentricEGP(EGP):
         # Create local share of distributed queue
         self.dqp = DistributedQueue(node=self.node)
         self.dqp.add_callback = self._add_to_queue_callback
-        self.dqp_timeout_handler = EventHandler(self._queue_timeout_handler)
-        self._wait(self.dqp_timeout_handler, entity=self.dqp, event_type=self.dqp._EVT_QUEUE_TIMEOUT)
 
         # Create the request scheduler
         self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
@@ -479,11 +477,6 @@ class NodeCentricEGP(EGP):
             logger.error("Attempted to submit request for entanglement with unknown ID!")
             return self.ERR_CREATE
 
-        # Check if we have the resources for this request
-        if self.qmm.get_free_mem_ad() < creq.num_pairs:
-            logger.error("Not enough free qubits to satisfy request")
-            return self.ERR_NORES
-
         # Check if we can achieve the minimum fidelity
         if self.feu.estimated_fidelity < creq.min_fidelity:
             logger.error("Requested fidelity is too high to be satisfied")
@@ -537,17 +530,6 @@ class NodeCentricEGP(EGP):
         except Exception as err_data:
             logger.exception("Error occurred processing DQP add callback!")
             self.issue_err(err=self.ERR_OTHER, err_data=err_data)
-
-    def _queue_timeout_handler(self, evt):
-        """
-        Handler for items that have timed out in the distributed queue.
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The event that triggered this handler
-        """
-        # Retrieve the item from the distributed queue and propagate it to higher layers
-        dist_queue = evt.source
-        queue_item = dist_queue.timed_out_items.pop()
-        self.issue_err(err=self.ERR_NOTIME, err_data=queue_item.request)
 
     # Handler to be given to MHP as a stateProvider
     def trigger_pair_mhp(self):
@@ -776,7 +758,7 @@ class NodeCentricEGP(EGP):
         creq = self.scheduler.get_request(aid=aid)
         now = self.get_current_time()
 
-        if creq is None or creq.create_time + creq.max_time > now:
+        if creq is None or creq.create_time + creq.max_time < now:
             logger.error("Request timed out while applying corrections and moving qubit")
             self.issue_err(err=self.ERR_TIMEOUT, err_data=aid)
 

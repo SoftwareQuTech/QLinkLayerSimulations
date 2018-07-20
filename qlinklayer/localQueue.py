@@ -291,9 +291,12 @@ class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
         Sets up the timeout event into the future
         """
         if self.lifetime:
-            now = sim_time()
-            deadline = now + self.lifetime
-            self._schedule_after(deadline, self._EVT_TIMEOUT)
+            if self.request.create_time is not None:
+                start = self.request.create_time
+            else:
+                start = sim_time()
+            deadline = start + self.lifetime
+            self._schedule_at(deadline, self._EVT_TIMEOUT)
 
     def schedule(self):
         """

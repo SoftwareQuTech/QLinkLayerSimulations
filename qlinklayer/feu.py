@@ -1,7 +1,7 @@
 import abc
-from numpy import absolute, trace, isclose, kron, round, zeros
+from numpy import kron, zeros
+from netsquid.qubits import dm_fidelity
 from easysquid.toolbox import EasySquidException
-from netsquid.qubits.dmtools import _sqrtm
 from netsquid.qubits.ketstates import s00, s01, s10, s11, b01, b11
 
 # Density matrices
@@ -11,28 +11,6 @@ dm10 = kron(s10.H, s10)  # |10><10|
 dm11 = kron(s11.H, s11)  # |11><11|
 dm_psi_plus = kron(b01.H, b01)
 dm_psi_minus = kron(b11.H, b11)
-
-
-def dm_fidelity(dmA, dmB):
-    """
-    Computes the fidelity between two qubit state density matrices
-    :param dmA: obj `~numpy.matrix`
-    :param dmB: obj `~numpy.matrix`
-    :return: float
-        The rounded fidelity of the two density matrices
-    """
-    if not isclose(trace(dmA), 1):
-        raise Exception("Density matrix A: {} is not a valid quantum state!".format(dmA))
-
-    elif not isclose(trace(dmB), 1):
-        raise Exception("Density matrix B: {} is not a valid quantum state!".format(dmB))
-
-    if dmA.shape != dmB.shape:
-        raise Exception("Density matrices must have same shape to compute fidelity")
-
-    fid = trace(_sqrtm(_sqrtm(dmA) * dmB * _sqrtm(dmA)))**2
-
-    return round(absolute(fid), decimals=5)
 
 
 class FidelityEstimationUnit(metaclass=abc.ABCMeta):
@@ -101,7 +79,7 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         params = self._extract_params()
         ideal_state = kron(b01.H, b01)  # (|01> + |10>)(<01| + <10|)
         estimated_state = self._calculate_estimated_state(*params)
-        return dm_fidelity(estimated_state, ideal_state)
+        return dm_fidelity(estimated_state, ideal_state, squared=True)
 
     def _extract_params(self):
         """
