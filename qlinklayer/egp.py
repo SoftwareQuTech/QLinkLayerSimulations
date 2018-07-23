@@ -250,14 +250,14 @@ class NodeCentricEGP(EGP):
         self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
         self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
 
-    def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_conn=None, dqp_conn=None):
+    def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None):
         """
         Sets up underlying protocols and connections between EGP's
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
         if not self.conn:
             # Set up MHP Service
-            self._connect_mhp(other_egp, mhp_conn)
+            self._connect_mhp(other_egp, mhp_service, mhp_conn)
 
             # Set up distributed queue
             self._connect_dqp(other_egp, dqp_conn)
@@ -268,16 +268,25 @@ class NodeCentricEGP(EGP):
         else:
             logger.warning("Attempted to configure EGP with new connection while already connected")
 
-    def _connect_mhp(self, other_egp, mhp_conn=None):
+    def _connect_mhp(self, other_egp, mhp_service=None, mhp_conn=None):
         """
         Creates the MHP Service and sets up the MHP protocols running at each of the nodes
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
+            The peer EGP we want to share an MHP Service with
+        :param mhp_service: obj `~qlinklayer.mhp.SimulatedNodeCentricMHPService`
+            The MHP Service the EGP will rely on for entanglement generation attempts
+        :param mhp_conn: obj `~easysquid.easyfibre.HeraldedFibreConnection`
+            The heralding connection that the entanglement attempts occur over
         """
         peer_node = other_egp.node
 
         # Create the service and set it for both protocols
-        self.mhp_service = SimulatedNodeCentricMHPService(name="MHPService", nodeA=self.node, nodeB=peer_node,
-                                                          conn=mhp_conn)
+        if mhp_service is None:
+            self.mhp_service = SimulatedNodeCentricMHPService(name="MHPService", nodeA=self.node, nodeB=peer_node,
+                                                              conn=mhp_conn)
+        else:
+            self.mhp_service = mhp_service
+
         other_egp.mhp_service = self.mhp_service
 
         # Set up local MHPs part of the service
@@ -289,33 +298,22 @@ class NodeCentricEGP(EGP):
         Sets up the local mhp protocol that checks for entanglement requests periodically
         """
         # Get our protocol from the service
-        self.mhp = self.mhp_service.get_node_proto(self.node)
-
-        # Set the callback for request handling
-        self.mhp.callback = self.handle_reply_mhp
-
-        # Add the protocol to the service
-        self.mhp_service.add_node(node=self.node, defaultProtocol=self.mhp, stateProvider=self.trigger_pair_mhp)
+        self.mhp = self.mhp_service.configure_node_proto(node=self.node, stateProvider=self.trigger_pair_mhp,
+                                                         callback=self.handle_reply_mhp)
 
         # Fidelity Estimation Unit used to estimate the fidelity of produced entangled pairs
-        self.feu = SingleClickFidelityEstimationUnit(node=self.node, mhp_conn=self.mhp.conn,
-                                                     mhp_service=self.mhp_service)
+        self.feu = SingleClickFidelityEstimationUnit(node=self.node, mhp_service=self.mhp_service)
 
     def _connect_dqp(self, other_egp, dqp_conn=None):
         """
         Sets up the DQP between the nodes
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
-        # Call DQP's connect to peer
-        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn)
-
         # Get the MHP timing offsets
-        myTrig = self.mhp_service.get_node_proto(self.node).t0
-        otherTrig = self.mhp_service.get_node_proto(other_egp.node).t0
+        scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, other_egp.node])
 
-        # Store the offsets for correct request scheduling
-        self.dqp.set_triggers(myTrig=myTrig, otherTrig=otherTrig)
-        other_egp.dqp.set_triggers(myTrig=otherTrig, otherTrig=myTrig)
+        # Call DQP's connect to peer
+        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn, scheduling_offsets)
 
     def _connect_egp(self, other_egp, egp_conn=None):
         """
@@ -493,8 +491,9 @@ class NodeCentricEGP(EGP):
             return self.ERR_UNSUPP
 
         # Check if we can satisfy the request within the given time frame
-        expected_time = self.mhp.timeStep * creq.num_pairs
-        if expected_time > creq.max_time:
+        attempt_latency = self.mhp_service.get_cycle_time(self.node)
+        min_time = attempt_latency * creq.num_pairs
+        if min_time > creq.max_time:
             logger.error("Requested max time is too short")
             return self.ERR_UNSUPP
 
@@ -596,7 +595,7 @@ class NodeCentricEGP(EGP):
             # Check if this aid may have been expired while waiting for a reply from midpoint
             elif not self.scheduler.get_request(aid=aid):
                 logger.warning("Got MHP Reply containing aid {} for no local request!".format(aid))
-                self.qmm.free_qubit(self.mhp.electron_physical_ID)
+                self.qmm.free_qubit(self.mhp_service.get_comm_qubit_id(self.node))
 
             # Otherwise this response is associated with a generation attempt
             else:
@@ -694,7 +693,7 @@ class NodeCentricEGP(EGP):
             logger.error("MHP_SEQ {} greater than expected SEQ {}".format(mhp_seq, self.expected_seq))
 
             # Collect expiration information to send to our peer
-            new_mhp_seq = (mhp_seq + 1) % self.mhp.conn.max_seq
+            new_mhp_seq = (mhp_seq + 1) % self.mhp_service.get_max_mhp_seq(self.node)
             self.send_expire_notification(aid=aid, old_seq=self.expected_seq, new_seq=new_mhp_seq)
 
             # Clear the request
@@ -708,7 +707,7 @@ class NodeCentricEGP(EGP):
             return False
 
         else:
-            self.expected_seq = (self.expected_seq + 1) % self.mhp.conn.max_seq
+            self.expected_seq = (self.expected_seq + 1) % self.mhp_service.get_max_mhp_seq(self.node)
             logger.debug("Incrementing our expected MHP SEQ to {}".format(self.expected_seq))
             return True
 
@@ -789,7 +788,7 @@ class NodeCentricEGP(EGP):
 
         # Construct result information
         now = self.get_current_time()
-        t_create = now - self.mhp.conn.channel_to_node(self.node).compute_delay()
+        t_create = now - self.mhp_service.get_midpoint_comm_delay(self.node)
         t_goodness = t_create
         result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
 
