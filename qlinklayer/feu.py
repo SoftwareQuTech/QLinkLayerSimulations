@@ -1,5 +1,5 @@
 import abc
-from numpy import absolute, trace, isclose, kron, exp, round, zeros
+from numpy import absolute, trace, isclose, kron, round, zeros
 from easysquid.toolbox import EasySquidException
 from netsquid.qubits.dmtools import _sqrtm
 from netsquid.qubits.ketstates import s00, s01, s10, s11, b01, b11
@@ -51,7 +51,7 @@ class FidelityEstimationUnit(metaclass=abc.ABCMeta):
 
 
 class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
-    def __init__(self, node, mhp_service, mhp_conn):
+    def __init__(self, node, mhp_service):
         """
         Fidelity Estimation Unit that estimates fidelity of generated states given parameters used in the Single Click
         heralding protocol.
@@ -65,26 +65,20 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
             state population
         """
         self.node = node
-        self.mhp_conn = mhp_conn
         self.mhp_service = mhp_service
         self.estimated_fidelity = self._estimate_fidelity()
 
-    def update_components(self, node=None, mhp_conn=None, mhp_service=None):
+    def update_components(self, node=None, mhp_service=None):
         """
         Updates the components used for the fidelity estimated
         :param node: obj `~easysquid.qnode.QuantumNode`
             The node containing the quantumprocessingdevice that describes photon emission parameters
-        :param mhp_conn: obj `~MHPHeraldedConnection`
-            The connection containing fibre lengths and noise models of photon transmission as well as
-            midpoint parameters
         :param mhp_service: `~qlinklayer.mhp.MHPService`
             MHP Service that tracks the node protocols and MHP parameters used at the endnodes like the bright
             state population
         """
         if node:
             self.node = node
-        if mhp_conn:
-            self.mhp_conn = mhp_conn
         if mhp_service:
             self.mhp_service = mhp_service
 
@@ -115,30 +109,20 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         properties, node state preparation, etc.
         :return: Parameters to use for fidelity estimation
         """
-        mhpA = self.mhp_service.get_node_proto(self.mhp_conn.nodeA)
-        mhpB = self.mhp_service.get_node_proto(self.mhp_conn.nodeB)
+        # Get the transmissivity info from the service
+        etaA, etaB = self.mhp_service.get_fibre_transmissivities(self.node)
 
-        # Get the length of the fibres from the endnodes to the midpoint
-        lengthA = self.mhp_conn.channel_A_to_M.length
-        lengthB = self.mhp_conn.channel_B_to_M.length
+        # Get bright state info from the service (states are prepared in sqrt(1-alpha)|0> + sqrt(alpha)|1> so the
+        # probability of emission is simply alpha for both end nodes
+        alphaA, alphaB = self.mhp_service.get_bright_state_populations(self.node)
 
-        # Get the loss/length from each endnode (dB/km)
-        lossA = self.mhp_conn.channel_A_to_M.quantum_loss_model.p_loss_length
-        lossB = self.mhp_conn.channel_B_to_M.quantum_loss_model.p_loss_length
+        # Get the probability of a dark count at the midpoint
+        pdark = self.mhp_service.calculate_dark_count_probability(self.node)
 
-        # Calculate the transmitivity of the fibres
-        etaA = 10 ** (-lossA * lengthA / 10)
-        etaB = 10 ** (-lossB * lengthB / 10)
-
-        # Get the emission information (states are prepared in sqrt(1-alpha)|0> + sqrt(alpha)|1> so the probability of
-        # emission is simply alpha for both end nodes
-        alphaA = mhpA.alpha
-        alphaB = mhpB.alpha
-
-        pd = 1 - exp(-(self.mhp_conn.time_window * 1e-9) * self.mhp_conn.dark_rate)
+        # Get the dephasing photon parameter from the quantum memory device at our node
         dp_photon = (1 - getattr(self.node.qmem.photon_emission_noise, '_dp_photon', 0))
 
-        return etaA, etaB, alphaA, alphaB, pd, dp_photon
+        return etaA, etaB, alphaA, alphaB, pdark, dp_photon
 
     @staticmethod
     def _calculate_estimated_state(etaA, etaB, alphaA, alphaB, pdark, dp_photon):
@@ -237,10 +221,11 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         alphaA = 0.5
         alphaB = 0.5
 
+        conn = self.mhp_service.get_node_proto(self.node).conn
         # Since emission angle depends on node parameters we should store it for retrieval by the correct node
         bright_state_populations = {
-            self.mhp_conn.nodeA.nodeID: alphaA,
-            self.mhp_conn.nodeB.nodeID: alphaB
+            conn.nodeA.nodeID: alphaA,
+            conn.nodeB.nodeID: alphaB
         }
 
         return bright_state_populations

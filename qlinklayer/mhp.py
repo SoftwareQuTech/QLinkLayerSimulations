@@ -1,5 +1,6 @@
 import abc
 from collections import defaultdict
+from math import exp
 from easysquid.services import Service, TimedServiceProtocol
 from easysquid.simpleLink import NodeCentricMHP
 from easysquid.easyfibre import HeraldedFibreConnection
@@ -906,7 +907,8 @@ class SimulatedNodeCentricMHPService(Service):
     """
     Simulated Node Centric MHP Service
     """
-    protocol = NodeCentricMHPServiceProtocol
+    protocol_class = NodeCentricMHPServiceProtocol
+    conn_class = NodeCentricMHPHeraldedConnection
 
     def __init__(self, name, nodeA, nodeB, conn=None, lengthA=1e-5, lengthB=1e-5):
         """
@@ -929,12 +931,12 @@ class SimulatedNodeCentricMHPService(Service):
 
         # Set up a default connection if not specified
         if not conn:
-            conn = NodeCentricMHPHeraldedConnection(nodeA=nodeA, nodeB=nodeB, lengthA=lengthA, lengthB=lengthB,
-                                                    use_time_window=True, time_window=1)
+            conn = self.conn_class(nodeA=nodeA, nodeB=nodeB, lengthA=lengthA, lengthB=lengthB, use_time_window=True,
+                                   time_window=1)
 
         # Create the MHP node protocols
-        nodeAProto = self.protocol(timeStep=conn.t_cycle, node=nodeA, connection=conn, t0=conn.trigA)
-        nodeBProto = self.protocol(timeStep=conn.t_cycle, node=nodeB, connection=conn, t0=conn.trigB)
+        nodeAProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeA, connection=conn, t0=conn.trigA)
+        nodeBProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeB, connection=conn, t0=conn.trigB)
 
         # Store them for retrieval by the nodes
         self.node_info = {
@@ -958,6 +960,137 @@ class SimulatedNodeCentricMHPService(Service):
             raise Exception
         else:
             return self.node_info[nodeID]
+
+    def configure_node_proto(self, node, stateProvider=None, callback=None):
+        """
+        Sets up the MHP Service Protocol for a node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node to configure a protocol for
+        :param stateProvider: func
+            Function for the protocol to poll to check for request availability
+        :param callback: func
+            Callback function to execute when the service protocol has attempted satisfaction of a request
+        """
+        node_proto = self.get_node_proto(node)
+        node_proto.callback = callback
+        self.add_node(node=node, defaultProtocol=node_proto, stateProvider=stateProvider)
+        return node_proto
+
+    def get_max_mhp_seq(self, node):
+        """
+        Returns the maximum MHP Sequence number for the node's protocol
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        node_proto = self.get_node_proto(node)
+        return node_proto.conn.max_seq
+
+    def get_midpoint_comm_delay(self, node):
+        """
+        Returns the communication delay for messages sent to/from the provided node to the midpoint
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        node_proto = self.get_node_proto(node)
+        channel = node_proto.conn.channel_to_node(node)
+        return channel.compute_delay()
+
+    def get_comm_qubit_id(self, node):
+        """
+        Returns the active communication qubit used by the MHP Service protocol belonging to the specified node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        node_proto = self.get_node_proto(node)
+        comm_q = node_proto.electron_physical_ID
+        return comm_q
+
+    def get_storage_qubit_id(self, node):
+        """
+        Returns the active storage qubit used by the MHP Service protocol belonging to the specified node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        node_proto = self.get_node_proto(node)
+        storage_q = node_proto.storage_physical_ID
+        return storage_q
+
+    def get_cycle_time(self, node):
+        """
+        Returns the cycle time for attempted entanglement generations for the specified node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        node_proto = self.get_node_proto(node)
+        cycle_time = node_proto.conn.t_cycle
+        return cycle_time
+
+    def get_mhp_conn(self, node):
+        """
+        Returns the connection used by the specified node's mhp protocol for entanglement attempts
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        node_proto = self.get_node_proto(node)
+        return node_proto.conn
+
+    def get_fibre_transmissivities(self, node):
+        """
+        Returns fibre transmissivity information for the MHP set up belonging to the specified node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        conn = self.get_mhp_conn(node)
+
+        # Get the length of the fibres from the endnodes to the midpoint
+        lengthA = conn.channel_A_to_M.length
+        lengthB = conn.channel_B_to_M.length
+
+        # Get the loss/length from each endnode (dB/km)
+        lossA = conn.channel_A_to_M.quantum_loss_model.p_loss_length
+        lossB = conn.channel_B_to_M.quantum_loss_model.p_loss_length
+
+        # Calculate the transmitivity of the fibres
+        etaA = 10 ** (-lossA * lengthA / 10)
+        etaB = 10 ** (-lossB * lengthB / 10)
+
+        return etaA, etaB
+
+    def get_bright_state_populations(self, node):
+        """
+        Returns the bright state population information for the MHP set up belonging to the specified node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        conn = self.get_mhp_conn(node)
+
+        mhpA = self.get_node_proto(node=conn.nodeA)
+        mhpB = self.get_node_proto(node=conn.nodeB)
+
+        return mhpA.alpha, mhpB.alpha
+
+    def calculate_dark_count_probability(self, node):
+        """
+        Returns the dark count probability information for the MHP set up belonging to the specified node
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node we are retrieving the information for
+        """
+        conn = self.get_mhp_conn(node)
+        pdark = 1 - exp(-(conn.time_window * 1e-9) * conn.dark_rate)
+
+        return pdark
+
+    def get_timing_offsets(self, nodes):
+        """
+        Returns the timing offset information for the MHP set up belonging to the specified nodes
+        :param nodes: list of obj `~easysquid.qnode.QuantumNode`
+            The nodes we are retrieving the information for
+        """
+        timing_offsets = {}
+        for node in nodes:
+            node_proto = self.get_node_proto(node)
+            timing_offsets[node.nodeID] = node_proto.t0
+        return timing_offsets
 
     def _put_process(self, nodeID, request):
         """

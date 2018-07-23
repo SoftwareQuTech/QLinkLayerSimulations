@@ -135,31 +135,43 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         else:
             return master
 
-    def connect_to_peer_protocol(self, other_distQueue, conn=None):
+    def connect_to_peer_protocol(self, other_distQueue, conn=None, scheduling_offsets=None):
         """
-        Connects to a peer DQP.  Sets up a default connection if none specified to be used.
+        Connects to a peer DQP.  Sets up a default connection if none specified to be used.  If scheduling_offsets is
+        provided then the DQPs will also configure scheduling delay information.
         :param other_distQueue: obj `~qlinklayer.distQueue.DistributedQueue`
             The peer distributed queue that we want to connect with
         :param conn: obj `~easysquid.connection.Connection`
             The connection to use for communication
+        :param scheduling_offsets: dict
+            Contains (nodeID, offset) information
         """
         if not conn:
             # Create a common connection
             conn = ClassicalFibreConnection(self.node, other_distQueue.node, length=1e-5)
 
         # Perform setup on both protocols
-        self.establish_connection(conn)
-        other_distQueue.establish_connection(conn)
+        self.establish_connection(conn, scheduling_offsets)
+        other_distQueue.establish_connection(conn, scheduling_offsets)
 
-    def establish_connection(self, connection):
+    def establish_connection(self, connection, scheduling_offsets=None):
         """
-        Sets up the internal connection and configures the master/slave relationship for the queue
+        Sets up the internal connection and configures the master/slave relationship for the queue and configures
+        and scheduling delay info
         :param connection: obj `~easysquid.connection.Connection`
             The communication connection used by the distributed queue
+        :param scheduling_offsets: dict
+            Contains (nodeID, offset) information
         """
         self.setConnection(connection)
         self.otherID = self.get_otherID()
         self.master = self._establish_master(self.master)
+
+        # Set the triggers for scheduling delays
+        if scheduling_offsets:
+            myTrig = scheduling_offsets[self.node.nodeID]
+            otherTrig = scheduling_offsets[self.otherID]
+            self.set_triggers(myTrig=myTrig, otherTrig=otherTrig)
 
     def schedule_comm_timeout(self, ack_id):
         """
