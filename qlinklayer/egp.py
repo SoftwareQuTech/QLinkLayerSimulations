@@ -16,7 +16,7 @@ logger = create_logger("logger")
 
 
 class EGPRequest:
-    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id, priority):
+    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None):
         """
         Stores required parameters of Entanglement Generation Protocol Request
         :param otherID: int
@@ -199,7 +199,6 @@ class NodeCentricEGP(EGP):
     ERR_OTHER = 45
     ERR_EXPIRE = 46
     ERR_CREATE = 47
-    ERR_NOGEN = 50
 
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None):
         """
@@ -767,13 +766,19 @@ class NodeCentricEGP(EGP):
             The absolute queue ID corresponding to this generation attempt
         """
         logger.debug("Returning okay")
-        # Get the current request
-        creq = self.scheduler.get_request(aid=aid)
 
         # Make the communication qubit available for subsequent attempts
         comm_q, storage_q = self.scheduler.curr_gen[2:4]
         if comm_q != storage_q:
             self.qmm.free_qubit(comm_q)
+
+        # Get the current request
+        creq = self.scheduler.get_request(aid=aid)
+        now = self.get_current_time()
+
+        if creq is None or creq.create_time + creq.max_time > now:
+            logger.error("Request timed out while applying corrections and moving qubit")
+            self.issue_err(err=self.ERR_TIMEOUT, err_data=aid)
 
         # Get the fidelity estimate from FEU
         logger.debug("Estimating fidelity")
@@ -787,7 +792,6 @@ class NodeCentricEGP(EGP):
         logger.debug("Issuing okay to caller")
 
         # Construct result information
-        now = self.get_current_time()
         t_create = now - self.mhp_service.get_midpoint_comm_delay(self.node)
         t_goodness = t_create
         result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
