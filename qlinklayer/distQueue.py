@@ -107,6 +107,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Waiting for acks
         self.waitAddAcks = {}
+        self.addAckBacklog = deque()
         self.acksWaiting = 0
         self.comm_timeout_handler = None
         self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
@@ -180,7 +181,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         self.comm_timeout_handler = EventHandler(partial(self._comm_timeout_handler, ack_id=ack_id))
         comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
-        self.comm_timeout_event = self._schedule_after(2 * comm_delay, self._EVT_COMM_TIMEOUT)
+        self.comm_timeout_event = self._schedule_after(10 * comm_delay, self._EVT_COMM_TIMEOUT)
         self._wait_once(self.comm_timeout_handler, event=self.comm_timeout_event)
 
     def _comm_timeout_handler(self, evt, ack_id):
@@ -195,6 +196,11 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Remove the item from the local queue
             qid, queue_seq, request = self.waitAddAcks.pop(ack_id)
             self.queueList[qid].remove(queue_seq)
+
+            # If our peer failed to add our item we should remove any Acks we should provide for
+            # subsequent items they attempted to add
+            if self.has_subsequent_acks(qid=qid, qseq=queue_seq):
+                self.delete_outstanding_acks()
 
             # Pass error information upwards
             if self.add_callback:
@@ -212,7 +218,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         logger.debug("Handling local queue item timeout")
 
         # Pull the timed out item from the local queue's internal storage
-        queue_item = queue.timed_out_items.pop()
+        queue_item = queue.timed_out_items.pop(0)
         logger.debug("Got timed out queue item {}".format(queue_item))
 
         # Set up a timeout event for passing to higher layers
@@ -225,7 +231,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :param evt: obj `~netsquid.pydynaa.Event`
             The schedule event that triggered this handler
         """
-        logger.debug("Schedule handler triggered in dist queue")
+        logger.debug("{} Schedule handler triggered in dist queue".format(self.node.nodeID))
         self._schedule_now(self._EVT_SCHEDULE)
 
     def process_data(self):
@@ -399,6 +405,14 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # We are the node in control of the queue
             qseq = self._master_remote_add(nodeID, cseq, qid, request)
 
+            # Only respond and allow the slave to add this item if they have responded to the add requests that come in
+            # the queue before this item
+            if not self.waitAddAcks:
+                # Schedule the item to be ready
+                conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
+                scheduleAfter = max(0, conn_delay + self.myTrig - self.otherTrig)
+                self.ready_and_schedule(qid, qseq, scheduleAfter)
+
         else:
 
             # We are not in control, and must add as instructed
@@ -407,14 +421,10 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Send ack
             self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, 0])
 
-        logger.debug("Distributed queue readying item ({}, {})".format(qid, qseq))
-        self.queueList[qid].ready(qseq, 0)
-
-        # Schedule the item to be ready
-        conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
-        scheduleAfter = max(0, conn_delay + self.myTrig - self.otherTrig)
-        logger.debug("{} Scheduling after {}".format(self.node.nodeID, scheduleAfter))
-        self.queueList[qid].schedule_item(qseq, scheduleAfter)
+            # Schedule the item to be ready
+            conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
+            scheduleAfter = max(0, conn_delay + self.myTrig - self.otherTrig)
+            self.ready_and_schedule(qid, qseq, scheduleAfter)
 
         # Add a timeout on the queue item
         self.queueList[qid].add_timeout_event(qseq)
@@ -454,9 +464,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if self.master:
             # We are in control
             logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, rec_qseq))
-            # Mark this item as ready
-            logger.debug("Distributed queue readying item ({}, {})".format(qid, rec_qseq))
-            self.queueList[qid].ready(rec_qseq, 0)
             agreed_qseq = rec_qseq
 
         else:
@@ -464,17 +471,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # We are not in control but merely hold a copy of the queue
             # We can now add
             self.queueList[qid].add_with_id(nodeID, qseq, request)
-
-            # Mark this item as ready
-            logger.debug("Distributed queue readying item ({}, {})".format(qid, qseq))
-            self.queueList[qid].ready(qseq, 0)
             agreed_qseq = qseq
 
         # Schedule the item
         conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
         scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
-        logger.debug("{} Scheduling after {}".format(self.node.nodeID, scheduleAfter))
-        self.queueList[qid].schedule_item(agreed_qseq, scheduleAfter)
+        self.ready_and_schedule(qid, agreed_qseq, scheduleAfter)
 
         # Add a timeout on the queue item
         self.queueList[qid].add_timeout_event(agreed_qseq)
@@ -489,8 +491,75 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # We are now waiting for one ack less
         self.acksWaiting = self.acksWaiting - 1
 
+        # If this is the last queue item before our backlog of the slave's request then ready/schedule and send an
+        # ack to the slave
+        if self.has_subsequent_acks(qid, agreed_qseq):
+            self.release_acks()
+
         # Process backlog, and go idle if applicable
         self._try_go_idle()
+
+    def has_subsequent_acks(self, qid, qseq):
+        """
+        Given a qid and qseq, checks if the addAckBacklog contains a queue item subsequent to this one
+        :param qid: int
+            Queue ID to check addAckBacklog for
+        :param qseq: int
+            Queue sequence number to check if there are subsequent items for
+        :return: bool
+            Whether the addAckBacklog contains queue items that are subsequent to the specified info
+        """
+        if self.addAckBacklog:
+            cseq, next_qid, next_qseq = self.addAckBacklog[0]
+            return next_qid == qid and next_qseq == qseq + 1
+        else:
+            return False
+
+    def delete_outstanding_acks(self):
+        """
+        Deletes an ACK we should provide and any subsequent ACKs
+        """
+        # Grab item info, ack, and schedule
+        cseq, qid, qseq = self.addAckBacklog.popleft()
+
+        # Check if the following item(s) belong to the same queue and release them as well
+        while self.has_subsequent_acks(qid=qid, qseq=qseq):
+            # Check if this item is a subsequent item in the same queue
+            cseq, qid, qseq = self.addAckBacklog.popleft()
+
+    def release_acks(self):
+        """
+        Releases a stored ack and any stored items that are subsequent queue items
+        """
+        # Grab item info, ack, and schedule
+        cseq, qid, qseq = self.addAckBacklog.popleft()
+        self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
+
+        conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
+        scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
+        self.ready_and_schedule(qid, qseq, scheduleAfter)
+
+        # Check if the following item(s) belong to the same queue and release them as well
+        while self.has_subsequent_acks(qid=qid, qseq=qseq):
+            cseq, qid, qseq = self.addAckBacklog.popleft()
+            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
+            self.ready_and_schedule(qid, qseq, scheduleAfter)
+
+    def ready_and_schedule(self, qid, qseq, schedule_after):
+        """
+        Readies an item in the queue and schedules it for retrieval
+        :param qid: int
+            Queue ID that the item belongs to
+        :param qseq: int
+            Sequence identifier within the specified queue
+        :param schedule_after: float
+            Delay before the queue item is ready to be retrieved
+        """
+        logger.debug("Distributed queue readying item ({}, {})".format(qid, qseq))
+        self.queueList[qid].ready(qseq, 0)
+
+        logger.debug("{} Scheduling after {}".format(self.node.nodeID, schedule_after))
+        self.queueList[qid].schedule_item(qseq, schedule_after)
 
     # API to add to Queue
 
@@ -606,12 +675,16 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         Process request to add to queue from remote if this is the master node.
         """
 
-        # Add to the queue and get queue sequence number 
-        # TODO introduce waiting
+        # Add to the queue and get queue sequence number
         queue_seq = self.queueList[qid].add(self.myID, request)
 
-        # Send ack
-        self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, queue_seq])
+        # Check if we are waiting for any acks from the slave
+        if not self.waitAddAcks:
+            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, queue_seq])
+
+        # Otherwise wait on a response for our ADDs we have in flight before we ack
+        else:
+            self.addAckBacklog.append((cseq, qid, queue_seq))
 
         return queue_seq
 

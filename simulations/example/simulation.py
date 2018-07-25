@@ -1,7 +1,10 @@
 import netsquid as ns
+import pdb
+from argparse import ArgumentParser
 from time import time
 from os import makedirs
-from os.path import abspath, dirname, exists
+from os.path import exists
+from random import random, randint
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
@@ -86,16 +89,47 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     pm.addEvent(source=scenarioB.egp.mhp, evtType=scenarioB.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
 
 
-def schedule_scenario_actions(scenarioA, scenarioB):
+def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, min_pairs, max_pairs, tmax_pair,
+                              request_overlap, request_freq, num_requests):
     idA = scenarioA.egp.node.nodeID
     idB = scenarioB.egp.node.nodeID
-    max_time = 60 * SECOND
 
-    requestA = EGPRequest(otherID=idB, num_pairs=3, min_fidelity=0.2, max_time=max_time, purpose_id=1, priority=10)
-    requestB = EGPRequest(otherID=idA, num_pairs=3, min_fidelity=0.2, max_time=max_time, purpose_id=1, priority=10)
+    create_time = 0
+    max_sim_time = 0
 
-    scenarioA.schedule_create(request=requestA, t=0)
-    scenarioB.schedule_create(request=requestB, t=0)
+    if min_pairs > max_pairs:
+        max_pairs = min_pairs
+
+    for i in range(num_requests):
+        # Randomly decide if we are creating a request this cycle
+        if random() <= create_prob:
+            # Randomly select a number of pairs within the configured range
+            num_pairs = randint(min_pairs, max_pairs)
+
+            # Provision time for the request based on total number of pairs
+            max_time = num_pairs * tmax_pair * SECOND
+
+            # Randomly choose the node that will create the request
+            scenario = scenarioA if random() <= origin_bias else scenarioB
+            otherID = idB if scenario == scenarioA else idA
+            request = EGPRequest(otherID=otherID, num_pairs=num_pairs, min_fidelity=0.2, max_time=max_time - 1,
+                                 purpose_id=1, priority=10)
+            scenario.schedule_create(request=request, t=create_time)
+
+            # If we want overlap then the next create occurs at the specified frequency
+            if request_overlap:
+                create_time += request_freq * SECOND
+
+            # Otherwise schedule the next request once this one has already completed
+            else:
+                create_time += max_time
+
+            max_sim_time = create_time + max_time
+
+        else:
+            create_time += request_freq * SECOND
+
+    return max_sim_time
 
 
 def setup_network_protocols(network):
@@ -123,10 +157,8 @@ def setup_network_protocols(network):
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation():
-    # Grab the config we want to set the netowrk up with
-    dir_path = dirname(abspath(__file__))
-    config = "{}/../configs/qlink_configs/network_with_cav_with_conv.json".format(dir_path)
+def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
+                   request_overlap=False, request_freq=0, num_requests=10, enable_pdb=False):
 
     # Set up the simulation
     setup_simulation()
@@ -138,14 +170,17 @@ def run_simulation():
     # Set up the Measure Immediately scenarios at nodes alice and bob
     alice_scenario = MeasureImmediatelyScenario(egp=egpA)
     bob_scenario = MeasureImmediatelyScenario(egp=egpB)
-    schedule_scenario_actions(alice_scenario, bob_scenario)
+    sim_duration = schedule_scenario_actions(alice_scenario, bob_scenario, origin_bias, create_prob, min_pairs,
+                                             max_pairs, tmax_pair, request_overlap, request_freq, num_requests) + 1
 
     # Hook up data collectors to the scenarios
-    sim_duration = 60 * SECOND + 1
-    setup_data_collection(alice_scenario, bob_scenario, sim_duration, dir_path)
+    setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path)
 
     # Start the simulation
     network.start()
+
+    if enable_pdb:
+        pdb.set_trace()
 
     logger.info("Beginning simulation")
     start_time = time()
@@ -155,10 +190,49 @@ def run_simulation():
     stop_time = time()
     logger.info("Finished simulation, took {}".format(stop_time - start_time))
 
-    # Set a trace to allow inspection
-    # import pdb
-    # pdb.set_trace()
+    if enable_pdb:
+        pdb.set_trace()
+
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('--network-config', type=str, required=True, help='Configuration file containing network and'
+                                                                          'memory device configuration')
+    parser.add_argument('--results-path', type=str, required=True, help='Path to directory to store collected data')
+
+    parser.add_argument('--origin-bias', default=0.5, type=float,
+                        help='Probability that the request comes from node A, calculates complement for probability'
+                             'from node B')
+
+    parser.add_argument('--create-probability', default=1.0, type=float, help='Probability that a CREATE request is'
+                                                                              'submitted at a particular timestep')
+
+    parser.add_argument('--min-pairs', type=int, default=1, help='The minimum number of pairs to include in a CREATE'
+                                                                 'request')
+
+    parser.add_argument('--max-pairs', type=int, default=3, help='The maximum number of pairs that can be requested')
+
+    parser.add_argument('--tmax-pair', type=float, default=2, help='Maximum amount of time per pair (in seconds) in a'
+                                                                   'request')
+
+    parser.add_argument('--request-overlap', default=False, action='store_true',
+                        help='Allow requests submissions to overlap')
+
+    parser.add_argument('--request-frequency', type=float, default=0, help='Minimum amount of time (in seconds) between'
+                                                                           'calls to CREATE')
+
+    parser.add_argument('--num-requests', type=int, default=10, help='Total number of requests to simulate')
+
+    parser.add_argument('--enable-pdb', action='store_true', default=False, help='Turn on PDB pre and post simulation')
+
+    args = parser.parse_args()
+
+    return args
 
 
 if __name__ == '__main__':
-    run_simulation()
+    args = parse_args()
+    run_simulation(config=args.network_config, results_path=args.results_path, origin_bias=args.origin_bias,
+                   create_prob=args.create_probability, min_pairs=args.min_pairs, max_pairs=args.max_pairs,
+                   tmax_pair=args.tmax_pair, request_overlap=args.request_overlap, request_freq=args.request_frequency,
+                   num_requests=args.num_requests, enable_pdb=args.enable_pdb)

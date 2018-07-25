@@ -1,7 +1,6 @@
 # Tests of the easy protocol implementation
 
 import unittest
-import netsquid.pydynaa as pydynaa
 import numpy as np
 import logging
 from qlinklayer.distQueue import DistributedQueue
@@ -10,6 +9,7 @@ from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import create_logger
+from netsquid.simutil import sim_run, sim_reset
 
 
 class FastTestProtocol(TimedProtocol):
@@ -113,7 +113,7 @@ class TestDistributedQueue(unittest.TestCase):
 
         # Set up two nodes and run a simulation in which items
         # are randomly added at specific time intervals
-        pydynaa.DynAASim().reset()
+        sim_reset()
         alice = QuantumNode("Alice", 1)
         bob = QuantumNode("Bob", 2)
 
@@ -135,7 +135,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(50000)
+        sim_run(50000)
 
         # Check the Queue contains ordered elements from Alice and Bob
         qA = aliceDQ.queueList[0].queue
@@ -156,7 +156,7 @@ class TestDistributedQueue(unittest.TestCase):
 
         # Set up two nodes and run a simulation in which items
         # are randomly added at specific time intervals
-        pydynaa.DynAASim().reset()
+        sim_reset()
         alice = QuantumNode("Alice", 1)
         bob = QuantumNode("Bob", 2)
         conn = ClassicalFibreConnection(alice, bob, length=0.01)
@@ -174,7 +174,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(50000)
+        sim_run(50000)
 
         # Check the Queue contains ordered elements from Alice and Bob
         qA = aliceDQ.queueList[0].queue
@@ -195,7 +195,7 @@ class TestDistributedQueue(unittest.TestCase):
 
         # Set up two nodes and run a simulation in which items
         # are randomly added at specific time intervals
-        pydynaa.DynAASim().reset()
+        sim_reset()
         alice = QuantumNode("Alice", 1)
         bob = QuantumNode("Bob", 2)
 
@@ -215,7 +215,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(5000)
+        sim_run(5000)
 
         # Check the Queue contains ordered elements from Alice and Bob
         qA = aliceDQ.queueList[0].queue
@@ -238,7 +238,7 @@ class TestDistributedQueue(unittest.TestCase):
         def add_callback(result):
             self.callback_storage.append(result)
 
-        pydynaa.DynAASim().reset()
+        sim_reset()
         alice = QuantumNode("Alice", 1)
         bob = QuantumNode("Bob", 2)
 
@@ -258,7 +258,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        pydynaa.DynAASim().run(5000)
+        sim_run(5000)
 
         expected_qid = 0
         num_adds = 100

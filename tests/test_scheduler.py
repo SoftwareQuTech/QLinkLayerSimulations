@@ -2,7 +2,7 @@ import unittest
 from easysquid.easynetwork import EasyNetwork
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import QuantumProcessingDevice
-from netsquid import pydynaa
+from netsquid.simutil import sim_run, sim_reset
 from qlinklayer.distQueue import DistributedQueue
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.qmm import QuantumMemoryManagement
@@ -57,7 +57,7 @@ class TestRequestScheduler(unittest.TestCase):
         test_scheduler.update_other_mem_size(mem=test_size)
 
     def test_next(self):
-        pydynaa.DynAASim().reset()
+        sim_reset()
         dqpA = DistributedQueue(node=self.nodeA)
         dqpB = DistributedQueue(node=self.nodeB)
         dqpA.connect_to_peer_protocol(dqpB)
@@ -80,7 +80,7 @@ class TestRequestScheduler(unittest.TestCase):
         dqpA.add(request)
         self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
 
-        pydynaa.DynAASim().run(11)
+        sim_run(11)
 
         # Check that QMM reserve failure yields a default request
         comm_q, storage_q = qmmA.reserve_entanglement_pair(n=request.num_pairs)
