@@ -8,6 +8,7 @@
         "p_loss_init": 0,
         "p_loss_length": 0.5,
         "depolar_rate": 0,
+        "time_window": 40,
         "use_time_window": true,
         "c": 206753.41931034482,
         "c_noise_model": "default",
@@ -105,7 +106,7 @@
           ],
           "tau_emission": 6.48,
           "time_window": 40,
-          "delta_phi": 7.15,
+          "delta_phi": 10.11,
           "p_zero_phonon": 0.46,
           "collection_eff": 0.006
         },
