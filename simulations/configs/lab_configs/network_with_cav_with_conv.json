@@ -5,7 +5,7 @@
       "parameters": {
         "lengthA": 1,
         "lengthB": 0.5,
-        "p_loss_init": 0.83,
+        "p_loss_init": 0,
         "p_loss_length": 0.5,
         "depolar_rate": 0,
         "use_time_window": true,
