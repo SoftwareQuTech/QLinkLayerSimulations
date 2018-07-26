@@ -397,7 +397,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         sim_run(10)
 
-        expected_results = [(egpA.dqp.DQ_TIMEOUT, req) for req in alice_requests]
+        expected_results = [(egpA.dqp.DQ_TIMEOUT, req.create_id) for req in alice_requests]
         self.assertEqual(self.alice_results, expected_results)
         self.assertEqual(self.bob_results, [])
 
@@ -468,14 +468,13 @@ class TestNodeCentricEGP(unittest.TestCase):
         expected_err_egp = egpA.ERR_TIMEOUT
 
         # Unresponsive error two times followed by a timeout of the request
-        expected_results = [(expected_err_mhp, None)] * num_timeouts + [(expected_err_egp, alice_request)]
+        expected_results = [(expected_err_mhp, 0)] * num_timeouts + [(expected_err_egp, alice_request)]
 
         self.assertEqual(len(self.alice_results), len(expected_results))
         self.assertEqual(self.alice_results[:num_timeouts], expected_results[:num_timeouts])
 
-        err, request = self.alice_results[-1]
+        err, _ = self.alice_results[-1]
         self.assertEqual(err, expected_err_egp)
-        self.assertEqual(request.create_time, alice_request.create_time)
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
@@ -525,9 +524,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(len(self.alice_results), 1)
 
         # Check that we got the correct error and that the requests are the same
-        [(error, request)] = self.alice_results
+        [(error, _)] = self.alice_results
         self.assertEqual(error, egpA.ERR_TIMEOUT)
-        self.assertEqual(vars(alice_request), vars(request))
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
@@ -791,10 +789,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
         sim_run(0.01)
 
-        expected_results = [(NodeCentricEGP.ERR_CREATE, node_self_request),
-                            (NodeCentricEGP.ERR_CREATE, node_unknown_request),
-                            (NodeCentricEGP.ERR_UNSUPP, unsuppfid_requet),
-                            (NodeCentricEGP.ERR_UNSUPP, unsupptime_request)]
+        expected_results = [(NodeCentricEGP.ERR_CREATE, 0),
+                            (NodeCentricEGP.ERR_CREATE, 0),
+                            (NodeCentricEGP.ERR_UNSUPP, 0),
+                            (NodeCentricEGP.ERR_UNSUPP, 0)]
 
         self.assertEqual(self.alice_results, expected_results)
 

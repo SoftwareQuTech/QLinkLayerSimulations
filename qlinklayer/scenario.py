@@ -62,9 +62,10 @@ class EGPSimulationScenario(SimulationScenario):
             The request we are creating
         """
         # Only extract result information if the create was successfully submitted
-        self.egp.create(creq=request)
-        self.create_storage.append((self.egp.node.nodeID, request))
-        self._schedule_now(self._EVT_CREATE)
+        result = self.egp.create(creq=request)
+        if result is not None:
+            self.create_storage.append((self.egp.node.nodeID, request))
+            self._schedule_now(self._EVT_CREATE)
 
     def get_create_info(self, remove=True):
         """
