@@ -8,6 +8,7 @@
         "p_loss_init": 0,
         "p_loss_length": 0.5,
         "depolar_rate": 0,
+        "time_window": 40,
         "use_time_window": true,
         "c": 206753.41931034482,
         "c_noise_model": "default",
@@ -88,8 +89,7 @@
               }
             },
             "operation_time": 500000.0
-          },
-          "move_gate": {}
+          }
         }
       },
       "photon_emission": {
@@ -106,7 +106,7 @@
           ],
           "tau_emission": 12,
           "time_window": 40,
-          "delta_phi": 7.15,
+          "delta_phi": 10.11,
           "p_zero_phonon": 0.03,
           "collection_eff": 0.006
         },
@@ -160,21 +160,24 @@
           "qubit_id2": 1,
           "gates_ids": [
             "gates_two_qubit"
-          ]
+          ],
+          "bidirectional": true
         },
         {
           "qubit_id1": 0,
           "qubit_id2": 2,
           "gates_ids": [
             "gates_two_qubit"
-          ]
+          ],
+          "bidirectional": true
         },
         {
           "qubit_id1": 0,
           "qubit_id2": 3,
           "gates_ids": [
             "gates_two_qubit"
-          ]
+          ],
+          "bidirectional": true
         }
       ]
     }
