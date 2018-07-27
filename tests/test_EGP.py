@@ -593,7 +593,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(40)
+        sim_run(200)
 
         # Check that we were able to get the first generation of alice's request completed
         self.assertEqual(self.alice_results[0], self.bob_results[0])
