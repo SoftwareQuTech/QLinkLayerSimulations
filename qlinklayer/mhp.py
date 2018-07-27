@@ -662,12 +662,13 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
     ERR_LOCAL = 31
     ERR_TIMEOUT = 32
 
-    def __init__(self, timeStep, t0, node, connection):
+    def __init__(self, timeStep, t0, node, connection, alpha):
         self.status = self.STAT_IDLE
         self.timeout_handler = None
         self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
         self._EVT_ENTANGLE_ATTEMPT = EventType("ENTANGLE ATTEMPT", "Triggered when the MHP attempts entanglement")
         super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
+        self.set_bright_state_population(alpha=alpha)
 
     def reset_protocol(self):
         """
@@ -910,7 +911,7 @@ class SimulatedNodeCentricMHPService(Service):
     protocol_class = NodeCentricMHPServiceProtocol
     conn_class = NodeCentricMHPHeraldedConnection
 
-    def __init__(self, name, nodeA, nodeB, conn=None, lengthA=1e-5, lengthB=1e-5):
+    def __init__(self, name, nodeA, nodeB, conn=None, lengthA=1e-5, lengthB=1e-5, alphaA=0.1, alphaB=0.1):
         """
         Node Centric MHP Service that creates the desired protocol for nodes.  Passes request information down to the
         protocols for retrieval and execution
@@ -935,8 +936,10 @@ class SimulatedNodeCentricMHPService(Service):
                                    time_window=1)
 
         # Create the MHP node protocols
-        nodeAProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeA, connection=conn, t0=conn.trigA)
-        nodeBProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeB, connection=conn, t0=conn.trigB)
+        nodeAProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeA, connection=conn, t0=conn.trigA,
+                                         alpha=alphaA)
+        nodeBProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeB, connection=conn, t0=conn.trigB,
+                                         alpha=alphaB)
 
         # Store them for retrieval by the nodes
         self.node_info = {
