@@ -61,7 +61,7 @@
                 "dephasing_prob": 0.0
               }
             },
-            "operation_time": 5
+            "operation_time": 100
           },
           "initialization_op": {
             "noise_model": {
