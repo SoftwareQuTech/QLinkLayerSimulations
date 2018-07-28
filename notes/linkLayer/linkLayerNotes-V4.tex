@@ -63,6 +63,8 @@ $F_{\min}$ & Minimum acceptable fidelity (with high confidence). \\
 $t_{\max}$ & Maximum acceptable waiting time before request is completed. \\
 Purpose ID & Identifying the purpose or application at this node (optional, default 0). \\
 Priority & Manual setting of a priority for entanglement production (optional).\\
+Store & Instructs the EGP whether to store the entangled qubit into a memory location or \\
+to keep it in the communication location (defaults to storage). \\
 create ID & Sequence number identifying this CREATE command.
 \end{tabular}
 \end{description}
@@ -126,6 +128,8 @@ of the end nodes and further entanglement attempts are not synchronized.
 \item We need to decide when a node may reject requests to produce entanglement with a neighbour. This likely requires an additional command from the higher layer to set/query a policy.
 \item It may be advantageous to investigate providing a 'create and measure' functionality.  This is to say that the entangled pairs produced under this scheme are immediately measured
       from the communication qubit rather than moving the state to a storage qubit which could reduce the throughput of entanglement generation and fidelity of the entangled pairs.
+\item If higher layers are allowed to specify whether entangled qubits should remain in the communication location and there are outstanding generations to satisfy, should the EGP vacate
+      the communication qubit by force to allow for further generation attempts or should this block further generation attempts until higher layers have consumed the qubit?
 \end{itemize}
 
 \subsection{Performance metrics}

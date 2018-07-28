@@ -1,7 +1,7 @@
 #
 # Quantum Memory Management Unit
 #
-from easysquid.toolbox import create_logger
+from easysquid.toolbox import create_logger, EasySquidException
 
 
 logger = create_logger("logger")
@@ -21,10 +21,29 @@ class QuantumMemoryManagement:
     def is_busy(self):
         return self.node.qmem.busy
 
+    def reserve_qubit(self, qid):
+        """
+        Reserves the qubit ID locally for a process
+        :param qid: int
+            The qubit ID to reserve
+        """
+        if self.reserved_qubits[qid]:
+            raise EasySquidException("Qubit location {} already reserved!".format(qid))
+        else:
+            self.reserved_qubits[qid] = True
+
+    def vacate_qubit(self, qid):
+        """
+        Removes the reservation for a qubit id
+        :param qid: int
+            The qubit ID we want to free for other processes
+        """
+        self.reserved_qubits[qid] = False
+
     def get_move_delay(self):
         """
         Gets the delay time for a move operation in the memory device.
-        #TODO: Refacotr this to not perform the operation when it is easier to get the total time
+        #TODO: Refactor this to not perform the operation when it is easier to get the total time
         :return: float
             The amount of time it takes to move the electron state to the carbon
         """
@@ -60,15 +79,15 @@ class QuantumMemoryManagement:
         :return: int
             The qubit address corresponding to the reserved communication qubit.  -1 if failed
         """
-        # Currently assume position 0 is always the communication qubit
-        comm_q = 0
-        if self.qubit_in_use(comm_q):
-            return -1
-        else:
-            self.reserved_qubits[comm_q] = True
+        free_comms = self.get_free_communication_ids()
+        if free_comms:
+            comm_q = free_comms[0]
+            self.reserve_qubit(comm_q)
             return comm_q
+        else:
+            return -1
 
-    def reserve_storage_qubit(self, n):
+    def reserve_storage_qubit(self):
         """
         Reserves a set of storage qubits locally
         :param n: int
@@ -76,17 +95,13 @@ class QuantumMemoryManagement:
         :return: list or int
             A list of the reserved storage qubit ids or -1 if failure
         """
-        storage_qs = []
-        logger.debug("Attempting to reserve {} qubits from: {}".format(n, self.reserved_qubits))
-        for address in range(1, self.node.qmem.max_num):
-            # Check if qmem is using this address, also check if it has already been reserved
-            if not self.qubit_in_use(address) and not self.reserved_qubits[address]:
-                storage_qs.append(address)
-
-            if len(storage_qs) == n:
-                return storage_qs
-
-        return -1
+        free_storage = self.get_free_storage_ids()
+        if free_storage:
+            storage_q = free_storage[0]
+            self.reserve_qubit(storage_q)
+            return storage_q
+        else:
+            return -1
 
     def free_qubit(self, id):
         """
@@ -94,7 +109,7 @@ class QuantumMemoryManagement:
         :param id: int
             Address of the qubit to free
         """
-        self.reserved_qubits[id] = False
+        self.vacate_qubit(qid=id)
         self.node.qmem.release_qubit(id)
 
     def free_qubits(self, id_list):
@@ -108,7 +123,7 @@ class QuantumMemoryManagement:
         for q in id_list:
             self.free_qubit(q)
 
-    def reserve_entanglement_pair(self, n=1):
+    def reserve_entanglement_pair(self):
         """
         Reserves a pair of communication qubit and storage qubits for use with MHP.
         :param n: int
@@ -119,17 +134,13 @@ class QuantumMemoryManagement:
         # Obtain a communication qubit
         comm_q = self.reserve_communication_qubit()
         if comm_q == -1:
-            return -1, [-1]
+            return -1, -1
 
         # Obtain n storage qubits
-        storage_q = self.reserve_storage_qubit(n)
+        storage_q = self.reserve_storage_qubit()
         if storage_q == -1:
-            return -1, [-1]
-
-        # Mark the obtained qubits as reserved
-        self.reserved_qubits[comm_q] = True
-        for q in storage_q:
-            self.reserved_qubits[q] = True
+            self.free_qubit(id=comm_q)
+            return -1, -1
 
         return comm_q, storage_q
 
@@ -139,14 +150,40 @@ class QuantumMemoryManagement:
         quantum memory device
         :return:
         """
-        free_mem = 0
-        # Ignore communication qubit id 0
-        for address in range(1, self.node.qmem.max_num):
-            if not self.qubit_in_use(address) and not self.reserved_qubits[address]:
-                free_mem += 1
+        free_comms = self.get_free_communication_ids()
+        free_storage = self.get_free_storage_ids()
+        free_mem = (len(free_comms), len(free_storage))
 
         logger.debug("Quantum Memory Device has free memory {}".format(free_mem))
         return free_mem
+
+    def get_free_communication_ids(self):
+        """
+        Obtains all free communication qubit IDs for provisioning resources for incoming generation requests
+        :return: list of ints
+            List of the available communication qubits that can be used
+        """
+        comm_qs = self.node.qmem.get_communication_qubit_ids()
+        free_comms = []
+        for qid in comm_qs:
+            if not self.reserved_qubits[qid] and not self.qubit_in_use(id=qid):
+                free_comms.append(qid)
+
+        return free_comms
+
+    def get_free_storage_ids(self):
+        """
+        Obtains all free storage qubit IDs for provision resources for incoming generation requests
+        :return: list of ints
+            List of the available storage qubits that can be used
+        """
+        storage_qs = self.node.qmem.get_storage_qubit_ids()
+        free_storage = []
+        for qid in storage_qs:
+            if not self.reserved_qubits[qid] and not self.qubit_in_use(id=qid):
+                free_storage.append(qid)
+
+        return free_storage
 
     def logical_to_physical(self, qubit_id):
         """

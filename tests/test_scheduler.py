@@ -1,7 +1,7 @@
 import unittest
 from easysquid.easynetwork import EasyNetwork
 from easysquid.qnode import QuantumNode
-from easysquid.quantumMemoryDevice import QuantumProcessingDevice
+from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from netsquid.simutil import sim_run, sim_reset
 from qlinklayer.distQueue import DistributedQueue
 from qlinklayer.scheduler import RequestScheduler
@@ -11,8 +11,8 @@ from qlinklayer.egp import EGPRequest
 
 class TestRequestScheduler(unittest.TestCase):
     def setUp(self):
-        memA = QuantumProcessingDevice(name="AMem", max_num=2)
-        memB = QuantumProcessingDevice(name="BMem", max_num=2)
+        memA = NVCommunicationDevice(name="AMem", max_num=2)
+        memB = NVCommunicationDevice(name="BMem", max_num=2)
         self.nodeA = QuantumNode(name="TestA", nodeID=1, memDevice=memA)
         self.nodeB = QuantumNode(name="TestB", nodeID=2, memDevice=memB)
 
@@ -35,7 +35,7 @@ class TestRequestScheduler(unittest.TestCase):
         self.assertEqual(test_scheduler.distQueue, self.dqpA)
         self.assertEqual(test_scheduler.qmm, qmm)
         self.assertEqual(test_scheduler.my_free_memory, qmm.get_free_mem_ad())
-        self.assertEqual(test_scheduler.other_mem, 0)
+        self.assertEqual(test_scheduler.other_mem, (0, 0))
 
     def test_next_pop(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
@@ -74,17 +74,18 @@ class TestRequestScheduler(unittest.TestCase):
         self.network.start()
 
         # Check that an empty queue has a default request
-        self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
+        self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
 
         # Check that an item not agreed upon also yields a default request
         dqpA.add(request)
-        self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
+        self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
 
         sim_run(11)
 
         # Check that QMM reserve failure yields a default request
-        comm_q, storage_q = qmmA.reserve_entanglement_pair(n=request.num_pairs)
-        self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
+        comm_q = qmmA.reserve_communication_qubit()
+        storage_q = [qmmA.reserve_storage_qubit() for _ in range(request.num_pairs)]
+        self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
 
         # Return the reserved resources
         qmmA.free_qubit(comm_q)
@@ -92,14 +93,14 @@ class TestRequestScheduler(unittest.TestCase):
             qmmA.free_qubit(q)
 
         # Check that lack of peer resources causes a default request
-        self.assertEqual(test_scheduler.default_gen, test_scheduler.next())
+        self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
 
         # Verify that now we can obtain the next request
-        test_scheduler.other_mem = request.num_pairs
+        test_scheduler.other_mem = (1, request.num_pairs)
 
         # Verify that the next request is the one we submitted
         gen = test_scheduler.next()
-        self.assertEqual(gen, (True, (0, 0), 0, 1, None, 0))
+        self.assertEqual(gen, (True, (0, 0), 0, 1, None, (1, 1)))
 
 
 if __name__ == "__main__":

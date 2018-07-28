@@ -117,7 +117,7 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
             scenario = scenarioA if random() <= origin_bias else scenarioB
             otherID = idB if scenario == scenarioA else idA
             request = EGPRequest(otherID=otherID, num_pairs=num_pairs, min_fidelity=0.2, max_time=max_time,
-                                 purpose_id=1, priority=10)
+                                 purpose_id=1, priority=10, store=False)
             scenario.schedule_create(request=request, t=create_time)
 
             # If we want overlap then the next create occurs at the specified frequency

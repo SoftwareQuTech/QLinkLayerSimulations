@@ -110,7 +110,7 @@ def parse_request_data_from_sql(results_path):
         c.execute("SELECT * FROM {}".format(create_table))
         for entry in c.fetchall():
             timestamp, nodeID, create_id, create_time, max_time, min_fidelity, num_pairs, otherID, priority,\
-                purpose_id, succ = entry
+                purpose_id, store, succ = entry
 
             total_requested_pairs += num_pairs
 

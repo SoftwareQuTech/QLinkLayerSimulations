@@ -17,7 +17,7 @@ logger = create_logger("logger", level=logging.DEBUG)
 
 
 class EGPRequest:
-    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None):
+    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None, store=True):
         """
         Stores required parameters of Entanglement Generation Protocol Request
         :param otherID: int
@@ -32,6 +32,9 @@ class EGPRequest:
             Identifier for the purpose of this entangled pair
         :param priority: obj
             Priority on the request
+        :param store: bool
+            Specifies whether entangled qubits should be stored within a storage qubit or left within the communication
+            qubit
         """
         self.otherID = otherID
         self.num_pairs = num_pairs
@@ -41,6 +44,7 @@ class EGPRequest:
         self.priority = priority
         self.create_id = None
         self.create_time = None
+        self.store = store
 
     def __copy__(self):
         """
@@ -50,7 +54,8 @@ class EGPRequest:
         :return: obj `~qlinklayer.egp.EGPRequest`
             A copy of the EGPRequest object
         """
-        c = type(self)(self.otherID, self.num_pairs, self.min_fidelity, self.max_time, self.purpose_id, self.priority)
+        c = type(self)(otherID=self.otherID, num_pairs=self.num_pairs, min_fidelity=self.min_fidelity,
+                       max_time=self.max_time, purpose_id=self.purpose_id, priority=self.priority, store=self.store)
         c.assign_create_id(self.create_id, self.create_time)
         return c
 
@@ -434,7 +439,7 @@ class NodeCentricEGP(EGP):
 
             # Track our peer's available memory
             logger.debug("EGP at node {} processing request: {}".format(self.node.nodeID, creq.__dict__))
-            if not self.scheduler.other_mem:
+            if not self.scheduler.other_has_resources():
                 self.request_other_free_memory()
 
             # Add the request to the DQP
@@ -650,7 +655,14 @@ class NodeCentricEGP(EGP):
 
             else:
                 logger.debug("Peer applying correction, suspending generation")
-                self.scheduler.suspend_generation(t=self.peer_move_delay + self.peer_corr_delay)
+                suspend_time = self.peer_corr_delay
+
+                # Check if we need to suspend for extra delay for our peer to move to a storage qubit
+                if creq.store:
+                    suspend_time += self.peer_move_delay
+
+                # Suspend for an estimated amount of time until our peer is ready to continue generation
+                self.scheduler.suspend_generation(t=suspend_time)
                 self._move_comm_to_storage(mhp_seq, aid)
 
         else:
@@ -701,13 +713,17 @@ class NodeCentricEGP(EGP):
 
         # Grab the current generation information
         comm_q, storage_q = self.scheduler.curr_gen[2:4]
+
         logger.debug("Applying correction to comm_q {} and moving to {}".format(comm_q, storage_q))
 
         # Construct a quantum program to correct and move
         prgm = QuantumProgram()
         qs = prgm.load_mem_qubits(self.node.qmem)
         qs[comm_q].Z()
-        qs[comm_q].move(new_id=storage_q)
+
+        # Check if we need to move the qubit into storage
+        if comm_q != storage_q:
+            qs[comm_q].move(new_id=storage_q)
 
         # Set the callback of the program
         prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
@@ -724,16 +740,24 @@ class NodeCentricEGP(EGP):
         """
         # Grab the current generation information
         comm_q, storage_q = self.scheduler.curr_gen[2:4]
-        logger.debug("Moving comm_q {} to storage {}".format(comm_q, storage_q))
 
-        # Construct a quantum program to move the qubit
-        prgm = QuantumProgram()
-        qs = prgm.load_mem_qubits(qmem=self.node.qmem)
-        qs[comm_q].move(new_id=storage_q)
+        # Check if a move operation is required
+        if comm_q != storage_q:
+            logger.debug("Moving comm_q {} to storage {}".format(comm_q, storage_q))
 
-        # Set the callback
-        prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
-        self.node.qmem.execute_program(prgm)
+            # Construct a quantum program to move the qubit
+            prgm = QuantumProgram()
+            qs = prgm.load_mem_qubits(qmem=self.node.qmem)
+            qs[comm_q].move(new_id=storage_q)
+
+            # Set the callback
+            prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
+            self.node.qmem.execute_program(prgm)
+
+        # Otherwise proceed to return the okay
+        else:
+            logger.debug("Leaving entangled qubit in comm_q {}".format(comm_q))
+            self._return_ok(mhp_seq, aid)
 
     def _return_ok(self, mhp_seq, aid):
         """
