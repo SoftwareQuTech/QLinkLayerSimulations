@@ -8,7 +8,7 @@ from random import random, randint
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
-from netsquid.simutil import SECOND, sim_reset, sim_run
+from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
     MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
@@ -162,7 +162,8 @@ def setup_network_protocols(network):
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
-                   request_overlap=False, request_freq=0, num_requests=10, enable_pdb=False):
+                   request_overlap=False, request_freq=0, num_requests=10, max_sim_time=float('inf'),
+                   max_wall_time=float('inf'), enable_pdb=False):
 
     # Set up the simulation
     setup_simulation()
@@ -177,6 +178,8 @@ def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pai
     sim_duration = schedule_scenario_actions(alice_scenario, bob_scenario, origin_bias, create_prob, min_pairs,
                                              max_pairs, tmax_pair, request_overlap, request_freq, num_requests) + 1
 
+    sim_duration = min(max_wall_time, sim_duration)
+
     # Hook up data collectors to the scenarios
     collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path)
 
@@ -189,7 +192,18 @@ def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pai
     logger.info("Beginning simulation")
     start_time = time()
 
-    sim_run(sim_duration)
+    # Minimum step size of 1 millisecond
+    timestep = max(sim_duration / 1e9, 1e3)
+
+    # Run simulation
+    while sim_time() < max_sim_time:
+        sim_run(duration=timestep)
+
+        # Check clock once in a while
+        now = time()
+        if now - start_time > max_wall_time:
+            logger.info("Max wall time reached, ending simulation.")
+            break
 
     stop_time = time()
     logger.info("Finished simulation, took {}".format(stop_time - start_time))
@@ -203,34 +217,44 @@ def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pai
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--network-config', type=str, required=True, help='Configuration file containing network and'
-                                                                          'memory device configuration')
-    parser.add_argument('--results-path', type=str, required=True, help='Path to directory to store collected data')
+    parser.add_argument('--network-config', type=str, required=True,
+                        help='Configuration file containing network and memory device configuration')
 
-    parser.add_argument('--origin-bias', default=0.5, type=float,
+    parser.add_argument('--results-path', type=str, required=True,
+                        help='Path to directory to store collected data')
+
+    parser.add_argument('--origin-bias', type=float, default=0.5,
                         help='Probability that the request comes from node A, calculates complement for probability'
                              'from node B')
 
-    parser.add_argument('--create-probability', default=1.0, type=float, help='Probability that a CREATE request is'
-                                                                              'submitted at a particular timestep')
+    parser.add_argument('--create-probability', type=float, default=1.0,
+                        help='Probability that a CREATE request is submitted at a particular timestep')
 
-    parser.add_argument('--min-pairs', type=int, default=1, help='The minimum number of pairs to include in a CREATE'
-                                                                 'request')
+    parser.add_argument('--min-pairs', type=int, default=1,
+                        help='The minimum number of pairs to include in a CREATE request')
 
-    parser.add_argument('--max-pairs', type=int, default=3, help='The maximum number of pairs that can be requested')
+    parser.add_argument('--max-pairs', type=int, default=3,
+                        help='The maximum number of pairs that can be requested')
 
-    parser.add_argument('--tmax-pair', type=float, default=2, help='Maximum amount of time per pair (in seconds) in a'
-                                                                   'request')
+    parser.add_argument('--tmax-pair', type=float, default=2,
+                        help='Maximum amount of time per pair (in seconds) in a request')
 
     parser.add_argument('--request-overlap', default=False, action='store_true',
                         help='Allow requests submissions to overlap')
 
-    parser.add_argument('--request-frequency', type=float, default=0, help='Minimum amount of time (in seconds) between'
-                                                                           'calls to CREATE')
+    parser.add_argument('--request-frequency', type=float, default=0,
+                        help='Minimum amount of time (in seconds) between calls to CREATE')
 
     parser.add_argument('--num-requests', type=int, default=10, help='Total number of requests to simulate')
 
-    parser.add_argument('--enable-pdb', action='store_true', default=False, help='Turn on PDB pre and post simulation')
+    parser.add_argument('--max-sim-time', type=float, default=float('inf'),
+                        help='Maximum simulated time (in seconds) the simulation should run for')
+
+    parser.add_argument('--max-wall-time', type=float, default=float('inf'),
+                        help='Maximum wall clock time (in seconds) the simulation should (approximately) run for')
+
+    parser.add_argument('--enable-pdb', action='store_true', default=False,
+                        help='Turn on PDB pre and post simulation')
 
     args = parser.parse_args()
 
@@ -242,4 +266,5 @@ if __name__ == '__main__':
     run_simulation(config=args.network_config, results_path=args.results_path, origin_bias=args.origin_bias,
                    create_prob=args.create_probability, min_pairs=args.min_pairs, max_pairs=args.max_pairs,
                    tmax_pair=args.tmax_pair, request_overlap=args.request_overlap, request_freq=args.request_frequency,
-                   num_requests=args.num_requests, enable_pdb=args.enable_pdb)
+                   num_requests=args.num_requests, max_sim_time=args.max_sim_time, max_wall_time=args.max_wall_time,
+                   enable_pdb=args.enable_pdb)

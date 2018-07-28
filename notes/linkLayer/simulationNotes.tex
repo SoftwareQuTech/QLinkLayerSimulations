@@ -22,6 +22,9 @@ This document outlines various simulation parameters that can be used to test th
     \item $--request-overlap$: Allow request submissions to overlap, this causes requests to be submitted before previous request's max\_time has expired.
     \item $--request-frequency$: Minimum amount of time (in seconds) between calls to CREATE
     \item $--num-requests$: Total number of requests to simulate
+    \item $--max-sim-time$: The maximum amount of simulated time (in seconds) to allow the simulation to run for.  Default allows the simulation code to
+    decide.
+    \item $--max-wall-time$: The maximum amount of real clock time (in seconds) to allow the simulation to run for.  Default allows the simulation to run until is has deemd itself completed.  When used in combination with $--max-sim-time$ the simulation will end when either of the specified times has been reached.
     \item $--enable-pdb$: Turn on PDB pre and post simulation
 \end{itemize}
 
@@ -37,12 +40,13 @@ A simulation where:
     \item Only one request is active at any time
     \item Config file "network\_config.json" is used
     \item Store results in "results" directory
+    \item Simulation runs for 20 simulated seconds
 \end{itemize}
 
 \begin{verbatim}
 python3 simulation.py --network-config network_config.json --results-path
 results --origin-bias 0.5 --create-probability 0.5 --min-pairs 2 --max-pairs 2
---num-requests 100
+--num-requests 100 --max-sim-time 20
 \end{verbatim}
 
 \subsection{Example 2}
@@ -56,12 +60,14 @@ A simulation where:
     \item Requests occur in a frequency of 0.05 seconds
     \item Config file "/home/user/network\_config.json" is used
     \item Store results in "results" directory
+    \item Simulation runs for 200 real clock seconds
 \end{itemize}
 
 \begin{verbatim}
 python3 simulation.py --network-config /home/user/network_config.json
 --results-path results --origin-bias 0.2 --create-probability 1 --min-pairs 2
 --max-pairs 3 --request-overlap --request-frequency 0.05 --num-requests 1
+--max-wall-time 200
 \end{verbatim}
 
 \subsection{Example 3}
@@ -76,13 +82,14 @@ A simulation where:
     \item Requests occur in a frequency of 2 seconds
     \item Config file "network\_config.json" is used
     \item Store results in "/home/user/simulation\_results" directory
+    \item Simulation runs for maximum of 300 simulated seconds or 600 real seconds
 \end{itemize}
 
 \begin{verbatim}
 python3 simulation.py --network-config network_config.json --results-path
 /home/user/simulation_results --origin-bias 1 --create-probability 0.8
 --min-pairs 1 --max-pairs 1 --request-overlap --request-frequency 2
---num-requests 1000 --tmax-pair 10
+--num-requests 1000 --tmax-pair 10 --max-sim-time 300 --max-wall-time 600
 \end{verbatim}
 
 \subsection{Example 4}
@@ -97,6 +104,7 @@ A simulation where:
     \item Requests occur in a frequency of 10 seconds
     \item Config file "network\_config.json" is used
     \item Store results in "results" directory
+    \item Let the simulation run until it has completed.
     \item Enable the debugger for inspection of local variables before and after simulation
 \end{itemize}
 
