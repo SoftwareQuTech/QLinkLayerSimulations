@@ -151,7 +151,7 @@ class EGP(EasyProtocol):
         # Process message demanding on command
         self.commandHandlers[cmd](data)
 
-    def issue_err(self, err, err_data=None):
+    def issue_err(self, err, err_data=0):
         """
         Issues an error back to higher layer protocols with the error code that prevented
         successful generation of entanglement
@@ -430,8 +430,8 @@ class NodeCentricEGP(EGP):
             err = self.check_supported_request(creq)
             if err:
                 logger.error("Create request failed {}".format(err))
-                self.issue_err(err=err, err_data=creq)
-                return
+                self.issue_err(err=err)
+                return None
 
             self._assign_creation_information(creq)
 
@@ -525,7 +525,7 @@ class NodeCentricEGP(EGP):
             # Otherwise bubble up the DQP error
             else:
                 logger.error("Error occurred adding request to distributed queue!")
-                self.issue_err(err=status, err_data=creq)
+                self.issue_err(err=status, err_data=creq.create_id)
 
         except Exception as err_data:
             logger.exception("Error occurred processing DQP add callback!")
@@ -758,9 +758,9 @@ class NodeCentricEGP(EGP):
         creq = self.scheduler.get_request(aid=aid)
         now = self.get_current_time()
 
-        if creq is None or creq.create_time + creq.max_time < now:
-            logger.error("Request timed out while applying corrections and moving qubit")
-            self.issue_err(err=self.ERR_TIMEOUT, err_data=aid)
+        if creq is None:
+            logger.error("Request not found!")
+            self.issue_err(err=self.ERR_OTHER)
 
         # Get the fidelity estimate from FEU
         logger.debug("Estimating fidelity")
@@ -805,4 +805,4 @@ class NodeCentricEGP(EGP):
         """
         scheduler = evt.source
         request = scheduler.timed_out_requests.pop(0)
-        self.issue_err(err=self.ERR_TIMEOUT, err_data=request)
+        self.issue_err(err=self.ERR_TIMEOUT, err_data=request.create_id)

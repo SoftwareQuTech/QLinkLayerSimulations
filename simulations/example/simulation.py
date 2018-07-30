@@ -9,7 +9,8 @@ from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
 from netsquid.simutil import SECOND, sim_reset, sim_run
-from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, MHPEntanglementAttemptSequence, EGPStateSequence
+from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
+    MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureImmediatelyScenario
@@ -46,37 +47,38 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     data_dir = "{}/{}".format(dir_path, timestamp)
     setup_data_directory(data_dir)
 
+    logger.info("Saving results to {}".format(data_dir))
+
     # Prepare our data collection (this should be made a lot nicer especially the addEvent calls)
     pm = PM_Controller()
-    err_log = "{}/error.log".format(data_dir)
-    req_log = "{}/request.log".format(data_dir)
-    midpoint_attempt_log = "{}/midpoint_attempt.log".format(data_dir)
-    node_attempt_log = "{}/node_attempt.log".format(data_dir)
-    state_log = "{}/states.log".format(data_dir)
+    data_file = "{}/sim_data.db".format(data_dir)
 
     # DataSequence for error collection
-    err_ds = EGPErrorSequence(name="EGP Errors", recFile=err_log, maxSteps=collection_duration)
+    err_ds = EGPErrorSequence(name="EGP Errors", dbFile=data_file, maxSteps=collection_duration)
+
+    # DataSequence for create collection
+    create_ds = EGPCreateSequence(name="EGP Creates", dbFile=data_file, maxSteps=collection_duration)
 
     # DataSequence for ok/create collection
-    ok_ds = EGPOKSequence(name="EGP OKs", recFile=req_log, maxSteps=collection_duration)
+    ok_ds = EGPOKSequence(name="EGP OKs", dbFile=data_file, maxSteps=collection_duration)
 
     # DataSequences for attempt tracking
-    midpoint_attempt_ds = MHPEntanglementAttemptSequence(name="Midpoint EGP Attempts", recFile=midpoint_attempt_log,
-                                                         ylabel="Outcome", maxSteps=collection_duration)
+    midpoint_attempt_ds = MHPMidpointEntanglementAttemptSequence(name="Midpoint EGP Attempts", dbFile=data_file,
+                                                                 maxSteps=collection_duration)
 
-    node_attempt_ds = MHPEntanglementAttemptSequence(name="Node EGP Attempts", recFile=node_attempt_log,
-                                                     ylabel="nodeID", maxSteps=collection_duration)
+    node_attempt_ds = MHPNodeEntanglementAttemptSequence(name="Node EGP Attempts", dbFile=data_file,
+                                                         maxSteps=collection_duration)
 
     # DataSequence for entangled state collection
-    state_ds = EGPStateSequence(name="EGP Qubit States", recFile=state_log, maxSteps=collection_duration)
+    state_ds = EGPStateSequence(name="EGP Qubit States", dbFile=data_file, maxSteps=collection_duration)
 
     # Hook up the datasequences to the events in that occur
-    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=ok_ds)
+    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=create_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=ok_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=state_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_ERR, ds=err_ds)
 
-    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=ok_ds)
+    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=create_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=ok_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=state_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
@@ -87,6 +89,8 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     pm.addEvent(source=scenarioA.egp.mhp, evtType=scenarioA.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
 
     pm.addEvent(source=scenarioB.egp.mhp, evtType=scenarioB.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
+
+    return [create_ds, ok_ds, state_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
 
 
 def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, min_pairs, max_pairs, tmax_pair,
@@ -112,7 +116,7 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
             # Randomly choose the node that will create the request
             scenario = scenarioA if random() <= origin_bias else scenarioB
             otherID = idB if scenario == scenarioA else idA
-            request = EGPRequest(otherID=otherID, num_pairs=num_pairs, min_fidelity=0.2, max_time=max_time - 1,
+            request = EGPRequest(otherID=otherID, num_pairs=num_pairs, min_fidelity=0.2, max_time=max_time,
                                  purpose_id=1, priority=10)
             scenario.schedule_create(request=request, t=create_time)
 
@@ -174,7 +178,7 @@ def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pai
                                              max_pairs, tmax_pair, request_overlap, request_freq, num_requests) + 1
 
     # Hook up data collectors to the scenarios
-    setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path)
+    collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path)
 
     # Start the simulation
     network.start()
@@ -189,6 +193,9 @@ def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pai
 
     stop_time = time()
     logger.info("Finished simulation, took {}".format(stop_time - start_time))
+
+    for collector in collectors:
+        collector.commit_data()
 
     if enable_pdb:
         pdb.set_trace()

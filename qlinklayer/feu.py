@@ -79,7 +79,7 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         params = self._extract_params()
         ideal_state = kron(b01.H, b01)  # (|01> + |10>)(<01| + <10|)
         estimated_state = self._calculate_estimated_state(*params)
-        return dm_fidelity(estimated_state, ideal_state, squared=True)
+        return float(dm_fidelity(estimated_state, ideal_state, squared=True))
 
     def _extract_params(self):
         """
