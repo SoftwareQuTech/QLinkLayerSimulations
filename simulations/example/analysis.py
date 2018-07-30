@@ -1,10 +1,11 @@
 import json
 import matplotlib.pyplot as plt
+import sqlite3
 from argparse import ArgumentParser
 from collections import defaultdict
 
 
-def parse_request_data(results_path):
+def parse_request_data_from_log(results_path):
     """
     Parses collected request/ok data points for log file
     :param results_path: str
@@ -76,7 +77,67 @@ def parse_request_data(results_path):
     return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
 
 
-def parse_attempt_data(results_path, all_gens, gen_starts):
+def parse_request_data_from_sql(results_path):
+    """
+    Parses collected request/ok data points from the sql database
+    :param results_path: str
+        Path to directory containing request.log
+    :return: dict, list, dict, list, int
+        requests - dict of key (createID, sourceID, otherID)
+                           value [sourceID, otherID, numPairs, createID, createTime,maxTime]
+                 These are successfully submitted request
+        rejected_requests - list of [sourceID, otherID, numPairs, timeStamp] of rejected requests
+        gens - dict of key (createID, sourceID, otherID)
+                       value list of [createID, sourceID, otherID, mhpSeq, createTime]
+                 Generations corresponding to successfully submitted requests
+        all_gens - list of (createTime, (createID, sourceID, otherID, mhpSeq))
+        total_requested_pairs - Number of pairs requested (successful + unsuccessful requests)
+    """
+    conn = sqlite3.connect(results_path)
+    c = conn.cursor()
+    c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    all_tables = [t[0] for t in c.fetchall()]
+
+    create_tables = list(filter(lambda table_name: "EGP_Creates" in table_name[0], all_tables))
+    requests = {}
+    rejected_requests = []
+    total_requested_pairs = 0
+
+    for create_table in create_tables:
+        c.execute("SELECT * FROM {}".format(create_table))
+        for entry in c.fetchall():
+            timestamp, nodeID, create_id, create_time, max_time, min_fidelity, num_pairs, otherID, priority,\
+                purpose_id, succ = entry
+
+            total_requested_pairs += num_pairs
+
+            if create_id is not None and create_time is not None:
+                requests[(create_id, nodeID, otherID)] = [nodeID, otherID, num_pairs, create_id, create_time, max_time]
+            else:
+                rejected_requests.append([nodeID, otherID, num_pairs, timestamp])
+
+    ok_tables = filter(lambda table_name: "EGP_OKs" in table_name[0], all_tables)
+    gens = defaultdict(list)
+    all_gens = []
+    recorded_mhp_seqs = []
+
+    for ok_table in ok_tables:
+        c.execute("SELECT * FROM {}".format(ok_table))
+        for entry in c.fetchall():
+            timestamp, createID, originID, otherID, MHPSeq, logical_id, goodness, t_goodness, t_create, succ = entry
+
+            if MHPSeq in recorded_mhp_seqs:
+                continue
+            else:
+                recorded_mhp_seqs.append(MHPSeq)
+
+            gens[(createID, originID, otherID)].append([createID, originID, otherID, MHPSeq, t_create])
+            all_gens.append((t_create, (createID, originID, otherID, MHPSeq)))
+
+    return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
+
+
+def parse_attempt_data_from_log(results_path, all_gens, gen_starts):
     """
     Parses collected attempt data points for log file
     :param results_path: str
@@ -101,6 +162,47 @@ def parse_attempt_data(results_path, all_gens, gen_starts):
             elements = line.split(' ')
             timestamp = float(elements[5].strip(','))
             nodeID = int(elements[7].strip(','))
+            node_attempts[nodeID] += 1
+
+            for gen in all_gens:
+                genID = gen[1]
+                if gen_starts[genID] < timestamp < gen[0]:
+                    gen_attempts[genID] += 1
+                    break
+
+    return node_attempts, gen_attempts
+
+
+def parse_attempt_data_from_sql(results_path, all_gens, gen_starts):
+    """
+    Parses collected attempt data points from the sql database
+    :param results_path: str
+        Path to directory containing node_attempt.log containing attempts from both nodes
+    :param all_gens: list of (createTime, (createID, sourceID, otherID, mhpSeq))
+        All generations that occurred during the simulation
+    :param gen_starts: dict of key (createID, sourceID, otherID, mhpSeq)
+                               value createTime
+        Contains the completion time of each generation
+    :return: node_attempts, gen_attempts
+        node_attempts - dict of key nodeID
+                                value num_attempts
+            Containing the number of attempts made by each node
+        gen_attempts - dict of key (createID, sourceID, otherID, mhpSeq)
+                               value int
+            Containing the number of attempts made for the generation
+    """
+    conn = sqlite3.connect(results_path)
+    c = conn.cursor()
+    c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    all_tables = [t[0] for t in c.fetchall()]
+
+    node_attempt_tables = list(filter(lambda table_name: "Node_EGP_Attempts" in table_name, all_tables))
+    gen_attempts = defaultdict(int)
+    node_attempts = defaultdict(int)
+    for attempt_table in node_attempt_tables:
+        c.execute("SELECT * FROM {}".format(attempt_table))
+        for entry in c.fetchall():
+            timestamp, nodeID, succ = entry
             node_attempts[nodeID] += 1
 
             for gen in all_gens:
@@ -284,11 +386,11 @@ def plot_throughput(all_gens):
 
 
 def main(results_path):
-    (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data(results_path)
+    (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path)
     satisfied_creates, unsatisfied_creates = extract_successful_unsuccessful_creates(requests, gens)
     request_times = get_request_latencies(satisfied_creates, gens)
     gen_starts, gen_times = get_gen_latencies(requests, gens)
-    node_attempts, gen_attempts = parse_attempt_data(results_path, all_gens, gen_starts)
+    node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, all_gens, gen_starts)
 
     print("Number of satisfied CREATE requests: {} out of total {}".format(len(satisfied_creates), len(requests)))
     print("Satisfied CREATE requests: {}".format(satisfied_creates))
