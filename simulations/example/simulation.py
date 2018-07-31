@@ -193,26 +193,37 @@ def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pai
     start_time = time()
 
     # Minimum step size of 1 millisecond
-    timestep = max(sim_duration / 1e9, 1e3)
+    timestep = max(sim_duration / SECOND, 1e6)
 
-    # Run simulation
-    while sim_time() < max_sim_time:
-        sim_run(duration=timestep)
+    last_time_log = time()
+    try:
+        # Run simulation
+        while sim_time() < max_sim_time * SECOND:
+            sim_run(duration=timestep)
 
-        # Check clock once in a while
-        now = time()
-        if now - start_time > max_wall_time:
-            logger.info("Max wall time reached, ending simulation.")
-            break
+            # Check clock once in a while
+            now = time()
+            if now - start_time > max_wall_time:
+                logger.info("Max wall time reached, ending simulation.")
+                break
 
-    stop_time = time()
-    logger.info("Finished simulation, took {}".format(stop_time - start_time))
+            elif now - last_time_log > 10:
+                logger.info("Current sim time: {}".format(sim_time()))
+                last_time_log = now
 
-    for collector in collectors:
-        collector.commit_data()
+        stop_time = time()
+        logger.info("Finished simulation, took {}".format(stop_time - start_time))
 
-    if enable_pdb:
-        pdb.set_trace()
+    # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
+    except Exception:
+        logger.exception("Ending simulation early!")
+
+    finally:
+        for collector in collectors:
+            collector.commit_data()
+
+        if enable_pdb:
+            pdb.set_trace()
 
 
 def parse_args():
