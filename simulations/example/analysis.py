@@ -5,6 +5,9 @@ from argparse import ArgumentParser
 from collections import defaultdict
 
 
+SECOND = 1e9
+
+
 def parse_request_data_from_log(results_path):
     """
     Parses collected request/ok data points for log file
@@ -98,7 +101,7 @@ def parse_request_data_from_sql(results_path):
     c.execute("SELECT name FROM sqlite_master WHERE type='table'")
     all_tables = [t[0] for t in c.fetchall()]
 
-    create_tables = list(filter(lambda table_name: "EGP_Creates" in table_name[0], all_tables))
+    create_tables = list(filter(lambda table_name: "EGP_Creates" in table_name, all_tables))
     requests = {}
     rejected_requests = []
     total_requested_pairs = 0
@@ -116,7 +119,7 @@ def parse_request_data_from_sql(results_path):
             else:
                 rejected_requests.append([nodeID, otherID, num_pairs, timestamp])
 
-    ok_tables = filter(lambda table_name: "EGP_OKs" in table_name[0], all_tables)
+    ok_tables = filter(lambda table_name: "EGP_OKs" in table_name, all_tables)
     gens = defaultdict(list)
     all_gens = []
     recorded_mhp_seqs = []
@@ -348,30 +351,21 @@ def plot_throughput(all_gens):
     :param all_gens: list of (createTime, (createID, sourceID, otherID, mhpSeq))
         Contains the create time of the generations
     """
-    window_size = 1e9
+    window_size = SECOND
+    t_actions = []
     throughput = [(0, 0)]
-    for i in range(len(all_gens)):
-        num_gens = 0
-        curr_time = all_gens[i][0]
 
-        for gen in all_gens[i::-1]:
-            if gen[0] + window_size >= curr_time:
-                num_gens += 1
-            else:
-                break
+    for gen in all_gens:
+        gen_time = gen[0]
+        t_actions.append((gen_time, 1))
+        t_actions.append((gen_time + window_size, -1))
 
-        throughput.append((curr_time, num_gens))
+    t_actions = sorted(t_actions, key=lambda t: t[0])
 
-        num_gens = 0
-        if not i == len(all_gens) - 1:
-            next_time = all_gens[i + 1][0]
-            if next_time - curr_time > 1e9:
-                for gen in all_gens[i::-1]:
-                    if gen[0] + window_size >= curr_time:
-                        throughput.append((gen[0] + window_size, num_gens))
-                        num_gens += 1
-                    else:
-                        break
+    for timestamp, action in t_actions:
+        inst_throughput = throughput[-1][1] + action
+        throughput.append((timestamp - 1, throughput[-1][1]))
+        throughput.append((timestamp, inst_throughput))
 
     throughput = sorted(throughput, key=lambda p: p[0])
     s = [t[1] for t in throughput]
