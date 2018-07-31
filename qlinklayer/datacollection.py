@@ -62,7 +62,7 @@ class EGPStateSequence(EGPDataSequence):
     Collects qubit states of generated entangled pairs
     """
     def get_column_names(self):
-        matrix_columns = [str((i, j, k)) for i in range(4) for j in range(4) for k in ['real', 'imag']]
+        matrix_columns = ["{}, {}, {}".format(i, j, k) for i in range(4) for j in range(4) for k in ['real', 'imag']]
         return ["Timestamp", "Node ID"] + matrix_columns + ["Success"]
 
     def event_handler(self, event=None):
