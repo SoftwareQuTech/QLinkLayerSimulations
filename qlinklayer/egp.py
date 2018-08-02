@@ -757,6 +757,11 @@ class NodeCentricEGP(EGP):
             logger.error("Request not found!")
             self.issue_err(err=self.ERR_OTHER)
 
+        # Check that aid actually corresponds to the current request
+        if not self.scheduler.curr_gen[1]==aid:
+            logger.error("Request absolute queue IDs mismatch!")
+            self.issue_err(err=self.ERR_OTHER)
+
         # Make the communication qubit available for subsequent attempts
         comm_q, storage_q = self.scheduler.curr_gen[2:4]
         if comm_q != storage_q:
