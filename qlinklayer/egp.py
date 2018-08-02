@@ -758,7 +758,7 @@ class NodeCentricEGP(EGP):
             self.issue_err(err=self.ERR_OTHER)
 
         # Check that aid actually corresponds to the current request
-        if not self.scheduler.curr_gen[1]==aid:
+        if not self.scheduler.curr_gen[1] == aid:
             logger.error("Request absolute queue IDs mismatch!")
             self.issue_err(err=self.ERR_OTHER)
 
