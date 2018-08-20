@@ -11,8 +11,9 @@ from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import create_logger
+import logging
 
-logger = create_logger("logger")
+logger = create_logger("logger", logging.DEBUG)
 
 
 class EGPRequest:
@@ -122,16 +123,12 @@ class EGP(EasyProtocol):
         # Fetch message from the other side
         [content, t] = self.conn.get_as(self.node.nodeID)
         logger.debug("Processing message from peer: {}".format(content))
-        if isinstance(content, tuple):
-            for item in content:
-                cmd = item[0]
-                [data] = item[1:len(item)]
+        for item in content:
+            if len(item) != 2:
+                raise ValueError("Unexpected format of classical message.")
+            cmd = item[0]
+            data = item[1]
 
-                self._process_cmd(cmd, data)
-
-        else:
-            cmd = content[0]
-            [data] = content[1:len(content)]
             self._process_cmd(cmd, data)
 
     def _process_cmd(self, cmd, data):

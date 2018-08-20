@@ -240,16 +240,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         # Fetch message from the other side
         [content, t] = self.conn.get_as(self.myID)
-        if isinstance(content, tuple):
-            for item in content:
-                cmd = item[0]
-                [data] = item[1:len(item)]
+        for item in content:
+            if len(item) != 2:
+                raise ValueError("Unexpected format of classical message.")
+            cmd = item[0]
+            data = item[1]
 
-                self._process_cmd(cmd, data)
-
-        else:
-            cmd = content[0]
-            [data] = content[1:len(content)]
             self._process_cmd(cmd, data)
 
     def _process_cmd(self, cmd, data):
@@ -409,7 +405,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # the queue before this item
             if not self.waitAddAcks:
                 # Schedule the item to be ready
-                conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
+                conn_delay = self.conn.channel_from_node(self.node).delay_mean
                 scheduleAfter = max(0, conn_delay + self.myTrig - self.otherTrig)
                 self.ready_and_schedule(qid, qseq, scheduleAfter)
 
@@ -422,7 +418,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, 0])
 
             # Schedule the item to be ready
-            conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
+            conn_delay = self.conn.channel_from_node(self.node).delay_mean
             scheduleAfter = max(0, conn_delay + self.myTrig - self.otherTrig)
             self.ready_and_schedule(qid, qseq, scheduleAfter)
 
@@ -474,7 +470,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             agreed_qseq = qseq
 
         # Schedule the item
-        conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
+        conn_delay = self.conn.channel_from_node(self.node).delay_mean
         scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
         self.ready_and_schedule(qid, agreed_qseq, scheduleAfter)
 
@@ -535,7 +531,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         cseq, qid, qseq = self.addAckBacklog.popleft()
         self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
 
-        conn_delay = self.conn.channel_from_node(self.node).get_delay_mean()
+        conn_delay = self.conn.channel_from_node(self.node).delay_mean
         scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
         self.ready_and_schedule(qid, qseq, scheduleAfter)
 

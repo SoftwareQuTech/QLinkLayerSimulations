@@ -1,32 +1,15 @@
 {
     "0": {
-        "number_of_lions": 4,
-        "number_of_tigers": 2,
-        "number_of_remaining_wildebeasts": 5.0
-    },
-    "1": {
-        "number_of_lions": 4,
-        "number_of_tigers": 2,
-        "number_of_remaining_wildebeasts": 3.3
-    },
-    "2": {
-        "number_of_lions": 4,
-        "number_of_tigers": 2,
-        "number_of_remaining_wildebeasts": 2.5
-    },
-    "3": {
-        "number_of_lions": 4,
-        "number_of_tigers": 3,
-        "number_of_remaining_wildebeasts": 5.0
-    },
-    "4": {
-        "number_of_lions": 4,
-        "number_of_tigers": 3,
-        "number_of_remaining_wildebeasts": 3.3
-    },
-    "5": {
-        "number_of_lions": 4,
-        "number_of_tigers": 3,
-        "number_of_remaining_wildebeasts": 2.5
+        "origin_bias": 0,
+        "create_prob": 1,
+        "min_pairs": 1,
+        "max_pairs": 1,
+        "tmax_pair": 10000,
+        "request_overlap": 0,
+        "request_freq": 1,
+        "num_requests": 10,
+        "max_sim_time": 1e-09,
+        "max_wall_time": 0.01,
+        "enable_pdb": 0
     }
 }

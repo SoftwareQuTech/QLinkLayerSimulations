@@ -7,20 +7,27 @@ import os.path
 # Mandatory paramaters
 #######################
 
-description_string = "A brief simulation test run"
+description_string = "Testing to setup a simulation"
 easysquid_directory = "/Users/adahlberg/Documents/EasySquid/"  # full absolute path
 netsquid_directory = "/Users/adahlberg//Documents/NetSquid/"  # full absolute path
-outputdirname = "my_zoo"
-number_of_runs = 3
-outputdirname = "zoo"
+number_of_runs = 1
+outputdirname = "simulation_results"
 
 #########################
 # Optional parameters
 #########################
 
-opt_params = {"number_of_lions": 4,
-              "number_of_tigers": [2, 3],
-              "number_of_remaining_wildebeasts": [5.0, 3.3, 2.5]
+opt_params = {"origin_bias": 0,
+              "create_prob": 1,
+              "min_pairs": 1,
+              "max_pairs": 1,
+              "tmax_pair": 10000,
+              "request_overlap": 0,
+              "request_freq": 1,
+              "num_requests": 10,
+              "max_sim_time": 1e-9,
+              "max_wall_time": 0.01,
+              "enable_pdb" : 0
              }
 
 ################################################################
