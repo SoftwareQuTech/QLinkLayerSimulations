@@ -1,0 +1,32 @@
+{
+    "0": {
+        "number_of_lions": 4,
+        "number_of_tigers": 2,
+        "number_of_remaining_wildebeasts": 5.0
+    },
+    "1": {
+        "number_of_lions": 4,
+        "number_of_tigers": 2,
+        "number_of_remaining_wildebeasts": 3.3
+    },
+    "2": {
+        "number_of_lions": 4,
+        "number_of_tigers": 2,
+        "number_of_remaining_wildebeasts": 2.5
+    },
+    "3": {
+        "number_of_lions": 4,
+        "number_of_tigers": 3,
+        "number_of_remaining_wildebeasts": 5.0
+    },
+    "4": {
+        "number_of_lions": 4,
+        "number_of_tigers": 3,
+        "number_of_remaining_wildebeasts": 3.3
+    },
+    "5": {
+        "number_of_lions": 4,
+        "number_of_tigers": 3,
+        "number_of_remaining_wildebeasts": 2.5
+    }
+}
