@@ -13,7 +13,7 @@ from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import create_logger
 import logging
 
-logger = create_logger("logger", logging.DEBUG)
+logger = create_logger("logger", level=logging.DEBUG)
 
 
 class EGPRequest:

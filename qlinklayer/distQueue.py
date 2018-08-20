@@ -15,7 +15,9 @@ from qlinklayer.localQueue import TimeoutLocalQueue
 from qlinklayer.general import LinkLayerException
 from easysquid.toolbox import create_logger
 
-logger = create_logger("logger")
+import logging
+
+logger = create_logger("logger", level=logging.DEBUG)
 
 
 class DistributedQueue(EasyProtocol, ClassicalProtocol):

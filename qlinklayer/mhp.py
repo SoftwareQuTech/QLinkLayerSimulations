@@ -11,7 +11,7 @@ from netsquid.simutil import sim_time
 
 import logging
 
-logger = create_logger("logger", level=logging.INFO)
+logger = create_logger("logger", level=logging.DEBUG)
 
 
 class MHPMessage:

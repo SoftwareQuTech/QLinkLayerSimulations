@@ -23,10 +23,10 @@ opt_params = {"origin_bias": 0,
               "max_pairs": 1,
               "tmax_pair": 10000,
               "request_overlap": 0,
-              "request_freq": 1,
+              "request_freq": 1e-3,
               "num_requests": 10,
-              "max_sim_time": 1e-9,
-              "max_wall_time": 0.01,
+              "max_sim_time": 1,
+              "max_wall_time": 10,
               "enable_pdb" : 0
              }
 
