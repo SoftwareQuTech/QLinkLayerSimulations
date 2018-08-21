@@ -92,19 +92,37 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
 
 
 def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, min_pairs, max_pairs, tmax_pair,
-                              request_overlap, request_freq, num_requests):
+                              request_overlap, request_cycle, num_requests, max_sim_time):
     idA = scenarioA.egp.node.nodeID
     idB = scenarioB.egp.node.nodeID
 
     create_time = 0
-    max_sim_time = 0
+    sim_duration = 0
+    added_requests = 0
+
+    if num_requests == 0:
+        num_requests = float('inf')
 
     if min_pairs > max_pairs:
         max_pairs = min_pairs
 
-    for i in range(num_requests):
+    #Check so we don't have an infinite loop
+    if num_requests == 0:
+        if max_sim_time == float('inf'):
+            raise ValueError("Cannot have inifinite number of requests and infinite simulation time")
+        else:
+            if request_overlap and (request_cycle == 0):
+                raise ValueError("Cannot have inifinite number of requests, request overlap and zero request cycle")
+            else:
+                if tmax_pair == 0:
+                    raise ValueError("Cannot have inifinite number of requests, no request overlap and zero tmax_pair")
+
+    while (added_requests < num_requests) and (create_time < (max_sim_time * SECOND)):
+
         # Randomly decide if we are creating a request this cycle
         if random() <= create_prob:
+            added_requests += 1
+
             # Randomly select a number of pairs within the configured range
             num_pairs = randint(min_pairs, max_pairs)
 
@@ -114,24 +132,25 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
             # Randomly choose the node that will create the request
             scenario = scenarioA if random() <= origin_bias else scenarioB
             otherID = idB if scenario == scenarioA else idA
+            print("Creating a request at time: {}".format(create_time))
             request = EGPRequest(otherID=otherID, num_pairs=num_pairs, min_fidelity=0.2, max_time=max_time,
                                  purpose_id=1, priority=10)
             scenario.schedule_create(request=request, t=create_time)
 
             # If we want overlap then the next create occurs at the specified frequency
             if request_overlap:
-                create_time += request_freq * SECOND
+                create_time += request_cycle * SECOND
 
             # Otherwise schedule the next request once this one has already completed
             else:
                 create_time += max_time
 
-            max_sim_time = create_time + max_time
+            sim_duration = create_time + max_time
 
         else:
-            create_time += request_freq * SECOND
+            create_time += request_cycle * SECOND
 
-    return max_sim_time
+    return sim_duration
 
 
 def setup_network_protocols(network, alphaA=0.1, alphaB=0.1):
@@ -161,7 +180,7 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1):
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
-                   request_overlap=False, request_freq=0, num_requests=1, max_sim_time=float('inf'),
+                   request_overlap=False, request_cycle=0, num_requests=1, max_sim_time=float('inf'),
                    max_wall_time=float('inf'), enable_pdb=False, create_and_measure=False, alphaA=0.1, alphaB=0.1):
     # Set up the simulation
     setup_simulation()
@@ -174,7 +193,7 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
     alice_scenario = MeasureImmediatelyScenario(egp=egpA)
     bob_scenario = MeasureImmediatelyScenario(egp=egpB)
     sim_duration = schedule_scenario_actions(alice_scenario, bob_scenario, origin_bias, create_prob, min_pairs,
-                                             max_pairs, tmax_pair, request_overlap, request_freq, num_requests) + 1
+                                             max_pairs, tmax_pair, request_overlap, request_cycle, num_requests, max_sim_time) + 1
 
     sim_duration = min(max_wall_time, sim_duration)
 
@@ -193,11 +212,12 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
     # Start with a step size of 1 millisecond
     timestep = 1e6
 
+    print("max_sim_time: {}".format((max_sim_time * SECOND)))
+
     last_time_log = time()
     try:
         # Run simulation
         while sim_time() < max_sim_time * SECOND:
-            print("sim_time, max_sim_time_abs: ({}, {})".format(sim_time(), max_sim_time * SECOND))
 
             # Check wall time during this simulation step
             wall_time_sim_step_start = time()
@@ -209,11 +229,9 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
             wall_time_left = max_wall_time - (time() - start_time)
             timestep = timestep * (wall_time_left / wall_time_sim_step_duration)
 
-            print("wall_time_sim_step_duration: {}".format(wall_time_sim_step_duration))
-            print("wall_time_left: {}".format(wall_time_left))
-            print("timestep: {}".format(timestep))
-
-            print("")
+            # Don't use a timestep that goes beyong max_sim_time
+            if (sim_time() + timestep) > (max_sim_time * SECOND):
+                timestep = sim_time() - (max_sim_time * SECOND)
 
             # Check clock once in a while
             now = time()
@@ -228,7 +246,6 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
         stop_time = time()
         logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time,
                                                                                              sim_time() / SECOND))
-
     # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
     except Exception:
         logger.exception("Ending simulation early!")

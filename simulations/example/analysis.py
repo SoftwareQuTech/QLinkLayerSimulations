@@ -379,7 +379,7 @@ def plot_throughput(all_gens):
     plt.show()
 
 
-def main(results_path):
+def main(results_path, no_plot=False):
     (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path)
     satisfied_creates, unsatisfied_creates = extract_successful_unsuccessful_creates(requests, gens)
     request_times = get_request_latencies(satisfied_creates, gens)
@@ -413,19 +413,24 @@ def main(results_path):
     print("Total node attempts during simulation: {}".format(node_attempts))
 
     if gen_attempts:
-        plot_gen_attempts(gen_attempts)
+        if not no_plot:
+            plot_gen_attempts(gen_attempts)
 
     if gen_times:
-        plot_gen_times(gen_times)
+        if not no_plot:
+            plot_gen_times(gen_times)
 
     if all_gens:
-        plot_throughput(all_gens)
+        if not no_plot:
+            plot_throughput(all_gens)
 
 
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument('--results-path', required=True, type=str,
                         help="Path to the directory containing the simulation results")
+    parser.add_argument('--no-plot', default=False, action='store_true',
+                        help="Whether to produce plots or not")
 
     args = parser.parse_args()
     return args
@@ -433,4 +438,4 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    main(results_path=args.results_path)
+    main(results_path=args.results_path, no_plot=args.no_plot)
