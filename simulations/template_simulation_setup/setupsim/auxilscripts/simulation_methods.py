@@ -16,6 +16,7 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureImmediatelyScenario
 
 import logging
+import os
 
 logger = create_logger("logger", level=logging.INFO)
 
@@ -32,27 +33,25 @@ def setup_simulation():
 
 def setup_data_directory(dir_path):
     """
-    Creates a directory for storing symulation data
+    Creates a directory for storing simulation data
     :param dir_path: str
         path to create
     """
-    if exists(dir_path):
-        raise Exception("Simulation data directory {} already exists!".format(dir_path))
+    if exists("{}.db".format(dir_path)):
+        raise Exception("Simulation data directory {}.db already exists!".format(dir_path))
     else:
-        makedirs(dir_path)
+        pass
 
 
 def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     # Create simulation data directory (simple timestamp) containing data collected by the datasequences
-    timestamp = time()
-    data_dir = "{}/{}".format(dir_path, timestamp)
-    setup_data_directory(data_dir)
+    setup_data_directory(dir_path)
 
-    logger.info("Saving results to {}".format(data_dir))
+    logger.info("Saving results to {}.db".format(dir_path))
 
     # Prepare our data collection (this should be made a lot nicer especially the addEvent calls)
     pm = PM_Controller()
-    data_file = "{}/sim_data.db".format(data_dir)
+    data_file = "{}.db".format(dir_path)
 
     # DataSequence for error collection
     err_ds = EGPErrorSequence(name="EGP Errors", dbFile=data_file, maxSteps=collection_duration)
@@ -162,7 +161,7 @@ def setup_network_protocols(network):
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
+def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
                    request_overlap=False, request_freq=0, num_requests=10, max_sim_time=float('inf'),
                    max_wall_time=float('inf'), enable_pdb=False):
 
@@ -172,6 +171,9 @@ def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pai
     print("max_sim_time: {}".format(max_sim_time))
 
     # Create the network
+    print("config: {}".format(config))
+    print("paht to script: {}".format(os.path.dirname(__file__)))
+    print("woking path: {}".format(os.getcwd()))
     network = setup_physical_network(config)
     egpA, egpB = setup_network_protocols(network)
 

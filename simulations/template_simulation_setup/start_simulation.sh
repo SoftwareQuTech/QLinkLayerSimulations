@@ -45,11 +45,16 @@ paramcombinationsfile=setupsim/paramcombinations.json
 configdir=setupsim/config
 
 
+
 # get the date and time as a single timestamp in ISO8601 format YYYY-MM-DDTHH:MM:SS+02:00
 timestamp=$(date '+%Y-%m-%dT%k:%M:%S%z')
 
 #get the directory that this script is located in
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)
+
+# Path to the Paramterer combinations file
+PARAMCOMBINATIONSPATH=$(echo $DIR/$paramcombinationsfile)
+echo $PARAMCOMBINATIONSPATH
 
 # logging to the console
 echo $timestamp
@@ -244,8 +249,11 @@ do
 	
 		counter=$((counter+1))
 
+	    # get the key without "-characters
+	    actual_key=${key:1:${#key}-2}
+
 		# CORE OF THIS SCRIPT: running the python script with the input parameters
-		python3 $runsimulation $timestamp $resultsdir $runindex $paramsvector
+		python3 $runsimulation $timestamp $resultsdir $runindex $PARAMCOMBINATIONSPATH $actual_key
 	
 
 	done
