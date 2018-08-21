@@ -145,7 +145,8 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1):
     # Create our EGP instances and connect them
     egpA = NodeCentricEGP(nodeA)
     egpB = NodeCentricEGP(nodeB)
-    egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn, alphaA=alphaA, alphaB=alphaB)
+    egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn,
+                                  alphaA=alphaA, alphaB=alphaB)
 
     # Attach the protocols to the nodes and connections
     network.add_network_protocol(egpA.dqp, nodeA, dqp_conn)
@@ -162,7 +163,6 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1):
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
                    request_overlap=False, request_freq=0, num_requests=1, max_sim_time=float('inf'),
                    max_wall_time=float('inf'), enable_pdb=False, create_and_measure=False, alphaA=0.1, alphaB=0.1):
-
     # Set up the simulation
     setup_simulation()
 
@@ -226,7 +226,8 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
                 last_time_log = now
 
         stop_time = time()
-        logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time, sim_time() / SECOND))
+        logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time,
+                                                                                             sim_time() / SECOND))
 
     # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
     except Exception:

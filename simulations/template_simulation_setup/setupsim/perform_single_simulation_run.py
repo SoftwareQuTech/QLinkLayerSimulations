@@ -11,7 +11,6 @@ This script:
       extended string of) the filename outputted by the SimulationInputParser.
 """
 
-
 # TODO: doing the importing makes this example simulation slow! Can/should we cache this somehow?
 from easysquid.simulationinputparser import SimulationInputParser
 import sys

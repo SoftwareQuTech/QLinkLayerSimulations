@@ -2,7 +2,6 @@ import json
 import itertools
 import os.path
 
-
 #######################
 # Mandatory paramaters
 #######################
@@ -17,22 +16,23 @@ outputdirname = "simulation_results"
 # Optional parameters
 #########################
 
-opt_params = {"config": '/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_no_conv.json',
-              "origin_bias": 0,
-              "create_prob": 1,
-              "min_pairs": 1,
-              "max_pairs": 1,
-              "tmax_pair": 10000,
-              "request_overlap": False,
-              "request_freq": 1e-6,
-              "num_requests": 10,
-              "max_sim_time": 1,
-              "max_wall_time": 10,
-              "enable_pdb" : False,
-              "alphaA": 0.1,
-              "alphaB": 0.1,
-              "create_and_measure": False
-             }
+opt_params = {
+    "config": '/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/' +
+              'lab_configs/network_with_cav_no_conv.json',
+    "origin_bias": 0,
+    "create_prob": 1,
+    "min_pairs": 1,
+    "max_pairs": 1,
+    "tmax_pair": 10000,
+    "request_overlap": False,
+    "request_freq": 1e-6,
+    "num_requests": 10,
+    "max_sim_time": 1,
+    "max_wall_time": 10,
+    "enable_pdb": False,
+    "alphaA": 0.1,
+    "alphaB": 0.1,
+    "create_and_measure": False}
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #
@@ -46,10 +46,10 @@ general_params = {"easysquid_directory": easysquid_directory,
                   "description": description_string,
                   "number_of_runs": number_of_runs,
                   "outputdirname": outputdirname
-                 }
+                  }
 
 if "number_of_runs" in list(general_params.keys()):
-    assert(type(number_of_runs) == int)
+    assert (type(number_of_runs) == int)
 
 # merging the two dictionaries
 params = {"general_params": general_params,
@@ -59,16 +59,15 @@ params = {"general_params": general_params,
 def save_to_json(data, filename):
     if os.path.isfile(filename):
         input(
-"""
-    About to overwrite {}.
-    If this is fine with you, press enter.
-    If not, then abort using CTRL+C""".format(filename))
+            """
+                About to overwrite {}.
+                If this is fine with you, press enter.
+                If not, then abort using CTRL+C""".format(filename))
     with open(filename, 'w') as simdetailsfile:
         json.dump(data, simdetailsfile, indent=4)
 
 
 save_to_json(data=params, filename='simdetails.json')
-
 
 # make all parameters that were not a list (i.e. they consist
 # of a single element only, into a list
@@ -78,7 +77,6 @@ for value in list(opt_params.values()):
         allparams.append(value)
     else:
         allparams.append([value])
-
 
 # create a dictionary `paramcombinations` with keys integers
 # and as values all possible combinations of the parameters
@@ -92,7 +90,6 @@ for parametertuple in itertools.product(*allparams):
         pardict[key] = parametertuple[keyindex]
     paramcombinations[counter] = pardict
     counter += 1
-
 
 # write the cartesian product to a file
 save_to_json(data=paramcombinations, filename='paramcombinations.json')

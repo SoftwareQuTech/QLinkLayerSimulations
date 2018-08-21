@@ -89,7 +89,7 @@ class EGP(EasyProtocol):
         self.err_callback = err_callback
         self.ok_callback = ok_callback
         self.next_creation_id = 0
-        self.max_creation_id = 2**32 - 1
+        self.max_creation_id = 2 ** 32 - 1
         self._EVT_ERROR = EventType("ERROR", "An error occurred in the EGP")
 
     @abc.abstractmethod
@@ -249,7 +249,8 @@ class NodeCentricEGP(EGP):
         self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
         self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
 
-    def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None, alphaA=0.1, alphaB=0.1):
+    def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
+                                 alphaA=0.1, alphaB=0.1):
         """
         Sets up underlying protocols and connections between EGP's
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
