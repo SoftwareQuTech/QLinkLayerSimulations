@@ -244,14 +244,14 @@ class NodeCentricEGP(EGP):
         self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
         self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
 
-    def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None):
+    def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None, alphaA=0.1, alphaB=0.1):
         """
         Sets up underlying protocols and connections between EGP's
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
         if not self.conn:
             # Set up MHP Service
-            self._connect_mhp(other_egp, mhp_service, mhp_conn)
+            self._connect_mhp(other_egp, mhp_service, mhp_conn, alphaA=alphaA, alphaB=alphaB)
 
             # Set up distributed queue
             self._connect_dqp(other_egp, dqp_conn)
@@ -262,7 +262,7 @@ class NodeCentricEGP(EGP):
         else:
             logger.warning("Attempted to configure EGP with new connection while already connected")
 
-    def _connect_mhp(self, other_egp, mhp_service=None, mhp_conn=None):
+    def _connect_mhp(self, other_egp, mhp_service=None, mhp_conn=None, alphaA=0.1, alphaB=0.1):
         """
         Creates the MHP Service and sets up the MHP protocols running at each of the nodes
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
@@ -277,7 +277,7 @@ class NodeCentricEGP(EGP):
         # Create the service and set it for both protocols
         if mhp_service is None:
             self.mhp_service = SimulatedNodeCentricMHPService(name="MHPService", nodeA=self.node, nodeB=peer_node,
-                                                              conn=mhp_conn)
+                                                              conn=mhp_conn, alphaA=alphaA, alphaB=alphaB)
         else:
             self.mhp_service = mhp_service
 

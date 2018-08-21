@@ -2,7 +2,6 @@ import netsquid as ns
 import pdb
 from argparse import ArgumentParser
 from time import time
-from os import makedirs
 from os.path import exists
 from random import random, randint
 from easysquid.easynetwork import Connections, setup_physical_network
@@ -16,7 +15,6 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureImmediatelyScenario
 
 import logging
-import os
 
 logger = create_logger("logger", level=logging.INFO)
 
@@ -136,7 +134,7 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
     return max_sim_time
 
 
-def setup_network_protocols(network):
+def setup_network_protocols(network, alphaA=0.1, alphaB=0.1):
     # Grab the nodes and connections
     nodeA = network.get_node_by_id(0)
     nodeB = network.get_node_by_id(1)
@@ -147,7 +145,7 @@ def setup_network_protocols(network):
     # Create our EGP instances and connect them
     egpA = NodeCentricEGP(nodeA)
     egpB = NodeCentricEGP(nodeB)
-    egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn)
+    egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn, alphaA=alphaA, alphaB=alphaB)
 
     # Attach the protocols to the nodes and connections
     network.add_network_protocol(egpA.dqp, nodeA, dqp_conn)
@@ -162,20 +160,15 @@ def setup_network_protocols(network):
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
-                   request_overlap=False, request_freq=0, num_requests=10, max_sim_time=float('inf'),
-                   max_wall_time=float('inf'), enable_pdb=False):
+                   request_overlap=False, request_freq=0, num_requests=1, max_sim_time=float('inf'),
+                   max_wall_time=float('inf'), enable_pdb=False, create_and_measure=False, alphaA=0.1, alphaB=0.1):
 
     # Set up the simulation
     setup_simulation()
 
-    print("max_sim_time: {}".format(max_sim_time))
-
     # Create the network
-    print("config: {}".format(config))
-    print("paht to script: {}".format(os.path.dirname(__file__)))
-    print("woking path: {}".format(os.getcwd()))
     network = setup_physical_network(config)
-    egpA, egpB = setup_network_protocols(network)
+    egpA, egpB = setup_network_protocols(network, alphaA=alphaA, alphaB=alphaB)
 
     # Set up the Measure Immediately scenarios at nodes alice and bob
     alice_scenario = MeasureImmediatelyScenario(egp=egpA)
