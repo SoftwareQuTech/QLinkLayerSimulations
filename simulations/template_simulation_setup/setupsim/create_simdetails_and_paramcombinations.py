@@ -18,18 +18,20 @@ outputdirname = "simulation_results"
 #########################
 
 opt_params = {"config": '/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_no_conv.json',
-# opt_params = {"config": "",
               "origin_bias": 0,
               "create_prob": 1,
               "min_pairs": 1,
               "max_pairs": 1,
               "tmax_pair": 10000,
               "request_overlap": False,
-              "request_freq": 1e-3,
+              "request_freq": 1e-6,
               "num_requests": 10,
               "max_sim_time": 1,
               "max_wall_time": 10,
-              "enable_pdb" : False
+              "enable_pdb" : False,
+              "alphaA": 0.1,
+              "alphaB": 0.1,
+              "create_and_measure": False
              }
 
 ################################################################

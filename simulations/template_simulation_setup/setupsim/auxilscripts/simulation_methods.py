@@ -226,7 +226,7 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
                 last_time_log = now
 
         stop_time = time()
-        logger.info("Finished simulation, took {} wall time and {} real time".format(stop_time - start_time, sim_time()))
+        logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time, sim_time() / SECOND))
 
     # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
     except Exception:

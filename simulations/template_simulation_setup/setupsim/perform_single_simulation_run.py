@@ -17,36 +17,16 @@ from easysquid.simulationinputparser import SimulationInputParser
 import sys
 import auxilscripts.simulation_methods as sim_methods
 
-param_types = {"config":str,
-               "origin_bias": float,
-               "create_prob": float,
-               "min_pairs": int,
-               "max_pairs": int,
-               "tmax_pair": float,
-               "request_overlap": bool,
-               "request_freq": float,
-               "num_requests": int,
-               "max_sim_time": float,
-               "max_wall_time": float,
-               "enable_pdb": bool}
-
 # get parameters
 params_received_from_start_simulation = sys.argv[1:]
 
 # pass on the parameters to the SimulationInputParser to get them
 # in the correct form
-sip = SimulationInputParser(params_received_from_start_simulation, parse_numerical_value=False)
+sip = SimulationInputParser(params_received_from_start_simulation)
 
 # extract the desired data from the SimulationInputParser
 paramsdict = sip.inputdict
 filebasename = sip.filebasename
-
-# Convert parameters to correcty type
-for (paramName, param) in paramsdict.items():
-    paramsdict[paramName]=param_types[paramName](param)
-
-print("paramsdict: {}".format(paramsdict))
-print("filebasename: {}".format(filebasename))
 
 # Run the simulation
 sim_methods.run_simulation(results_path=filebasename, **paramsdict)

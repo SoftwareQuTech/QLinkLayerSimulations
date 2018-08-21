@@ -14,10 +14,13 @@
         "max_pairs": 1,
         "tmax_pair": 10000,
         "request_overlap": false,
-        "request_freq": 0.001,
+        "request_freq": 1e-06,
         "num_requests": 10,
         "max_sim_time": 1,
         "max_wall_time": 10,
-        "enable_pdb": false
+        "enable_pdb": false,
+        "alphaA": 0.1,
+        "alphaB": 0.1,
+        "create_and_measure": false
     }
 }
