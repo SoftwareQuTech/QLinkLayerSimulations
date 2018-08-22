@@ -47,14 +47,13 @@ configdir=setupsim/config
 
 
 # get the date and time as a single timestamp in ISO8601 format YYYY-MM-DDTHH:MM:SS+02:00
-timestamp=$(date '+%Y-%m-%dT%k:%M:%S%z')
+timestamp=$(date '+%Y-%m-%dT%H:%M:%S%z')
 
 #get the directory that this script is located in
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)
 
 # Path to the Paramterer combinations file
 PARAMCOMBINATIONSPATH=$(echo $DIR/$paramcombinationsfile)
-echo $PARAMCOMBINATIONSPATH
 
 # logging to the console
 echo $timestamp
@@ -197,7 +196,7 @@ if [ "$OUTPUTLOGFILE" = 'y' ]
 then
 	logfiledestination=$resultsdir/simulationlog\_$timestamp\_$OUTPUTDIRNAME.txt
 	echo $'Start time:' >> $logfiledestination
-	echo $(date '+%Y-%m-%dT%k:%M:%S%z') >> $logfiledestination
+	echo $(date '+%Y-%m-%dT%H:%M:%S%z') >> $logfiledestination
 	echo $'\n\nLog of simulating: ' >> $logfiledestination
 	echo $OUTPUTDIRNAME >> $logfiledestination
 	echo $'\n-----------------------------\n' >> $logfiledestination
@@ -228,7 +227,7 @@ do
 	
 		# logging
 		currentindex=$(($runindex * $numberofsimulations + $counter))
-		logstr="$(date '+%Y-%m-%dT%k:%M:%S%z') Running simulation #$runindex x $numberofsimulations + $counter = $currentindex/$totnumberofsimulationsminusone with parameters:"
+		logstr="$(date '+%Y-%m-%dT%H:%M:%S%z') Running simulation #$runindex x $numberofsimulations + $counter = $currentindex/$totnumberofsimulationsminusone with parameters:"
 
 
 		# logging to the console
