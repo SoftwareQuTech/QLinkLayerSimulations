@@ -13,7 +13,7 @@ from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreate
     MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
-from qlinklayer.scenario import MeasureImmediatelyScenario
+from qlinklayer.scenario import MeasureAfterSuccessScenario
 
 
 logger = create_logger("logger")
@@ -173,8 +173,8 @@ def run_simulation(config, results_path, origin_bias=0.5, create_prob=1, min_pai
     egpA, egpB = setup_network_protocols(network)
 
     # Set up the Measure Immediately scenarios at nodes alice and bob
-    alice_scenario = MeasureImmediatelyScenario(egp=egpA)
-    bob_scenario = MeasureImmediatelyScenario(egp=egpB)
+    alice_scenario = MeasureAfterSuccessScenario(egp=egpA)
+    bob_scenario = MeasureAfterSuccessScenario(egp=egpB)
     sim_duration = schedule_scenario_actions(alice_scenario, bob_scenario, origin_bias, create_prob, min_pairs,
                                              max_pairs, tmax_pair, request_overlap, request_freq, num_requests) + 1
 

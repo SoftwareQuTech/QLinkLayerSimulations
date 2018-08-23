@@ -2,6 +2,7 @@
 # Scheduler
 #
 from netsquid import pydynaa
+from netsquid.simutil import sim_time
 from easysquid.toolbox import create_logger
 
 logger = create_logger("logger")

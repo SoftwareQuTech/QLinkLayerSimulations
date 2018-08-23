@@ -9,9 +9,7 @@ from netsquid.qubits.qubitapi import create_qubits
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
 
-import logging
-
-logger = create_logger("logger", level=logging.DEBUG)
+logger = create_logger("logger")
 
 
 class MHPMessage:

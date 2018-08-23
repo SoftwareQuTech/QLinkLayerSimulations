@@ -11,13 +11,13 @@ from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import create_logger
-import logging
+import random
 
-logger = create_logger("logger", level=logging.DEBUG)
+logger = create_logger("logger")
 
 
 class EGPRequest:
-    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None, store=True):
+    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None, store=True, measure_directly=False):
         """
         Stores required parameters of Entanglement Generation Protocol Request
         :param otherID: int
@@ -35,6 +35,8 @@ class EGPRequest:
         :param store: bool
             Specifies whether entangled qubits should be stored within a storage qubit or left within the communication
             qubit
+        :param measure_directly: bool
+            Specifies whether to measure the communication qubit directly after the photon is emitted
         """
         self.otherID = otherID
         self.num_pairs = num_pairs
@@ -45,6 +47,7 @@ class EGPRequest:
         self.create_id = None
         self.create_time = None
         self.store = store
+        self.measure_directly = measure_directly
 
     def __copy__(self):
         """
@@ -55,7 +58,7 @@ class EGPRequest:
             A copy of the EGPRequest object
         """
         c = type(self)(otherID=self.otherID, num_pairs=self.num_pairs, min_fidelity=self.min_fidelity,
-                       max_time=self.max_time, purpose_id=self.purpose_id, priority=self.priority, store=self.store)
+                       max_time=self.max_time, purpose_id=self.purpose_id, priority=self.priority, store=self.store, measure_directly=self.measure_directly)
         c.assign_create_id(self.create_id, self.create_time)
         return c
 
@@ -248,6 +251,11 @@ class NodeCentricEGP(EGP):
         self._EVT_CREATE = EventType("CREATE", "Call to create has completed")
         self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
         self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
+
+        # Save basis and bit if entanglement is directly measured to produce key
+        self.basis_choice = None
+        self.bit_choise = None
+        self.midpoint_outcome = None
 
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
                                  alphaA=0.1, alphaB=0.1):
@@ -640,6 +648,7 @@ class NodeCentricEGP(EGP):
         """
         Handles a successful generation reply from the heralding midpoint.  If we are the entanglement request
         originator then we also correct the qubit locally if necessary.
+        If the request says measure directly, the qubit is simply meaured and
         :param r: int
             Outcome of the generation attempt
         :param mhp_seq: int
@@ -649,25 +658,80 @@ class NodeCentricEGP(EGP):
         :return:
         """
         creq = self.scheduler.get_request(aid=aid)
-        # Check if we need to correct the qubit
-        if r == 2:
-            if self.node.nodeID != creq.otherID:
-                self._apply_correction_and_move(mhp_seq, aid)
+        if creq.measure_directly:
+            # Save the measurement outcome
+            if r == 1:
+                self.midpoint_outcome = (0, 1)
+            else:
+                self.midpoint_outcome = (1, 1)
+
+            # Make a random basis choice
+            self.basis_choice = random.randint(0, 1)
+
+            # Make the measurement
+            self._measure_in_chosen_basis(mhp_seq, aid)
+        else:
+            # Check if we need to correct the qubit
+            if r == 2:
+                if self.node.nodeID != creq.otherID:
+                    self._apply_correction_and_move(mhp_seq, aid)
+
+                else:
+                    logger.debug("Peer applying correction, suspending generation")
+                    suspend_time = self.peer_corr_delay
+
+                    # Check if we need to suspend for extra delay for our peer to move to a storage qubit
+                    if creq.store:
+                        suspend_time += self.peer_move_delay
+
+                    # Suspend for an estimated amount of time until our peer is ready to continue generation
+                    self.scheduler.suspend_generation(t=suspend_time)
+                    self._move_comm_to_storage(mhp_seq, aid)
 
             else:
-                logger.debug("Peer applying correction, suspending generation")
-                suspend_time = self.peer_corr_delay
-
-                # Check if we need to suspend for extra delay for our peer to move to a storage qubit
-                if creq.store:
-                    suspend_time += self.peer_move_delay
-
-                # Suspend for an estimated amount of time until our peer is ready to continue generation
-                self.scheduler.suspend_generation(t=suspend_time)
                 self._move_comm_to_storage(mhp_seq, aid)
 
+    def _measure_in_chosen_basis(self, mhp_seq, aid):
+        """
+        Measures in the basis chosen randomly. Saves the measurement outcome and calls
+        back to complete MHP reply handling
+        :param mhp_seq: int
+            The MHP Sequence number corresponding to the generation (to pass to callback)
+        :param aid: tuple of (int, int)
+            The absolute queue ID corresponding to the generation (to pass to callback)
+        :return: None
+        """
+
+        # Grab the current generation information
+        comm_q, _ = self.scheduler.curr_gen[2:4]
+
+        # Constuct a quantum program
+        prgm = QuantumProgram()
+        q = prgm.load_mem_qubits(qmem=self.node.qmem)[comm_q]
+
+        if self.basis_choice:
+            logger.debug("Measuring comm_q {} in Hadamard basis".format(comm_q))
+            q.H()
         else:
-            self._move_comm_to_storage(mhp_seq, aid)
+            logger.debug("Measuring comm_q {} in standard basis".format(comm_q))
+
+        q.measure(callback=self._handle_measurement_outcome)
+        prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
+
+        self.node.qmem.execute_program(prgm)
+
+    def _handle_measurement_outcome(self, outcome):
+        """
+        Handles the measurement outcome from measureing the communication qubit
+        directly after the photon was emitted.
+        Calls back to complete MHP reply handling.
+        :param outcome: int
+            The measurement outcome
+        :return: None
+        """
+
+        # Saves measurement outcome
+        self.bit_choice = outcome
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """
@@ -833,3 +897,4 @@ class NodeCentricEGP(EGP):
         scheduler = evt.source
         request = scheduler.timed_out_requests.pop(0)
         self.issue_err(err=self.ERR_TIMEOUT, err_data=request.create_id)
+

@@ -9,10 +9,10 @@ from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import create_logger
 from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
-    MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence
+    MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence, EGPQubErrSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
-from qlinklayer.scenario import MeasureImmediatelyScenario
+from qlinklayer.scenario import MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 
 import logging
 
@@ -41,7 +41,7 @@ def setup_data_directory(dir_path):
         pass
 
 
-def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
+def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, measure_directly):
     # Create simulation data directory (simple timestamp) containing data collected by the datasequences
     setup_data_directory(dir_path)
 
@@ -67,19 +67,28 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
     node_attempt_ds = MHPNodeEntanglementAttemptSequence(name="Node EGP Attempts", dbFile=data_file,
                                                          maxSteps=collection_duration)
 
-    # DataSequence for entangled state collection
-    state_ds = EGPStateSequence(name="EGP Qubit States", dbFile=data_file, maxSteps=collection_duration)
+    if measure_directly:
+        # DataSequence for QubErr collection
+        quberr_ds = EGPQubErrSequence(name="EGP QubErr", dbFile=data_file, maxSteps=collection_duration)
+    else:
+        # DataSequence for entangled state collection
+        state_ds = EGPStateSequence(name="EGP Qubit States", dbFile=data_file, maxSteps=collection_duration)
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=create_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=ok_ds)
-    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=state_ds)
+    if not measure_directly:
+        pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=state_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_ERR, ds=err_ds)
 
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=create_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=ok_ds)
-    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=state_ds)
+    if not measure_directly:
+        pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=state_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
+
+    if measure_directly:
+        pm.addEventAny([scenarioA, scenarioB], [scenarioA._EVT_OK, scenarioB._EVT_OK], ds=quberr_ds)
 
     pm.addEvent(source=scenarioA.egp.mhp.conn, evtType=scenarioA.egp.mhp.conn._EVT_ENTANGLE_ATTEMPT,
                 ds=midpoint_attempt_ds)
@@ -88,11 +97,14 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path):
 
     pm.addEvent(source=scenarioB.egp.mhp, evtType=scenarioB.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
 
-    return [create_ds, ok_ds, state_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
+    if measure_directly:
+        return [create_ds, ok_ds, quberr_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
+    else:
+        return [create_ds, ok_ds, state_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
 
 
 def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, min_pairs, max_pairs, tmax_pair,
-                              request_overlap, request_cycle, num_requests, max_sim_time):
+                              request_overlap, request_cycle, num_requests, max_sim_time, measure_directly):
     idA = scenarioA.egp.node.nodeID
     idB = scenarioB.egp.node.nodeID
 
@@ -105,6 +117,10 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
 
     if min_pairs > max_pairs:
         max_pairs = min_pairs
+
+    if request_cycle == 0:
+        # Use t_cycle of MHP for the request cycle
+        request_cycle = scenarioA.egp.mhp.conn.t_cycle / SECOND
 
     #Check so we don't have an infinite loop
     if num_requests == 0:
@@ -132,9 +148,9 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
             # Randomly choose the node that will create the request
             scenario = scenarioA if random() <= origin_bias else scenarioB
             otherID = idB if scenario == scenarioA else idA
-            print("Creating a request at time: {}".format(create_time))
             request = EGPRequest(otherID=otherID, num_pairs=num_pairs, min_fidelity=0.2, max_time=max_time,
-                                 purpose_id=1, priority=10)
+                                 purpose_id=1, priority=10, store=False, measure_directly=measure_directly)
+            logger.debug("Scheduling request at time {}".format(create_time))
             scenario.schedule_create(request=request, t=create_time)
 
             # If we want overlap then the next create occurs at the specified frequency
@@ -181,7 +197,7 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1):
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
                    request_overlap=False, request_cycle=0, num_requests=1, max_sim_time=float('inf'),
-                   max_wall_time=float('inf'), enable_pdb=False, create_and_measure=False, alphaA=0.1, alphaB=0.1):
+                   max_wall_time=float('inf'), enable_pdb=False, measure_directly=False, alphaA=0.1, alphaB=0.1):
     # Set up the simulation
     setup_simulation()
 
@@ -190,15 +206,19 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
     egpA, egpB = setup_network_protocols(network, alphaA=alphaA, alphaB=alphaB)
 
     # Set up the Measure Immediately scenarios at nodes alice and bob
-    alice_scenario = MeasureImmediatelyScenario(egp=egpA)
-    bob_scenario = MeasureImmediatelyScenario(egp=egpB)
+    if measure_directly:
+        alice_scenario = MeasureBeforeSuccessScenario(egp=egpA)
+        bob_scenario = MeasureBeforeSuccessScenario(egp=egpB)
+    else:
+        alice_scenario = MeasureAfterSuccessScenario(egp=egpA)
+        bob_scenario = MeasureAfterSuccessScenario(egp=egpB)
     sim_duration = schedule_scenario_actions(alice_scenario, bob_scenario, origin_bias, create_prob, min_pairs,
-                                             max_pairs, tmax_pair, request_overlap, request_cycle, num_requests, max_sim_time) + 1
+                                             max_pairs, tmax_pair, request_overlap, request_cycle, num_requests, max_sim_time, measure_directly) + 1
 
     sim_duration = min(max_wall_time, sim_duration)
 
     # Hook up data collectors to the scenarios
-    collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path)
+    collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path, measure_directly)
 
     # Start the simulation
     network.start()
@@ -210,9 +230,7 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
     start_time = time()
 
     # Start with a step size of 1 millisecond
-    timestep = 1e6
-
-    print("max_sim_time: {}".format((max_sim_time * SECOND)))
+    timestep = min(1e3, max_sim_time * SECOND)
 
     last_time_log = time()
     try:
@@ -221,20 +239,32 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
 
             # Check wall time during this simulation step
             wall_time_sim_step_start = time()
+            if timestep == float('inf') or timestep == -float('inf'):
+                raise RuntimeError()
             sim_run(duration=timestep)
+            previous_timestep = timestep
             wall_time_sim_step_stop = time()
             wall_time_sim_step_duration = wall_time_sim_step_stop - wall_time_sim_step_start
 
             # Calculate next duration
             wall_time_left = max_wall_time - (time() - start_time)
-            timestep = timestep * (wall_time_left / wall_time_sim_step_duration)
+
+            # Check if wall_time_sim_step_duration is zero
+            if wall_time_sim_step_duration == 0:
+                # Just make the timestep 10 times bigger since last duration went very quick
+                timestep = timestep * 10
+            else:
+                timestep = timestep * (wall_time_left / wall_time_sim_step_duration)
+
 
             # Don't use a timestep that goes beyong max_sim_time
             if (sim_time() + timestep) > (max_sim_time * SECOND):
-                timestep = sim_time() - (max_sim_time * SECOND)
+                timestep = (max_sim_time * SECOND) - sim_time()
 
             # Check clock once in a while
             now = time()
+            logger.info("Wall clock advanced {} s during the last {} s real time. Will now advance {} s real time.".format(wall_time_sim_step_duration, timestep, previous_timestep))
+            logger.info("Time advanced: {}/{} s real time.  {}/{} s wall time.".format(sim_time() / SECOND, max_sim_time, now - start_time, max_wall_time))
             if now - start_time > max_wall_time:
                 logger.info("Max wall time reached, ending simulation.")
                 break

@@ -15,9 +15,8 @@ from qlinklayer.localQueue import TimeoutLocalQueue
 from qlinklayer.general import LinkLayerException
 from easysquid.toolbox import create_logger
 
-import logging
-
-logger = create_logger("logger", level=logging.DEBUG)
+logger = create_logger("logger")
+from netsquid.simutil import sim_time
 
 
 class DistributedQueue(EasyProtocol, ClassicalProtocol):
@@ -587,7 +586,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         qid : int
             Queue ID (Default: 0)
         """
-
         if not (self._valid_qid(qid)):
             # Not a valid Queue ID
             raise LinkLayerException("Invalid Queue ID")
