@@ -33,8 +33,9 @@ class EGPCreateSequence(EGPDataSequence):
     Collects CREATE events from an EGP including the CREATE events
     """
     def get_column_names(self):
-        return ["Timestamp", "Node ID", "Create ID", "Create_Time", "Max Time", "Min Fidelity", "Num Pairs",
-                "Other ID", "Priority", "Purpose ID", "Store", "Measure_Directly", "Success"]
+        # TODO ITEMS AFTER "Timestamp and "Node ID" currently have to be sorted....
+        return ["Timestamp", "Node ID", "Create ID", "Create_Time", "Max Time", "Measure Directly", "Min Fidelity",
+                "Num Pairs", "Other ID", "Priority", "Purpose ID", "Store", "Success"]
 
     def getData(self, time, source=None):
         nodeID, request = source[0].get_create_info()

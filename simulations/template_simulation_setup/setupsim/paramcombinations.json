@@ -10,10 +10,12 @@
         "request_cycle": 0,
         "num_requests": 0,
         "max_sim_time": 0.01298001,
-        "max_wall_time": 10,
+        "max_wall_time": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": true
+        "measure_directly": true,
+        "t0": 20,
+        "save_additional_data": true
     }
 }

@@ -323,6 +323,7 @@ def main(results_path, no_plot=False):
             if file[-3:] == ".db":
                 break
         results_path = "./{}/{}".format(last_folder, file)
+        print("Looking at results in {}".format(results_path))
         # print("./{}/{}".format(last_folder, file))
 
     # node_attempts = get_all_entries_from_sql(results_path, "Node_EGP_Attempts")
@@ -344,14 +345,16 @@ def main(results_path, no_plot=False):
     #     print("    Mid attempt: {}".format(entry))
     #
     Attempts = get_all_entries_from_sql(results_path, "Node_EGP_Attempts")
-    print("Attemptss:")
-    for entry in Attempts:
-        print("    Attempt: {}".format(entry))
+    # print("Attempts:")
+    # for entry in Attempts:
+    #     print("    Attempt: {}".format(entry))
+    print("Nr of attempts: {}".format(len(Attempts) / 2))
 
     OKs = get_all_entries_from_sql(results_path, "EGP_OKs")
-    print("OKs:")
-    for entry in OKs:
-        print("    OK: {}".format(entry))
+    # print("OKs:")
+    # for entry in OKs:
+    #     print("    OK: {}".format(entry))
+    print("Nr of OKs: {}".format(len(OKs) / 2))
     #
     # states = get_all_entries_from_sql(results_path, "EGP_Qubit_States")
     # print("Fidelities:")
@@ -366,7 +369,7 @@ def main(results_path, no_plot=False):
     Z_err = []
     X_err = []
     for entry in QubErrs:
-        print("    QubErr: {}".format(entry))
+        # print("    QubErr: {}".format(entry))
         if entry[1] in [0, 1]:
             Z_err.append(entry[1])
         if entry[2] in [0, 1]:

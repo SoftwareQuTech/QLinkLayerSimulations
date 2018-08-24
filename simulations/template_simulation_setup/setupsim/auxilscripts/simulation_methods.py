@@ -1,5 +1,6 @@
 import netsquid as ns
 import pdb
+import json
 from argparse import ArgumentParser
 from time import time
 from os.path import exists
@@ -104,7 +105,7 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
 
 
 def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, min_pairs, max_pairs, tmax_pair,
-                              request_overlap, request_cycle, num_requests, max_sim_time, measure_directly):
+                              request_overlap, request_cycle, num_requests, max_sim_time, measure_directly, additional_data=None):
     idA = scenarioA.egp.node.nodeID
     idB = scenarioB.egp.node.nodeID
 
@@ -122,16 +123,21 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
         # Use t_cycle of MHP for the request cycle
         request_cycle = scenarioA.egp.mhp.conn.t_cycle / SECOND
 
-    #Check so we don't have an infinite loop
+    # Check so we don't have an infinite loop
     if num_requests == 0:
         if max_sim_time == float('inf'):
-            raise ValueError("Cannot have inifinite number of requests and infinite simulation time")
+            raise ValueError("Cannot have infinite number of requests and infinite simulation time")
         else:
             if request_overlap and (request_cycle == 0):
-                raise ValueError("Cannot have inifinite number of requests, request overlap and zero request cycle")
+                raise ValueError("Cannot have infinite number of requests, request overlap and zero request cycle")
             else:
                 if tmax_pair == 0:
-                    raise ValueError("Cannot have inifinite number of requests, no request overlap and zero tmax_pair")
+                    raise ValueError("Cannot have infinite number of requests, no request overlap and zero tmax_pair")
+
+    if additional_data:
+        additional_data["request_t_cycle"] = (request_cycle * SECOND)
+        additional_data["create_request_prob"] = create_prob
+        additional_data["create_request_origin_bias"] = origin_bias
 
     while (added_requests < num_requests) and (create_time < (max_sim_time * SECOND)):
 
@@ -197,13 +203,31 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1):
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
                    request_overlap=False, request_cycle=0, num_requests=1, max_sim_time=float('inf'),
-                   max_wall_time=float('inf'), enable_pdb=False, measure_directly=False, alphaA=0.1, alphaB=0.1):
+                   max_wall_time=float('inf'), enable_pdb=False, measure_directly=False, t0=0, t_cycle=0,
+                   alphaA=0.1, alphaB=0.1, save_additional_data=True):
+    # Save additional data
+    if save_additional_data:
+        additional_data = {}
+    else:
+        additional_data = None
     # Set up the simulation
     setup_simulation()
 
     # Create the network
     network = setup_physical_network(config)
+    # Recompute the timings of the heralded connection, depending on measure_directly
+    nodeA = network.get_node_by_id(0)
+    nodeB = network.get_node_by_id(1)
+    mhp_conn = network.get_connection(nodeA, nodeB, "mhp_conn")
+    mhp_conn.set_timings(t_cycle=t_cycle, t0=t0, measure_directly=measure_directly)
+    if save_additional_data:
+        additional_data["mhp_t_cycle"] = mhp_conn.t_cycle
+
+    # Setup entanlement generation protocols
     egpA, egpB = setup_network_protocols(network, alphaA=alphaA, alphaB=alphaB)
+    if save_additional_data:
+        additional_data["alphaA"] = alphaA
+        additional_data["alphaB"] = alphaB
 
     # Set up the Measure Immediately scenarios at nodes alice and bob
     if measure_directly:
@@ -213,7 +237,7 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
         alice_scenario = MeasureAfterSuccessScenario(egp=egpA)
         bob_scenario = MeasureAfterSuccessScenario(egp=egpB)
     sim_duration = schedule_scenario_actions(alice_scenario, bob_scenario, origin_bias, create_prob, min_pairs,
-                                             max_pairs, tmax_pair, request_overlap, request_cycle, num_requests, max_sim_time, measure_directly) + 1
+                                             max_pairs, tmax_pair, request_overlap, request_cycle, num_requests, max_sim_time, measure_directly, additional_data) + 1
 
     sim_duration = min(max_wall_time, sim_duration)
 
@@ -223,6 +247,7 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
     # Start the simulation
     network.start()
 
+    # Debugging
     if enable_pdb:
         pdb.set_trace()
 
@@ -281,54 +306,19 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
         logger.exception("Ending simulation early!")
 
     finally:
+        # Save additional data relevant for the simulation
+        if save_additional_data:
+            # Collect simulation times
+            additional_data["total_real_time"] = sim_time()
+            additional_data["total_wall_time"] = time() - start_time
+            with open(results_path + "_additional_data.json", 'w') as json_file:
+                json.dump(additional_data, json_file, indent=4)
+
+        # Commit the data collected in the data-sequences
         for collector in collectors:
             collector.commit_data()
 
+        # Debugging
         if enable_pdb:
             pdb.set_trace()
 
-
-def parse_args():
-    parser = ArgumentParser()
-    parser.add_argument('--network-config', type=str, required=True,
-                        help='Configuration file containing network and memory device configuration')
-
-    parser.add_argument('--results-path', type=str, required=True,
-                        help='Path to directory to store collected data')
-
-    parser.add_argument('--origin-bias', type=float, default=0.5,
-                        help='Probability that the request comes from node A, calculates complement for probability'
-                             'from node B')
-
-    parser.add_argument('--create-probability', type=float, default=1.0,
-                        help='Probability that a CREATE request is submitted at a particular timestep')
-
-    parser.add_argument('--min-pairs', type=int, default=1,
-                        help='The minimum number of pairs to include in a CREATE request')
-
-    parser.add_argument('--max-pairs', type=int, default=3,
-                        help='The maximum number of pairs that can be requested')
-
-    parser.add_argument('--tmax-pair', type=float, default=2,
-                        help='Maximum amount of time per pair (in seconds) in a request')
-
-    parser.add_argument('--request-overlap', default=False, action='store_true',
-                        help='Allow requests submissions to overlap')
-
-    parser.add_argument('--request-frequency', type=float, default=0,
-                        help='Minimum amount of time (in seconds) between calls to CREATE')
-
-    parser.add_argument('--num-requests', type=int, default=10, help='Total number of requests to simulate')
-
-    parser.add_argument('--max-sim-time', type=float, default=float('inf'),
-                        help='Maximum simulated time (in seconds) the simulation should run for')
-
-    parser.add_argument('--max-wall-time', type=float, default=float('inf'),
-                        help='Maximum wall clock time (in seconds) the simulation should (approximately) run for')
-
-    parser.add_argument('--enable-pdb', action='store_true', default=False,
-                        help='Turn on PDB pre and post simulation')
-
-    args = parser.parse_args()
-
-    return args

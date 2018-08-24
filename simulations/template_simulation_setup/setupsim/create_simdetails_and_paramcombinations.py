@@ -21,6 +21,7 @@ cycles = 1000
 opt_params = {
     "config": '/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/' +
               'no_losses/no_noise.json',
+              # 'lab_configs/network_with_cav_no_conv.json',
     "origin_bias": 1,
     "create_prob": 1,
     "min_pairs": 1,
@@ -30,11 +31,13 @@ opt_params = {
     "request_cycle": 0,
     "num_requests": 0,
     "max_sim_time": (10 + cycles * 12980) * 1e-9,
-    "max_wall_time": 10,
+    "max_wall_time": 10000,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
-    "measure_directly": True}
+    "measure_directly": True,
+    "t0": 20,
+    "save_additional_data": True}
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #

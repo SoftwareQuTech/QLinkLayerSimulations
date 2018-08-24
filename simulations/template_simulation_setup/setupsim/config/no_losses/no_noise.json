@@ -17,9 +17,7 @@
         "q_loss_model": "default",
         "bandwidth": 1000,
         "dark_rate": 0,
-        "detection_eff": 1,
-        "t0": 20,
-        "measure_directly": true
+        "detection_eff": 1
       }
     },
     "classical1": {
