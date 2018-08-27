@@ -16,12 +16,12 @@ outputdirname = "simulation_results"
 # Optional parameters
 #########################
 
-cycles = 1000
+cycles = 10000
 
 opt_params = {
-    "config": '/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/' +
-              'no_losses/no_noise.json',
-              # 'lab_configs/network_with_cav_no_conv.json',
+    "config": '/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup_LOCAL/setupsim/config/' +
+              # 'no_losses/no_noise.',
+              'lab_configs/network_with_cav_no_conv.json',
     "origin_bias": 1,
     "create_prob": 1,
     "min_pairs": 1,
