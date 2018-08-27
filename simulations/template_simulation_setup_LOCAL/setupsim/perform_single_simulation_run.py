@@ -2,13 +2,7 @@
 
 """
 This script:
-    - passes on its arguments to SimulationInputParser, which 
-      returns a filename (a "basename", i.e. without extension) 
-      and a dictionary of parameters.
-    - passes this dictionary of parameters on to the auxillary
-      script `myzoo.generate_zoolist`, which returns a list of strings
-    - stores this list of strings in an HDF5-file with as filename (an 
-      extended string of) the filename outputted by the SimulationInputParser.
+    Calls the method `auxilscript.sim_methods.run_simulation with the given arguments.
 """
 
 # TODO: doing the importing makes this example simulation slow! Can/should we cache this somehow?
