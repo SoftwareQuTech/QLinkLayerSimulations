@@ -288,7 +288,7 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
 
             # Check clock once in a while
             now = time()
-            logger.info("Wall clock advanced {} s during the last {} s real time. Will now advance {} s real time.".format(wall_time_sim_step_duration, timestep, previous_timestep))
+            logger.info("Wall clock advanced {} s during the last {} s real time. Will now advance {} s real time.".format(wall_time_sim_step_duration, previous_timestep / SECOND, timestep / SECOND))
             logger.info("Time advanced: {}/{} s real time.  {}/{} s wall time.".format(sim_time() / SECOND, max_sim_time, now - start_time, max_wall_time))
             if now - start_time > max_wall_time:
                 logger.info("Max wall time reached, ending simulation.")

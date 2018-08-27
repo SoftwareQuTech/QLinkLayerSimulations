@@ -7,7 +7,7 @@
         "outputdirname": "simulation_results"
     },
     "opt_params": {
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/no_noise.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup_LOCAL/setupsim/config/lab_configs/network_with_cav_no_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -16,7 +16,7 @@
         "request_overlap": true,
         "request_cycle": 0,
         "num_requests": 0,
-        "max_sim_time": 0.01298001,
+        "max_sim_time": 0.12980001000000002,
         "max_wall_time": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
