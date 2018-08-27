@@ -16,7 +16,7 @@ The `setupsim` folder contains two types of files:
 - configuration files, which contain, for example, the number of simulation runs and parameter values that are used in the simulation. To be precise:
 	+ the file `simdetails.json` (name should not be changed!) contains the parameters values, (called `opt_params`) and a bunch of nonoptional parameters (`general_params`), among which: the paths to the easysquid and netsquid directories, a description of the simulation, the total number of runs, a name for the simulation, and names and descriptions for the (HDF5)-files that the simulation outputs.
 	+ the file `paramcombinations.json`, which contains all possible combinations of the parameters specified in `simdetails.json`. See `setupsim/README.md` for more information.
-	+ a python script `create_simdetails_and_paramcombinations.json` that can be used to generate a `simdetails.json` and a `paramcombinations.json` file. This script is not called by any other program and thus solely serves the purpose of generating these two configuration files.
+	+ a python script `create_simdetails_and_paramcombinations.py` that can be used to generate a `simdetails.json` and a `paramcombinations.json` file. This script is not called by any other program and thus solely serves the purpose of generating these two configuration files.
 	+ a `config` folder, where the user may put as many config files as they like in order to use in the simulation (example: the user can choose to have the configuration values in these files read in `perform_single_simulation_run.py`).
 
 The `readonly` folder contains scripts which are not meant to be changed. The folder holds auxillary scripts that are called by `start_simulation.sh`.
@@ -87,7 +87,27 @@ When calling `start_simulation.sh`, some logging data will be printed to the con
 
 Some brief notes on the script `setupsim/perform_single_simulation_run.py`
 --------------------------------------------------------------------------
-The parameters with which `start_simulation.sh` calls `setupsim/perform_single_simulation_run.py` are not in a form that is directly interpretable by a Python script. For this reason, we use an object of class `easysquid.simulationinputparser.SimulationInputParser` in order to get these parameters in "Python-form" first. From this object, we extract:
+The script `start_simulation.sh` calls `setupsim/perform_single_simulation_run.py` with the following six parameters:
 
-- the parameter values in the form of a dictionary, which can then directly be used.
-- the "basename" of the output file, which is in the form `<TIMESTAMP>_<PARAMETERNAMESANDVALUES>_run<RUNINDEX>`. Note the absence of a file extension; the idea behind this is that the user adjust this basename to whatever they want and then uses their favourite means to store data to a file with this name. In the zoo example, we append this basename by `_zoolist` and made it into an HDF5-file.
+- `timestamp`: The current time-stamp.
+- `resultsdir`: The path to the directory for putting the results.
+- `runindex`: The current run-index for the parameter set.
+- `PARAMCOMBINATIONSPATH`: The path to the file `paramcombinations.json`.
+- `actual_key`: The key to be used for getting the parameters from the dictionary in `paramcombinations.json`.
+
+The easiest way to make use of these parameters is to give them to the an object of the class `easysquid.simulationinputparser.SimulationInputParser`. For example the `perform_single_simulation_run.py` could start by the following code:
+
+```
+# get parameters
+params_received_from_start_simulation = sys.argv[1:]
+
+# pass on the parameters to the SimulationInputParser to get them
+# in the correct form
+sip = SimulationInputParser(params_received_from_start_simulation)
+
+# extract the desired data from the SimulationInputParser
+paramsdict = sip.inputdict
+filebasename = sip.filebasename
+```
+
+where `paramsdict` is a dictionary containing the arguments to be passed into the simulation and `filebasename` should be used to name the files containing the results.
