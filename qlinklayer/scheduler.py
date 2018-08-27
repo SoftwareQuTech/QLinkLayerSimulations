@@ -2,6 +2,7 @@
 # Scheduler
 #
 from netsquid import pydynaa
+from netsquid.simutil import sim_time
 from easysquid.toolbox import create_logger
 
 logger = create_logger("logger")
@@ -29,12 +30,12 @@ class RequestScheduler(pydynaa.Entity):
         # Quantum memory management
         self.qmm = qmm
         self.my_free_memory = self.qmm.get_free_mem_ad()
-        self.other_mem = 0
+        self.other_mem = (0, 0)
 
         # Generation tracking
         self.requests = {}
         self.curr_gen = None
-        self.default_gen = (False, None, None, None, None, self.my_free_memory)
+        self.default_gen = self.get_default_gen()
         self.outstanding_gens = []
         self.outstanding_items = {}
         self.timed_out_requests = []
@@ -71,6 +72,14 @@ class RequestScheduler(pydynaa.Entity):
         """
         self.other_mem = mem
 
+    def other_has_resources(self):
+        """
+        Tells if our peer has any resources for the entanglement process
+        :return: bool
+            Whether/not peer has resources
+        """
+        return self.other_mem != (0, 0)
+
     def get_queue(self, request):
         """
         Determines which queue id to add the next request to.
@@ -95,6 +104,8 @@ class RequestScheduler(pydynaa.Entity):
         # Get our available memory
         self.my_free_memory = self.qmm.get_free_mem_ad()
 
+        next_gen = self.get_default_gen()
+
         if self.qmm.is_busy() or self._suspend:
             next_gen = self.default_gen
 
@@ -102,33 +113,45 @@ class RequestScheduler(pydynaa.Entity):
             next_gen = self.curr_gen
 
         # If there are outstanding generations and we have memory, overwrite with a request
-        elif self.outstanding_gens and self._has_resources_for_gen():
+        elif self.outstanding_gens:
             logger.debug("Filling next available gen template")
 
             # Obtain the next template
-            next_gen = self.outstanding_gens.pop(0)
+            gen_template = self.outstanding_gens[0]
 
-            # Reserve resources in the quantum memory
-            comm_q, [storage_q] = self.qmm.reserve_entanglement_pair(1)
-            if comm_q == -1 or storage_q == -1:
-                return self.default_gen
+            # Obtain the request to check for generation options
+            aid = gen_template[1]
+            request = self.get_request(aid)
 
-            # Compute our new free memory after reservation
-            new_free_memory = self.qmm.get_free_mem_ad()
+            # Check if we have the resources to fulfill this generation
+            if self._has_resources_for_gen(request):
+                # Compute our new free memory after reservation
+                free_memory = self.qmm.get_free_mem_ad()
+                gen_template[-1] = free_memory
 
-            # Fill in the template
-            next_gen[2] = comm_q
-            next_gen[3] = storage_q
-            next_gen[-1] = new_free_memory
-            next_gen = tuple(next_gen)
+                # Reserve resources in the quantum memory
+                comm_q, storage_q = self.reserve_resources_for_gen(request)
 
-            logger.debug("Created gen request {}".format(next_gen))
-            self.curr_gen = next_gen
+                # Fill in the template
+                gen_template[2] = comm_q
+                gen_template[3] = storage_q
 
-        else:
-            next_gen = self.default_gen
+                next_gen = tuple(gen_template)
+
+                logger.debug("Created gen request {}".format(next_gen))
+                self.outstanding_gens.pop(0)
+                self.curr_gen = next_gen
 
         return next_gen
+
+    def get_default_gen(self):
+        """
+        Returns the default gen template which is an info request
+        :return: tuple
+            Represents a gen template for an info request
+        """
+        self.my_free_memory = self.qmm.get_free_mem_ad()
+        return False, None, None, None, None, self.my_free_memory
 
     def mark_gen_completed(self, gen_id):
         """
@@ -176,23 +199,50 @@ class RequestScheduler(pydynaa.Entity):
 
         return removed_gens
 
-    def _has_resources_for_gen(self):
+    def _has_resources_for_gen(self, request):
         """
         Checks if we have the resources to service a generation request.
         :return: bool
             True/False whether we have resources
         """
+        other_free_comm, other_free_storage = self.other_mem
+        my_free_comm, my_free_storage = self.my_free_memory
+
         # Verify whether we have the resources to satisfy this request
         logger.debug("Checking if we can satisfy next gen")
-        if not self.other_mem > 0:
-            logger.debug("Peer memory size {} cannot satisfy gen!".format(self.other_mem))
+        if not other_free_comm:
+            logger.debug("Peer memory has no available communication qubits!")
             return False
 
-        elif not self.my_free_memory > 0:
-            logger.debug("Local memory size {} lcannot satisfy gen!".format(self.my_free_memory))
+        elif not my_free_comm > 0:
+            logger.debug("Local memory has no available communication qubits!")
             return False
+
+        if request.store:
+            if not other_free_storage:
+                logger.debug("Requested storage but peer memory has no available storage qubits!")
+                return False
+
+            elif not my_free_storage:
+                logger.debug("Requested storage but local memory has no available storage qubits!")
+                return False
 
         return True
+
+    def reserve_resources_for_gen(self, request):
+        """
+        Allocates the appropriate communication qubit/storage qubit given the specifications of the request
+        :param request: obj `~easysquid.egp.EGPRequest`
+            Specifies whether we want to store the entangled qubit or keep it in the communication id
+        :return: int, int
+            Qubit IDs to use for the communication process ad storage process
+        """
+        if request.store:
+            comm_q, storage_q = self.qmm.reserve_entanglement_pair()
+        else:
+            comm_q = self.qmm.reserve_communication_qubit()
+            storage_q = comm_q
+        return comm_q, storage_q
 
     def _schedule_request(self, evt):
         """

@@ -1,5 +1,6 @@
 import abc
 from easysquid.puppetMaster import PM_SQLDataSequence
+from easysquid.toolbox import EasySquidException
 
 
 class EGPDataSequence(PM_SQLDataSequence, metaclass=abc.ABCMeta):
@@ -32,8 +33,9 @@ class EGPCreateSequence(EGPDataSequence):
     Collects CREATE events from an EGP including the CREATE events
     """
     def get_column_names(self):
-        return ["Timestamp", "Node ID", "Create ID", "Create_Time", "Max Time", "Min Fidelity", "Num Pairs",
-                "Other ID", "Priority", "Purpose ID", "Success"]
+        # TODO ITEMS AFTER "Timestamp and "Node ID" currently have to be sorted....
+        return ["Timestamp", "Node ID", "Create ID", "Create_Time", "Max Time", "Measure Directly", "Min Fidelity",
+                "Num Pairs", "Other ID", "Priority", "Purpose ID", "Store", "Success"]
 
     def getData(self, time, source=None):
         nodeID, request = source[0].get_create_info()
@@ -77,6 +79,83 @@ class EGPStateSequence(EGPDataSequence):
         nodeID = source[0].egp.node.nodeID
         val = [nodeID] + [n for sl in [[z.real, z.imag] for z in state.flat] for n in sl]
         return [val, True]
+
+
+class EGPQubErrSequence(EGPDataSequence):
+    """
+    Collects Qub-errors of from measurement outcomes at the nodes and the midpoint
+    We use the following entries:
+        -1: No data
+        0 : No qub-error
+        1 : Qub-error
+    """
+    def get_column_names(self):
+        return ["Timestamp", "Z_err", "X_err", "Success"]
+
+    def getData(self, time, source=None):
+        # Get scenarios
+        scenarioA = source[0]
+        scenarioB = source[1]
+
+        # Get latest measurement data from A
+        ent_id, meas_dataA = scenarioA.get_measurement(remove=False)
+        if ent_id is None:
+            # No data yet
+            return [[-1, -1], False]
+
+        # Check if B also got the measurement data yet
+        _, meas_dataB = scenarioB.get_measurement(ent_id=ent_id, remove=True)
+
+        if meas_dataB is None:
+            # B hasn't received the corresponding OK yet, try next time
+            return [[-1, -1], False]
+
+        # Got measurement data from both A and B, delete entry from A
+        scenarioA.get_measurement(ent_id=ent_id, remove=True)
+
+        # Check qub-err
+
+        # Get basis and bit choices
+        basis_choiceA = meas_dataA[0]
+        basis_choiceB = meas_dataB[0]
+        bit_choiceA = meas_dataA[1]
+        bit_choiceB = meas_dataB[1]
+
+        # Get meas outcomes from midpoint
+        (m1, m2) = meas_dataA[2]
+
+        # Check consistency
+        if not (m1, m2) == meas_dataB[2]:
+            raise EasySquidException("Inconsistent measurement outcomes as nodes. Classical error?")
+
+        # Check if equal basis choices
+        if basis_choiceA != basis_choiceB:
+            return [-1, -1], False
+
+        # Possible Bell meas outcomes in ideal meas
+        ideal_outcomes_standard = {"equal_bits": [(0, 0), (1, 0)],
+                                   "unequal_bits": [(0, 1), (1, 1)]}
+        ideal_outcomes_hadamard = {"equal_bits": [(0, 0), (0, 1)],
+                                   "unequal_bits": [(1, 0), (1, 1)]}
+
+        if basis_choiceA == 0:  # Standard basis
+            if bit_choiceA == bit_choiceB:  # Equal bits
+                ideal_outcomes = ideal_outcomes_standard["equal_bits"]
+            else:
+                ideal_outcomes = ideal_outcomes_standard["unequal_bits"]
+            if (m1, m2) in ideal_outcomes:  # (no QubErr)
+                return [0, -1], True
+            else:  # (QubErr)
+                return [1, -1], True
+        else:  # Hadamard basis
+            if bit_choiceA == bit_choiceB:  # Equal bits
+                ideal_outcomes = ideal_outcomes_hadamard["equal_bits"]
+            else:
+                ideal_outcomes = ideal_outcomes_hadamard["unequal_bits"]
+            if (m1, m2) in ideal_outcomes:  # (no QubErr)
+                return [-1, 0], True
+            else:  # (QubErr)
+                return [-1, 1], True
 
 
 class MHPNodeEntanglementAttemptSequence(EGPDataSequence):

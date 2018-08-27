@@ -631,7 +631,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
         try:
             [msg, deltaT] = self.conn.get_as(self.node.nodeID)
             logger.debug("{} Received message {}".format(sim_time(), msg))
-            respM, passM = msg
+            respM, passM = msg[0]
             reply_message = MHPReply(response_data=respM, pass_data=passM)
             self._process_reply(reply_message)
 

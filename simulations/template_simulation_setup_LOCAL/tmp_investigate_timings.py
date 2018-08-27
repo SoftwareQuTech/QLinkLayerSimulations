@@ -3,81 +3,11 @@ import matplotlib.pyplot as plt
 import sqlite3
 from argparse import ArgumentParser
 from collections import defaultdict
+import numpy as np
+import os
 
 
 SECOND = 1e9
-
-
-def parse_request_data_from_log(results_path):
-    """
-    Parses collected request/ok data points for log file
-    :param results_path: str
-        Path to directory containing request.log
-    :return: dict, list, dict, list, int
-        requests - dict of key (createID, sourceID, otherID)
-                           value [sourceID, otherID, numPairs, createID, createTime,maxTime]
-                 These are successfully submitted request
-        rejected_requests - list of [sourceID, otherID, numPairs, timeStamp] of rejected requests
-        gens - dict of key (createID, sourceID, otherID)
-                       value list of [createID, sourceID, otherID, mhpSeq, createTime]
-                 Generations corresponding to successfully submitted requests
-        all_gens - list of (createTime, (createID, sourceID, otherID, mhpSeq))
-        total_requested_pairs - Number of pairs requested (successful + unsuccessful requests)
-    """
-    with open('{}/request.log'.format(results_path)) as f:
-        lines = f.read().splitlines()
-
-        requests = {}
-        rejected_requests = []
-        gens = defaultdict(list)
-        all_gens = []
-        total_requested_pairs = 0
-        recorded_mhp_seqs = []
-
-        for line in lines:
-            elements = line.split(' ')
-            data = elements[5:]
-
-            timeStamp = float(data[0].strip(','))
-
-            # Request create data
-            if len(data) > 12:
-                json_string = ''.join(data[3:19]).strip('),').replace('None', 'null').replace("'", '"')
-                request_vars = json.loads(json_string)
-                # Extract request info
-                sourceID = int(data[2].strip('(,'))
-
-                otherID = request_vars['otherID']
-                numPairs = request_vars['num_pairs']
-                total_requested_pairs += numPairs
-                maxTime = request_vars['max_time']
-
-                # Extract creation info
-                createID = request_vars['create_id']
-                createTime = request_vars['create_time']
-
-                if createID is not None and createTime is not None:
-                    requests[(createID, sourceID, otherID)] = [sourceID, otherID, numPairs, createID, createTime,
-                                                               maxTime]
-                else:
-                    rejected_requests.append([sourceID, otherID, numPairs, timeStamp])
-
-            # OK Response data
-            else:
-                createID = int(data[2].strip('(,'))
-                sourceID = int(data[3].strip('(,'))
-                otherID = int(data[4].strip(','))
-                createTime = float(data[8].strip(','))
-                mhpSeq = int(data[5].strip(','))
-                if mhpSeq in recorded_mhp_seqs:
-                    continue
-                else:
-                    recorded_mhp_seqs.append(mhpSeq)
-
-                gens[(createID, sourceID, otherID)].append([createID, sourceID, otherID, mhpSeq, createTime])
-                all_gens.append((createTime, (createID, sourceID, otherID, mhpSeq)))
-
-    return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
 
 
 def parse_request_data_from_sql(results_path):
@@ -110,7 +40,7 @@ def parse_request_data_from_sql(results_path):
         c.execute("SELECT * FROM {}".format(create_table))
         for entry in c.fetchall():
             timestamp, nodeID, create_id, create_time, max_time, min_fidelity, num_pairs, otherID, priority,\
-                purpose_id, succ = entry
+                purpose_id, store, succ = entry
 
             total_requested_pairs += num_pairs
 
@@ -138,42 +68,6 @@ def parse_request_data_from_sql(results_path):
             all_gens.append((t_create, (createID, originID, otherID, MHPSeq)))
 
     return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
-
-
-def parse_attempt_data_from_log(results_path, all_gens, gen_starts):
-    """
-    Parses collected attempt data points for log file
-    :param results_path: str
-        Path to directory containing node_attempt.log containing attempts from both nodes
-    :param all_gens: list of (createTime, (createID, sourceID, otherID, mhpSeq))
-        All generations that occurred during the simulation
-    :param gen_starts: dict of key (createID, sourceID, otherID, mhpSeq)
-                               value createTime
-        Contains the completion time of each generation
-    :return: node_attempts, gen_attempts
-        node_attempts - dict of key nodeID
-                                value num_attempts
-            Containing the number of attempts made by each node
-        gen_attempts - dict of key (createID, sourceID, otherID, mhpSeq)
-                               value int
-            Containing the number of attempts made for the generation
-    """
-    gen_attempts = defaultdict(int)
-    node_attempts = defaultdict(int)
-    with open('{}/node_attempt.log'.format(results_path)) as f:
-        for line in f:
-            elements = line.split(' ')
-            timestamp = float(elements[5].strip(','))
-            nodeID = int(elements[7].strip(','))
-            node_attempts[nodeID] += 1
-
-            for gen in all_gens:
-                genID = gen[1]
-                if gen_starts[genID] < timestamp < gen[0]:
-                    gen_attempts[genID] += 1
-                    break
-
-    return node_attempts, gen_attempts
 
 
 def parse_attempt_data_from_sql(results_path, all_gens, gen_starts):
@@ -215,6 +109,43 @@ def parse_attempt_data_from_sql(results_path, all_gens, gen_starts):
                     break
 
     return node_attempts, gen_attempts
+
+def get_all_attempts_from_sql(results_path):
+    """
+    tmp function use above...
+    """
+    conn = sqlite3.connect(results_path)
+    c = conn.cursor()
+    c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    all_tables = [t[0] for t in c.fetchall()]
+
+    node_attempt_tables = list(filter(lambda table_name: "Node_EGP_Attempts" in table_name, all_tables))
+    node_attempts = []
+    for attempt_table in node_attempt_tables:
+        c.execute("SELECT * FROM {}".format(attempt_table))
+        for entry in c.fetchall():
+            node_attempts.append(entry)
+
+    return node_attempts
+
+
+def get_all_entries_from_sql(results_path, name):
+    """
+    tmp function use above...
+    """
+    conn = sqlite3.connect(results_path)
+    c = conn.cursor()
+    c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    all_tables = [t[0] for t in c.fetchall()]
+
+    tables = list(filter(lambda table_name: name in table_name, all_tables))
+    entries = []
+    for table in tables:
+        c.execute("SELECT * FROM {}".format(table))
+        for entry in c.fetchall():
+            entries.append(entry)
+
+    return entries
 
 
 def extract_successful_unsuccessful_creates(requests, gens):
@@ -379,53 +310,98 @@ def plot_throughput(all_gens):
     plt.show()
 
 
-def main(results_path):
-    (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path)
-    satisfied_creates, unsatisfied_creates = extract_successful_unsuccessful_creates(requests, gens)
-    request_times = get_request_latencies(satisfied_creates, gens)
-    gen_starts, gen_times = get_gen_latencies(requests, gens)
-    node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, all_gens, gen_starts)
+def main(results_path, no_plot=False):
+    if results_path == "":
+        folders = []
+        for folder in os.listdir("./"):
+            if folder[:4] == "2018":
+                folders.append(folder)
+        last_folder = sorted(folders)[-1]
 
-    print("Number of satisfied CREATE requests: {} out of total {}".format(len(satisfied_creates), len(requests)))
-    print("Satisfied CREATE requests: {}".format(satisfied_creates))
-    print("Unsatisfied CREATE requests: {}".format(unsatisfied_creates))
-    print("Rejected CREATE requests: {}".format(rejected_requests))
+        # Find datafile
+        for file in os.listdir("./{}".format(last_folder)):
+            if file[-3:] == ".db":
+                break
+        results_path = "./{}/{}".format(last_folder, file)
+        print("Looking at results in {}".format(results_path))
+        # print("./{}/{}".format(last_folder, file))
 
-    if request_times:
-        print("Average request latency: {}".format(sum(request_times) / len(request_times) / 1e9))
-        print("Minimum request latency: {}".format(min(request_times) / 1e9))
-        print("Maximum request latency: {}".format(max(request_times) / 1e9))
+    # node_attempts = get_all_entries_from_sql(results_path, "Node_EGP_Attempts")
+    # nr_attempts = len(node_attempts)
+    #
+    # print("Node attempts:")
+    # for i in range(nr_attempts):
+    #     print("    Node attempt {}: {}".format(i + 1, node_attempts[i]))
+    #
+    # try:
+    #     time_diff = node_attempts[2][0] - node_attempts[0][0]
+    #     print("time_diff: {}".format(time_diff))
+    # except IndexError:
+    #     pass
+    #
+    # mid_attempts = get_all_entries_from_sql(results_path, "Midpoint_EGP_Attempts")
+    # print("Midpoint attempts:")
+    # for entry in mid_attempts:
+    #     print("    Mid attempt: {}".format(entry))
+    #
+    Attempts = get_all_entries_from_sql(results_path, "Node_EGP_Attempts")
+    # print("Attempts:")
+    # for entry in Attempts:
+    #     print("    Attempt: {}".format(entry))
+    print("Nr of attempts: {}".format(len(Attempts) / 2))
 
-    if gen_times:
-        print("Average generation time: {}".format(sum(gen_times) / len(all_gens) / 1e9))
-        print("Minimum generation time: {}".format(min(gen_times) / 1e9))
-        print("Maximum generation time: {}".format(max(gen_times) / 1e9))
+    OKs = get_all_entries_from_sql(results_path, "EGP_OKs")
+    # print("OKs:")
+    # for entry in OKs:
+    #     print("    OK: {}".format(entry))
+    print("Nr of OKs: {}".format(len(OKs) / 2))
+    #
+    # states = get_all_entries_from_sql(results_path, "EGP_Qubit_States")
+    # print("Fidelities:")
+    # for entry in states:
+    #     m_data = entry[2:34]
+    #     m = np.matrix([[m_data[i] + 1j * m_data[i+1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
+    #     fidelity = calc_fidelity(m)
+    #     print("    Fidelity: {}".format(fidelity))
 
-    if gen_attempts:
-        avg_attempt_per_gen = sum(gen_attempts.values()) / 2 / len(all_gens)
-        print("Average number of attempts per successful generation: {}".format(avg_attempt_per_gen))
-        print("Minimum number of attempts for a generation: {}".format(min(gen_attempts.values())))
-        print("Maximum number of attempts for a generation: {}".format(max(gen_attempts.values())))
-        print("Average probability of generating entanglement per attempt: {}".format(1 / avg_attempt_per_gen))
+    QubErrs = get_all_entries_from_sql(results_path, "EGP_QubErr")
+    print("QubErrs:")
+    Z_err = []
+    X_err = []
+    for entry in QubErrs:
+        # print("    QubErr: {}".format(entry))
+        if entry[1] in [0, 1]:
+            Z_err.append(entry[1])
+        if entry[2] in [0, 1]:
+            X_err.append(entry[2])
+    if len(Z_err) > 0:
+        print("Z_err: {}".format(sum(Z_err)/len(Z_err)))
+    else:
+        print("Z_err: NO DATA")
+    if len(X_err) > 0:
+        print("X_err: {}".format(sum(X_err)/len(X_err)))
+    else:
+        print("X_err: NO DATA")
 
-    print("Total number of generated pairs: {} of total requested {}".format(len(all_gens), total_requested_pairs))
-    print("Total number of entanglement attempts for successful generations: {}".format(sum(gen_attempts.values()) / 2))
-    print("Total node attempts during simulation: {}".format(node_attempts))
 
-    if gen_attempts:
-        plot_gen_attempts(gen_attempts)
-
-    if gen_times:
-        plot_gen_times(gen_times)
-
-    if all_gens:
-        plot_throughput(all_gens)
+def calc_fidelity(d_matrix):
+    """
+    Computes fidelity to the state 1/sqrt(2)(|01>+|10>)
+    :param d_matrix: Density matrix
+    :type d_matrix: :obj:`numpy.matrix`
+    :return: The fidelity
+    :rtype: float
+    """
+    psi = np.matrix([[0, 1, 1, 0]]).transpose() / np.sqrt(2)
+    return np.real((psi.H * d_matrix * psi)[0, 0])
 
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--results-path', required=True, type=str,
+    parser.add_argument('--results-path', required=False, default="", type=str,
                         help="Path to the directory containing the simulation results")
+    parser.add_argument('--no-plot', default=False, action='store_true',
+                        help="Whether to produce plots or not")
 
     args = parser.parse_args()
     return args
@@ -433,4 +409,4 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    main(results_path=args.results_path)
+    main(results_path=args.results_path, no_plot=args.no_plot)
