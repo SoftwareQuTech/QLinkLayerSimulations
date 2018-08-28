@@ -8,21 +8,40 @@ import sys
 # Mandatory paramaters
 #######################
 
-description_string = "A brief simulation test run"
-easysquid_directory = "/home/dahlberg/EasySquid/"  # full absolute path
-netsquid_directory = "/home/dahlberg/NetSQUID/"  # full absolute path
-number_of_runs = 3
-outputdirname = "zoo"
+description_string = "Testing to setup a simulation"
+easysquid_directory = "/Users/adahlberg/Documents/EasySquid/"  # full absolute path
+netsquid_directory = "/Users/adahlberg//Documents/NetSquid/"  # full absolute path
+number_of_runs = 1
+outputdirname = "simulation_results"
 
 
 #########################
 # Optional parameters
 #########################
 
-opt_params = {"number_of_lions": 4,
-              "number_of_tigers": [2, 3],
-              "number_of_remaining_wildebeasts": [5.0, 3.3, 2.5]
-             }
+cycles = 10000
+qlinklayer_directory = "/Users/adahlberg/Documents/QLinkLayer/"
+
+opt_params = {
+    "config": qlinklayer_directory + "simulations/template_simulation_setup_LOCAL/setupsim/config/" +
+              # "no_losses/no_noise.json",
+              "lab_configs/network_with_cav_no_conv.json",
+    "origin_bias": 1,
+    "create_prob": 1,
+    "min_pairs": 1,
+    "max_pairs": 1,
+    "tmax_pair": 10000,
+    "request_overlap": True,
+    "request_cycle": 0,
+    "num_requests": 0,
+    "max_sim_time": (10 + cycles * 12980) * 1e-9,
+    "max_wall_time": 10000,
+    "enable_pdb": False,
+    "alphaA": 0.1,
+    "alphaB": 0.1,
+    "measure_directly": True,
+    "t0": 20,
+    "save_additional_data": True}
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #
