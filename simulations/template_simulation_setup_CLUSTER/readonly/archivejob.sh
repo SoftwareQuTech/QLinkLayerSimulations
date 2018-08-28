@@ -14,7 +14,7 @@ JOB_DIR=$3
 # Concatenate output CSV files and move to project space
 mkdir -p $JOB_DIR
 
-mv -r $TMP_DIR/* $JOB_DIR
+mv $TMP_DIR/* $JOB_DIR
 
 # Cleanup
 rmdir $TMP_DIR

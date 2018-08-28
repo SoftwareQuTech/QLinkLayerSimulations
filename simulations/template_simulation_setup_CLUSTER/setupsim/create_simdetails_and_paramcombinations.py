@@ -96,8 +96,8 @@ def save_to_csv(param_combinations_keys, nrruns, filename):
     If not, then abort using CTRL+C""".format(filename))
     with open(filename, 'w') as simdetailsfile:
         for key in param_combinations_keys:
-            for _ in range(nrruns):
-                simdetailsfile.write("{}\n".format(key))
+            for i in range(nrruns):
+                simdetailsfile.write("{} {}\n".format(key, i))
 
 
 save_to_ini(data=general_params, filename=sim_dir + "setupsim/simdetails.ini")

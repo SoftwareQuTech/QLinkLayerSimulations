@@ -244,11 +244,12 @@ sbatch --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -
 # Get the number of cores
 nrcores=`sara-get-num-cores`
 
-# Move to the first item in the pool
-stopos next -p $STOPOS_POOL
 
 for ((i=1; i<=nrcores; i++)); do
 (
+    # Move to the first item in the pool
+    stopos next -p $STOPOS_POOL
+
     # Check if there are more items in the pool
     if [ "$STOPOS_RC" != "OK" ]; then
         break
@@ -278,13 +279,10 @@ for ((i=1; i<=nrcores; i++)); do
     fi
     
     # Schedule the simulation
-    python3 $runsimulation $timestamp $resultsdir $runindex $PARAMCOMBINATIONSPATH $actual_key
+    python3 $runsimulation $timestamp $TMP_DIR $runindex $PARAMCOMBINATIONSPATH $actual_key
     
     # Remove the parameters from the pool
     stopos remove -p $STOPOS_POOL
-
-    # Go to the next item in the pool
-    stopos next -p $STOPOS_POOL
 ) &
 done
 wait
