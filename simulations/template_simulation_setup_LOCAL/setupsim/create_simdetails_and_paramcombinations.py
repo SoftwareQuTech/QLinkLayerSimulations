@@ -17,11 +17,12 @@ outputdirname = "simulation_results"
 #########################
 
 cycles = 10000
+qlinklater_directory = "/Users/adahlberg/Documents/QLinkLayer/"
 
 opt_params = {
-    "config": '/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup_LOCAL/setupsim/config/' +
-              # 'no_losses/no_noise.',
-              'lab_configs/network_with_cav_no_conv.json',
+    "config": qlinklater_directory + "simulations/template_simulation_setup_LOCAL/setupsim/config/" +
+              # "no_losses/no_noise.json",
+              "lab_configs/network_with_cav_no_conv.json",
     "origin_bias": 1,
     "create_prob": 1,
     "min_pairs": 1,
