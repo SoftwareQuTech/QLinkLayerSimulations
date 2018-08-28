@@ -1,0 +1,21 @@
+{
+    "general_params": {
+        "easysquid_directory": "/home/timpc/Desktop/EasySquid/EasySquid/",
+        "netsquid_directory": "/home/timpc/Desktop/NetSQUID-tmp/",
+        "description": "A brief simulation test run",
+        "number_of_runs": 3,
+        "outputdirname": "zoo"
+    },
+    "opt_params": {
+        "number_of_lions": 4,
+        "number_of_tigers": [
+            2,
+            3
+        ],
+        "number_of_remaining_wildebeasts": [
+            5.0,
+            3.3,
+            2.5
+        ]
+    }
+}
