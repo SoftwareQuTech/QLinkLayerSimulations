@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import sqlite3
 from argparse import ArgumentParser
 from collections import defaultdict
@@ -7,6 +6,7 @@ from easysquid.toolbox import create_logger
 from netsquid.simutil import SECOND
 import json
 import math
+import matplotlib.pyplot as plt
 
 
 logger = create_logger("logger")
@@ -530,7 +530,7 @@ def main(results_path, no_plot=False):
         print("")
         if gen_attempts:
             print("Average probability of generating entanglement per attempt: {}".format(1 / avg_attempt_per_gen))
-        print("Average probability of generating entanglement per MHP cycle: {}".format(1 / avg_attempt_per_gen * fractionA))
+            print("Average probability of generating entanglement per MHP cycle: {}".format(1 / avg_attempt_per_gen * fractionA))
     except KeyError:
         pass
     try:

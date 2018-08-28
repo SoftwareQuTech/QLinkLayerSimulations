@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -p short # requested parition (normal, short, staging, ...)
-#SBATCH -t 0:10:00 # wall clock time
+#SBATCH -p normal # requested parition (normal, short, staging, ...)
+#SBATCH -t 10:00:00 # wall clock time
 #SBATCH -n 10 # requested processes
 
 # This script:

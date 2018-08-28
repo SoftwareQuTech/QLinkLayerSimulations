@@ -9,8 +9,8 @@ import sys
 #######################
 
 description_string = "Testing to setup a simulation"
-easysquid_directory = "/Users/adahlberg/Documents/EasySquid/"  # full absolute path
-netsquid_directory = "/Users/adahlberg//Documents/NetSquid/"  # full absolute path
+easysquid_directory = "/home/dahlberg/EasySquid/"  # full absolute path
+netsquid_directory = "/home/dahlberg/NetSquid/"  # full absolute path
 number_of_runs = 1
 outputdirname = "simulation_results"
 
@@ -19,13 +19,16 @@ outputdirname = "simulation_results"
 # Optional parameters
 #########################
 
-cycles = 10000
-qlinklayer_directory = "/Users/adahlberg/Documents/QLinkLayer/"
+cycles = 100000
+qlinklayer_directory = "/home/dahlberg/QLinkLayer/"
+config_dir = "simulations/template_simulation_setup_CLUSTER/setupsim/config"
+config_files=[]
+for root, dirs, files in os.walk(qlinklayer_directory + config_dir):
+    for filename in files:
+        config_files.append(root + "/" + filename)
 
 opt_params = {
-    "config": qlinklayer_directory + "simulations/template_simulation_setup_LOCAL/setupsim/config/" +
-              # "no_losses/no_noise.json",
-              "lab_configs/network_with_cav_no_conv.json",
+    "config": config_files,
     "origin_bias": 1,
     "create_prob": 1,
     "min_pairs": 1,
