@@ -253,7 +253,8 @@ do
 
 		# CORE OF THIS SCRIPT: running the python script with the input parameters
 		python3 $runsimulation $timestamp $resultsdir $runindex $PARAMCOMBINATIONSPATH $actual_key
-	
+#		python3 -m cProfile -o egp_simulation.prof $runsimulation $timestamp $resultsdir $runindex $PARAMCOMBINATIONSPATH $actual_key
+
 
 	done
 done
