@@ -38,7 +38,7 @@ opt_params = {
     "request_cycle": 0,
     "num_requests": 0,
     "max_sim_time": (10 + cycles * 12980) * 1e-9,
-    "max_wall_time": 10000,
+    "max_wall_time": 100000,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
