@@ -10,7 +10,7 @@ import sys
 
 description_string = "Testing to setup a simulation"
 easysquid_directory = "/home/dahlberg/EasySquid/"  # full absolute path
-netsquid_directory = "/home/dahlberg/NetSquid/"  # full absolute path
+netsquid_directory = "/home/dahlberg/NetSQUID/"  # full absolute path
 number_of_runs = 1
 outputdirname = "simulation_results"
 
@@ -21,7 +21,7 @@ outputdirname = "simulation_results"
 
 cycles = 100000
 qlinklayer_directory = "/home/dahlberg/QLinkLayer/"
-config_dir = "simulations/template_simulation_setup_CLUSTER/setupsim/config"
+config_dir = "simulations/template_simulation_setup/setupsim/config"
 config_files=[]
 for root, dirs, files in os.walk(qlinklayer_directory + config_dir):
     for filename in files:

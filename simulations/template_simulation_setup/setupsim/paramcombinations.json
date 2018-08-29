@@ -1,6 +1,6 @@
 {
     "0": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -19,7 +19,7 @@
         "save_additional_data": true
     },
     "1": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -38,7 +38,7 @@
         "save_additional_data": true
     },
     "2": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -57,7 +57,7 @@
         "save_additional_data": true
     },
     "3": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -76,7 +76,7 @@
         "save_additional_data": true
     },
     "4": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/lab_configs/network_with_cav_no_conv.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_no_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -95,7 +95,7 @@
         "save_additional_data": true
     },
     "5": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/lab_configs/network_with_cav_with_conv.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_with_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -114,7 +114,7 @@
         "save_additional_data": true
     },
     "6": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/lab_configs/network_no_cav_with_conv.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_with_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -133,7 +133,7 @@
         "save_additional_data": true
     },
     "7": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/lab_configs/network_no_cav_no_conv.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_no_conv.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -152,7 +152,7 @@
         "save_additional_data": true
     },
     "8": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
@@ -171,7 +171,7 @@
         "save_additional_data": true
     },
     "9": {
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup_CLUSTER/setupsim/config/no_losses/no_noise.json",
+        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/no_noise.json",
         "origin_bias": 1,
         "create_prob": 1,
         "min_pairs": 1,
