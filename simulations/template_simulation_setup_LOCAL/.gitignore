@@ -1,9 +1,0 @@
-# all simulation data files will have names that start with
-# a timestamp, and all timestamps will start with "20" 
-# (2018, 2019, 2020) so in order to prevent the (possibly huge
-# amount of) simulation data to also be pushed to a remote 
-# repository, we let git ignore these
-20*
-
-# all cached python files
-*.pyc 
