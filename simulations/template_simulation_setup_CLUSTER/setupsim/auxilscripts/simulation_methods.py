@@ -256,6 +256,10 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
 
     # Start with a step size of 1 millisecond
     timestep = min(1e3, max_sim_time * SECOND)
+    if max_wall_time == 0 and (0 < max_sim_time < float('inf')):
+        max_wall_time = float('inf')
+    if max_sim_time == 0 and (0 < max_wall_time < float('inf')):
+        max_sim_time = float('inf')
 
     last_time_log = time()
     try:

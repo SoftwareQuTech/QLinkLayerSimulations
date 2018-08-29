@@ -7,6 +7,7 @@ from netsquid.simutil import SECOND
 import json
 import math
 import matplotlib.pyplot as plt
+import os
 
 
 logger = create_logger("logger")
@@ -202,7 +203,7 @@ def parse_quberr_from_sql(results_path):
     :param results_path: The path to the SQL file
     :type results_path: str
     :return: Average QubErr
-    :rtype: tuple or floats
+    :rtype: tuple of tuples of floats
     """
     # Get the states_data
     quberr_data = parse_table_data_from_sql(results_path, "EGP_QubErr")
@@ -210,21 +211,25 @@ def parse_quberr_from_sql(results_path):
     # Parse the states data to compute fideli    print("QubErrs:")
     Z_err = []
     X_err = []
+    Z_data_points = 0
+    X_data_points = 0
     for entry in quberr_data:
         if entry[1] in [0, 1]:
             Z_err.append(entry[1])
+            Z_data_points += 1
         if entry[2] in [0, 1]:
             X_err.append(entry[2])
-    if len(Z_err) > 0:
-        avg_Z_err = sum(Z_err) / len(Z_err)
+            X_data_points += 1
+    if Z_data_points > 0:
+        avg_Z_err = sum(Z_err) / Z_data_points
     else:
         avg_Z_err = None
-    if len(X_err) > 0:
-        avg_X_err = sum(X_err) / len(X_err)
+    if X_data_points > 0:
+        avg_X_err = sum(X_err) / X_data_points
     else:
         avg_X_err = None
 
-    return avg_Z_err, avg_X_err
+    return (avg_Z_err, Z_data_points), (avg_X_err, X_data_points)
 
 
 def calc_throughput(all_gens, window=1):
@@ -419,8 +424,27 @@ def plot_throughput(all_gens):
     ax.grid()
     plt.show()
 
+def get_key_and_run_from_path(results_path):
+    """
+    results_path is assumed to be of the form "path/timestamp_key_i_run_j.db".
+    This function returns i and j as s tuple (i,j)
+    :param results_path:
+    :return: (str, str)
+    """
+    substrings = results_path.split('_')
+    for i in range(len(substrings)):
+        if substrings[i] == "key":
+            break
+    key_str = substrings[i + 1]
+    run_str = substrings[i + 3]
 
-def main(results_path, no_plot=False):
+    # strip of possible filetype from run
+    run_str = run_str.split('.')[0]
+
+    return key_str, run_str
+
+
+def analyse_single_file(results_path, no_plot=False):
     # Get create and ok data from sql file to compute latencies and throughput
     (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path)
     # Check (u)successful creates
@@ -437,7 +461,9 @@ def main(results_path, no_plot=False):
     fidelities = parse_fidelities_from_sql(results_path)
 
     # Get QubErr
-    avg_Z_err, avg_X_err = parse_quberr_from_sql(results_path)
+    Z_data, X_data = parse_quberr_from_sql(results_path)
+    avg_Z_err, Z_data_points = Z_data
+    avg_X_err, X_data_points = X_data
 
     # Check if there is an additional data file
     try:
@@ -449,6 +475,14 @@ def main(results_path, no_plot=False):
     print("|Simulation data: |")
     print("-------------------")
     print("Analysing data in file {}".format(results_path))
+    key_str, run_str = get_key_and_run_from_path(results_path)
+    path_to_folder = "/".join(results_path.split('/')[:-1])
+    with open(path_to_folder + "/paramcombinations.json") as json_file:
+        arguments = json.load(json_file)[key_str]
+    print("Arguments in paramcombinations.py for this simulation was:")
+    for arg_name, arg in arguments.items():
+        print("    {}={}".format(arg_name, arg))
+    print("")
     try:
         print("Total 'real time' was {} ns".format(additional_data["total_real_time"]))
     except KeyError:
@@ -488,11 +522,11 @@ def main(results_path, no_plot=False):
         print("")
 
     if avg_Z_err:
-        print("Average QubErr in Z-basis {}".format(avg_Z_err))
+        print("Average QubErr in Z-basis {} (from {} data points)".format(avg_Z_err, Z_data_points))
     else:
         print("Average QubErr in Z-basis NO_DATA")
     if avg_X_err:
-        print("Average QubErr in X-basis {}".format(avg_X_err))
+        print("Average QubErr in X-basis {} (from {} data points)".format(avg_X_err, X_data_points))
         print("")
     else:
         print("Average QubErr in X-basis NO_DATA")
@@ -551,6 +585,22 @@ def main(results_path, no_plot=False):
     if all_gens:
         if not no_plot:
             plot_throughput(all_gens)
+
+
+def main(results_path, no_plot):
+    # Check if results_path is a single .db file or a folder containing such
+    if results_path.endswith('.db'):
+        analyse_single_file(results_path, no_plot)
+    else:
+        if results_path.endswith('/'):
+            results_path = results_path[:-1]
+        for entry in os.listdir(results_path):
+            if entry.endswith('.db'):
+                print("")
+                print("====================================")
+                analyse_single_file(results_path + "/" + entry, no_plot)
+                print("====================================")
+                print("")
 
 
 def parse_args():
