@@ -7,3 +7,6 @@
 
 # all cached python files
 *.pyc 
+
+# Files from Cartesius
+slurm*.out
