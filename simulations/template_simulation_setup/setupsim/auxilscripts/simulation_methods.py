@@ -203,7 +203,7 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1):
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
                    request_overlap=False, request_cycle=0, num_requests=1, max_sim_time=float('inf'),
-                   max_wall_time=float('inf'), enable_pdb=False, measure_directly=False, t0=0, t_cycle=0,
+                   max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, measure_directly=False, t0=0, t_cycle=0,
                    alphaA=0.1, alphaB=0.1, save_additional_data=True):
     # Save additional data
     if save_additional_data:
@@ -255,11 +255,17 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
     start_time = time()
 
     # Start with a step size of 1 millisecond
-    timestep = min(1e3, max_sim_time * SECOND)
-    if max_wall_time == 0 and (0 < max_sim_time < float('inf')):
+    if max_wall_time == 0:
         max_wall_time = float('inf')
-    if max_sim_time == 0 and (0 < max_wall_time < float('inf')):
+    if max_sim_time == 0:
         max_sim_time = float('inf')
+    if max_mhp_cycle == 0:
+        max_mhp_cycle = float('inf')
+    max_sim_time = min(max_sim_time, mhp_conn.t_cycle * max_mhp_cycle / SECOND)
+    timestep = min(1e3, max_sim_time * SECOND)
+    print("max_sim_time: {}".format(max_sim_time))
+    print("timestep: {}".format(timestep))
+    print("mhp_cycle: {}".format(mhp_conn.t_cycle))
 
     last_time_log = time()
     try:
@@ -270,6 +276,7 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
             wall_time_sim_step_start = time()
             if timestep == float('inf') or timestep == -float('inf'):
                 raise RuntimeError()
+            print("timestep: {}".format(timestep))
             sim_run(duration=timestep)
             previous_timestep = timestep
             wall_time_sim_step_stop = time()
