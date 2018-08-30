@@ -340,6 +340,64 @@ def get_gen_latencies(requests, gens):
     return gen_starts, gen_times
 
 
+def parse_raw_queue_data(raw_queue_data):
+    """
+    Computes average and max queue length and total time items spent in queue
+    given data from the sqlite file
+    :param raw_queue_data: list
+        data extracted from the sqlite file
+    :return: tuple
+        (queue_lens, times, max_queue_len, avg_queue_len, tot_time_in_queue)
+        queue_lens: List of queue lengths at times in 'times
+        times: Times where corresponding to the queue lengths data points
+        max_queue_len: Max queue length
+        avg_queue_len: Average queue length
+        tot_time_in_queue: Total time items spent in queue.
+    """
+    tot_time_in_queue = 0
+    queue_lens = [0]
+    times = [0]
+    for entry in raw_queue_data:
+        time, change, _, _, _ = entry
+        time_diff = time - times[-1]
+        tot_time_in_queue += time_diff * queue_lens[-1]
+        queue_lens.append(queue_lens[-1] + change)
+        times.append(time)
+    tot_time_diff = times[-1] - times[1]
+    if min(queue_lens) < 0:
+        raise RuntimeError("Something went wrong, negative queue length")
+    return (queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue)
+
+
+def plot_queue_data(queue_lens, times):
+    """
+    Plots the queue length over time from data extracted using 'parse_raw_queue_data'
+    :param queue_lens: [queue_lensA, queue_lensB]
+    :param times: [qtimesA, qtimesB]
+    :return: None
+    """
+    colors = ['red', 'green']
+    labels = ['Node A', 'Node B']
+    for i in range(2):
+        x_points = []
+        y_points = []
+        for j in range(len(queue_lens[i])):
+            # Make points to make straight lines when queue len is not changing
+            x_points.append(times[i][j])
+            y_points.append(queue_lens[i][j])
+
+            if (j + 1) < len(times[i]):
+                x_points.append(times[i][j + 1])
+                y_points.append(queue_lens[i][j])
+
+        plt.plot(x_points, y_points, color=colors[i], label=labels[i])
+
+    plt.ylabel("Queue lengths")
+    plt.xlabel("Real time (s)")
+    plt.legend(loc='upper right')
+    plt.show()
+
+
 def plot_gen_attempts(gen_attempts):
     """
     Plots a histogram and a distribution of the number of attempts for generations in the simulation
@@ -445,6 +503,14 @@ def get_key_and_run_from_path(results_path):
 
 
 def analyse_single_file(results_path, no_plot=False):
+    # TODO tmp
+    data = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A")
+    left_sum = 0
+    for entry in data:
+        print(entry)
+        left_sum += entry[1]
+    print("sum: {}".format(left_sum))
+
     # Get create and ok data from sql file to compute latencies and throughput
     (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path)
     # Check (u)successful creates
@@ -464,6 +530,10 @@ def analyse_single_file(results_path, no_plot=False):
     Z_data, X_data = parse_quberr_from_sql(results_path)
     avg_Z_err, Z_data_points = Z_data
     avg_X_err, X_data_points = X_data
+
+    # Get queue data
+    raw_queue_dataA = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A")
+    raw_queue_dataB = parse_table_data_from_sql(results_path, "EGP_Local_Queue_B")
 
     # Check if there is an additional data file
     try:
@@ -573,6 +643,24 @@ def analyse_single_file(results_path, no_plot=False):
         print("Probability that a scheduled request was on A {}".format(additional_data["create_request_origin_bias"]))
     except KeyError:
         pass
+
+    # Extract data from raw queue data
+    if raw_queue_dataA:
+        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA = parse_raw_queue_data(raw_queue_dataA)
+        print("")
+        print("Max queue length at A: {}".format(max_queue_lenA))
+        print("Average queue length at A: {}".format(avg_queue_lenA))
+        print("Total time items spent in queue at A: {} ns".format(tot_time_in_queueA))
+    if raw_queue_dataB:
+        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB = parse_raw_queue_data(raw_queue_dataA)
+        print("")
+        print("Max queue length at B: {}".format(max_queue_lenB))
+        print("Average queue length at B: {}".format(avg_queue_lenB))
+        print("Total time items spent in queue at B: {} ns".format(tot_time_in_queueB))
+
+    if raw_queue_dataA and raw_queue_dataB:
+        if not no_plot:
+            plot_queue_data([queue_lensA, queue_lensB], [qtimesA, qtimesB])
 
     if gen_attempts:
         if not no_plot:

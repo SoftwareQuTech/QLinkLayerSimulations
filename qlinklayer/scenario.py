@@ -247,6 +247,7 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         super(MeasureBeforeSuccessScenario, self).__init__(egp=egp)
 
         # EGP internal objects
+        self.node = egp.node
         self.qmm = egp.qmm
 
         # Data storage from collected info

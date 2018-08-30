@@ -205,7 +205,7 @@ class NodeCentricEGP(EGP):
     ERR_EXPIRE = 46
     ERR_CREATE = 47
 
-    def __init__(self, node, conn=None, err_callback=None, ok_callback=None):
+    def __init__(self, node, conn=None, err_callback=None, ok_callback=None, throw_queue_events=False):
         """
         Node Centric Entanglement Generation Protocol.  Uses a Distributed Queue Protocol and Scheduler to coordinate
         the execution of requests of entanglement production between two peers.
@@ -239,11 +239,11 @@ class NodeCentricEGP(EGP):
         }
 
         # Create local share of distributed queue
-        self.dqp = DistributedQueue(node=self.node)
+        self.dqp = DistributedQueue(node=self.node, throw_dist_queue_events=throw_queue_events)
         self.dqp.add_callback = self._add_to_queue_callback
 
         # Create the request scheduler
-        self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
+        self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm, throw_outstanding_req_events=throw_queue_events)
         self.request_timeout_handler = EventHandler(self._request_timeout_handler)
         self._wait(self.request_timeout_handler, entity=self.scheduler, event_type=self.scheduler._EVT_REQ_TIMEOUT)
 

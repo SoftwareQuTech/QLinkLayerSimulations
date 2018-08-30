@@ -38,13 +38,14 @@ opt_params = {
     "num_requests": 0,
     "max_sim_time": 0,
     "max_wall_time": 0,
-    "max_mhp_cycle": 20000,
+    "max_mhp_cycle": 10000,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
     "measure_directly": True,
     "t0": 20,
-    "save_additional_data": True}
+    "save_additional_data": True,
+    "collect_queue_data": True}
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #

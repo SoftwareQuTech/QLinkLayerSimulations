@@ -11,13 +11,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "1": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/no_noise.json",
@@ -31,13 +32,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "2": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_with_conv.json",
@@ -51,13 +53,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "3": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_no_conv.json",
@@ -71,13 +74,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "4": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_no_conv.json",
@@ -91,13 +95,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "5": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_with_conv.json",
@@ -111,13 +116,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "6": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
@@ -131,13 +137,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "7": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
@@ -151,13 +158,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "8": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
@@ -171,13 +179,14 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     },
     "9": {
         "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
@@ -191,12 +200,13 @@
         "num_requests": 0,
         "max_sim_time": 0,
         "max_wall_time": 0,
-        "max_mhp_cycle": 20000,
+        "max_mhp_cycle": 10000,
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 20,
-        "save_additional_data": true
+        "save_additional_data": true,
+        "collect_queue_data": true
     }
 }

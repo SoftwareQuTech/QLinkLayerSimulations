@@ -18,7 +18,7 @@ class LocalQueue(Entity):
 
     """
 
-    def __init__(self, wsize=None, maxSeq=None, scheduleAfter=0):
+    def __init__(self, wsize=None, maxSeq=None, scheduleAfter=0, throw_events=False):
 
         # Largest possible sequence number before wraparound
         if maxSeq is None:
@@ -46,6 +46,15 @@ class LocalQueue(Entity):
         # Current sequence number that can be consumed
         self.popSeq = 0
 
+        self.throw_events = throw_events
+        if self.throw_events:
+            self._EVT_ITEM_ADDED = EventType("QUEUE ITEM ADDED", "Item added to the local queue")
+            self._EVT_ITEM_REMOVED = EventType("QUEUE ITEM REMOVED", "Item removed to the local queue")
+
+            # Data stored for data collection
+            self._last_seq_added = None
+            self._last_seq_removed = None
+
     def add(self, originID, request):
         """
         Add item to the Queue with a new sequence number, used by master node only.
@@ -57,6 +66,13 @@ class LocalQueue(Entity):
 
         # There is space, create a new queue item
         seq = self.nextSeq
+
+        logger.debug("Adding item with seq={} to local queue".format(seq))
+
+        if self.throw_events:
+            self._schedule_now(self._EVT_ITEM_ADDED)
+            self._last_seq_added = seq
+
         self.add_with_id(originID, seq, request)
 
         # Increment the next sequence number to assign
@@ -76,7 +92,12 @@ class LocalQueue(Entity):
 
     def remove(self, seq):
         if seq in self.queue:
-            self.queue.pop(seq)
+            q = self.queue.pop(seq)
+            logger.debug("Removing item with seq={} to local queue".format(q.seq))
+
+            if self.throw_events:
+                self._schedule_now(self._EVT_ITEM_REMOVED)
+                self._last_seq_removed = q.seq
 
         if seq == self.popSeq:
             self.popSeq = self._get_next_pop_seq()
@@ -103,8 +124,15 @@ class LocalQueue(Entity):
             # Remove from queue
             self.queue.pop(self.popSeq, None)
 
+            logger.debug("Removing item with seq={} to local queue".format(q.seq))
+
+            if self.throw_events:
+                self._schedule_now(self._EVT_ITEM_REMOVED)
+                self._last_seq_removed = q.seq
+
             # Increment lower bound of sequence numbers to return next
             self.popSeq = self._get_next_pop_seq()
+
 
             # Return item
             return q
@@ -166,9 +194,17 @@ class LocalQueue(Entity):
         item.scheduleAt = scheduleAt + sim_time()
         item.schedule()
 
+    def _reset_data(self):
+        """
+        Resets the variables storing the data for data collection
+        :return:
+        """
+        self._last_seq_added = None
+        self._last_seq_removed = None
+
 
 class TimeoutLocalQueue(LocalQueue):
-    def __init__(self, wsize=None, maxSeq=None, scheduleAfter=0.0):
+    def __init__(self, wsize=None, maxSeq=None, scheduleAfter=0.0, throw_events=False):
         """
         Implements a local queue that supports timing out queue items asynchronously
         :param wsize: int
@@ -178,7 +214,7 @@ class TimeoutLocalQueue(LocalQueue):
         :param scheduleAfter: float
             Default schedule delay for added queue items
         """
-        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter)
+        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter, throw_events=throw_events)
         self._EVT_PROC_TIMEOUT = EventType("QUEUE ITEM REMOVED", "Triggers when an item has successfully been removed")
         self._EVT_SCHEDULE = EventType("LOCAL QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
         self.timed_out_items = []

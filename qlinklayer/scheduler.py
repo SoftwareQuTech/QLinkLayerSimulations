@@ -13,7 +13,7 @@ class RequestScheduler(pydynaa.Entity):
     Stub for a scheduler to decide how we assign and consume elements of the queue.
     """
 
-    def __init__(self, distQueue, qmm):
+    def __init__(self, distQueue, qmm, throw_outstanding_req_events=False):
 
         # Distributed Queue to schedule from
         self.distQueue = distQueue
@@ -40,6 +40,15 @@ class RequestScheduler(pydynaa.Entity):
         self.outstanding_items = {}
         self.timed_out_requests = []
         self._suspend = False
+
+        self._throw_outstanding_req_events = throw_outstanding_req_events
+        if self._throw_outstanding_req_events:
+            self._EVT_ADD_OUTSTANDING_REQ = pydynaa.EventType("ADDED REQUEST", "New outstanding request")
+            self._EVT_REM_OUTSTANDING_REQ = pydynaa.EventType("REMOVED REQUEST", "One less outstanding request")
+
+            # Data stored for data collection
+            self._last_aid_added = None
+            self._last_aid_removed = None
 
     def suspend_generation(self, t):
         """
@@ -197,6 +206,10 @@ class RequestScheduler(pydynaa.Entity):
             key = (request.create_id, request.otherID)
             self.outstanding_items.pop(key, None)
 
+            if self._throw_outstanding_req_events:
+                self._last_aid_removed = aid
+                self._schedule_now(self._EVT_REM_OUTSTANDING_REQ)
+
         return removed_gens
 
     def _has_resources_for_gen(self, request):
@@ -270,6 +283,11 @@ class RequestScheduler(pydynaa.Entity):
         logger.debug("Scheduling request {}".format(aid))
         key = (request.create_id, request.otherID)
         self.outstanding_items[key] = aid
+
+        if self._throw_outstanding_req_events:
+            self._last_aid_added = aid
+            self._schedule_now(self._EVT_ADD_OUTSTANDING_REQ)
+
         self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
 
         logger.debug("Creating gen templates for request {}".format(vars(request)))
@@ -309,3 +327,12 @@ class RequestScheduler(pydynaa.Entity):
         self.outstanding_gens = list(filter(lambda gen: gen[1] != aid, self.outstanding_gens))
         logger.debug("Pruned generations {}".format(removed))
         return removed
+
+    def _reset_outstanding_req_data(self):
+        """
+        Resets the variables storing the data for data collection
+        :return:
+        """
+        self._last_aid_added = None
+        self._last_aid_removed = None
+
