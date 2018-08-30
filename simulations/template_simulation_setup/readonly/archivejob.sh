@@ -17,7 +17,7 @@ mkdir -p $JOB_DIR
 mv $TMP_DIR/* $JOB_DIR
 
 # Move the slurm file
-mv "${SIMULATION_DIR}/slurm-${JOB_ID}.out" $JOB_ID
+mv "${SIMULATION_DIR}/slurm-${JOB_ID}.out" $JOB_DIR
 
 # Cleanup
 rmdir $TMP_DIR
