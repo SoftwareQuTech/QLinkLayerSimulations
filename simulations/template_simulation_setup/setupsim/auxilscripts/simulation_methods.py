@@ -124,7 +124,7 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
         request_cycle = scenarioA.egp.mhp.conn.t_cycle / SECOND
 
     # Check so we don't have an infinite loop
-    if num_requests == 0:
+    if num_requests == float('inf'):
         if max_sim_time == float('inf'):
             raise ValueError("Cannot have infinite number of requests and infinite simulation time")
         else:
