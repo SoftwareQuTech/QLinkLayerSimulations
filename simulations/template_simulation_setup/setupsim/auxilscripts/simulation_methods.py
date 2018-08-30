@@ -233,6 +233,9 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=
 
     return egpA, egpB
 
+def _calc_prob_success_handler(midpoint, additional_data):
+    p_succ = midpoint._prob_of_success
+    additional_data["p_succ"] = p_succ
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
@@ -289,6 +292,12 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
 
     # Hook up data collectors to the scenarios
     collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path, measure_directly, collect_queue_data=collect_queue_data)
+    
+    # Schedule event handler to listen the probability of success being computed
+    if save_additional_data:
+        midpoint = mhp_conn.midPoint
+        p_succ_handler = ns.EventHandler(lambda event: _calc_prob_success_handler(midpoint, additional_data))
+        ns.Entity()._wait_once(p_succ_handler, entity=midpoint, event_type=midpoint._EVT_CALC_PROB)
 
     # Start the simulation
     network.start()
