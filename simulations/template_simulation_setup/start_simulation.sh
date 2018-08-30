@@ -41,22 +41,19 @@ echo 'Usage : --outputdescription [y/n] --copysimdetails [y/n] --copyconfigurati
 echo $'\nNOTE BEFOREHAND: it is advised to remain paying attention to the simulation until the message "Starting simulations..." appears in case the preparation of the simulation runs does not finish successfully\n'
 
 # relevant files
-runsimulation=setupsim/perform_single_simulation_run.py
-simdetailsfile=setupsim/simdetails.ini
-paramcombinationsfile=setupsim/paramcombinations.json
-configdir=setupsim/config
-paramsetfile=setupsim/paramset.csv
-archivejobfile=readonly/archivejob.sh
+runsimulation=$SIMULATION_DIR/setupsim/perform_single_simulation_run.py
+simdetailsfile=$SIMULATION_DIR/setupsim/simdetails.ini
+paramcombinationsfile=$SIMULATION_DIR/setupsim/paramcombinations.json
+configdir=$SIMULATION_DIR/setupsim/config
+paramsetfile=$SIMULATION_DIR/setupsim/paramset.csv
+archivejobfile=$SIMULATION_DIR/readonly/archivejob.sh
 
 # Get simulation details
 # TODO Check that requiered arguments are set
-. $SIMULATION_DIR/$simdetailsfile
+. $simdetailsfile
 
 # get the date and time as a single timestamp in ISO8601 format YYYY-MM-DDTHH:MM:SS+02:00
 timestamp=$(date '+%Y-%m-%dT%H:%M:%S%Z')
-
-# Path to the Paramterer combinations file
-PARAMCOMBINATIONSPATH=$SIMULATION_DIR/$paramcombinationsfile
 
 # Set the Python Path
 # TODO should we set this here?
@@ -139,15 +136,15 @@ export PYTHONPATH=$PYTHONPATH:$NETSQUIDDIR
 echo '- Getting software versions of NetSquid and EasySquid'
 
 
-EASYSQUIDHASH=$(./readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")
-NETSQUIDHASH=$(./readonly/get_git_hash.sh -dir "$NETSQUIDDIR")
+EASYSQUIDHASH=$(.$SIMULATOION_DIR/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")
+NETSQUIDHASH=$(.$SIMULATION_DIR/readonly/get_git_hash.sh -dir "$NETSQUIDDIR")
 
 
 #####################################
 # Create files for logging purposes #
 #####################################
 
-resultsdir=$timestamp\_$OUTPUTDIRNAME
+resultsdir=$SIMULATION_DIR/$timestamp\_$OUTPUTDIRNAME
 echo "- Creating directory $resultsdir for storing data"
 
 # create new directory
@@ -218,7 +215,7 @@ if [ "$RUNONCLUSTER" == 'y' ] ; then
     # Setup the stopos pool
     export STOPOS_POOL=pool_simulation
     stopos create
-    stopos add $SIMULATION_DIR/$paramsetfile
+    stopos add $paramsetfile
 else
     TMP_DIR=$resultsdir
 fi
@@ -298,9 +295,9 @@ for ((i=1; i<=processes; i++)); do
         # Schedule the simulation
         if [ "$PROFILING" == 'y' ]; then
             profile_file="$resultsdir"/"$timestamp"_key_"$actual_key"_run_"$runindex".prof
-            python3 -m cProfile -o $profile_file $runsimulation $timestamp $TMP_DIR $runindex $PARAMCOMBINATIONSPATH $actual_key
+            python3 -m cProfile -o $profile_file $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
         else
-            python3 $runsimulation $timestamp $TMP_DIR $runindex $PARAMCOMBINATIONSPATH $actual_key
+            python3 $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
         fi
 
         if [ "$RUNONCLUSTER" == 'y' ]; then

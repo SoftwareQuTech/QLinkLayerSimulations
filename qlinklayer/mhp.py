@@ -1,6 +1,6 @@
 import abc
 from collections import defaultdict
-from math import exp
+from math import exp, isclose
 from easysquid.services import Service, TimedServiceProtocol
 from easysquid.simpleLink import NodeCentricMHP
 from easysquid.easyfibre import HeraldedFibreConnection
@@ -662,12 +662,21 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
     ERR_LOCAL = 31
     ERR_TIMEOUT = 32
 
-    def __init__(self, timeStep, t0, node, connection, alpha):
+    def __init__(self, timeStep, t0, node, connection, alpha, message_timeout=None):
         self.status = self.STAT_IDLE
-        self.timeout_handler = None
+
+        self.timeout_handler = EventHandler(self.comm_timeout_handler)
+        self.time_of_message_sent = None
         self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
+
         self._EVT_ENTANGLE_ATTEMPT = EventType("ENTANGLE ATTEMPT", "Triggered when the MHP attempts entanglement")
         super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
+
+        if message_timeout is None:
+            # TODO WHat should this be?
+            self.message_timeout = 2 * self.timeStep
+        else:
+            self.message_timeout = message_timeout
         self.set_bright_state_population(alpha=alpha)
 
     def reset_protocol(self):
@@ -681,10 +690,10 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.status = self.STAT_IDLE
         self.aid = None
 
-        if self.timeout_handler:
-            logger.debug("Clearing timeout handler!")
-            self._dismiss(self.timeout_handler)
-            self.timeout_handler = None
+        # if self.timeout_handler:
+        #     logger.debug("Clearing timeout handler!")
+        #     self._dismiss(self.timeout_handler)
+        #     self.timeout_handler = None
 
     def _has_resources(self):
         """
@@ -744,8 +753,8 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         Schedules a communication timeout event and attaches a handler that resets the protocol
         :return:
         """
-        self.timeout_handler = EventHandler(self.comm_timeout_handler)
-        self.timeout_event = self._schedule_after(2 * self.timeStep, self._EVT_COMM_TIMEOUT)
+        self.time_of_message_sent = sim_time()
+        self.timeout_event = self._schedule_after(self.message_timeout, self._EVT_COMM_TIMEOUT)
         self._wait_once(self.timeout_handler, event=self.timeout_event)
 
     def comm_timeout_handler(self, evt):
@@ -755,10 +764,18 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             The event that triggered the timeout handler
         """
         logger.debug("Timeout handler triggered!")
-        if self.status == self.STAT_BUSY:
-            logger.warning("Timed out waiting for communication response!")
-            self._handle_error(None, self.ERR_TIMEOUT)
-            self.reset_protocol()
+        if self.time_of_message_sent is not None:
+            if isclose(sim_time() - self.time_of_message_sent, self.message_timeout):
+                logger.debug("Timeout is still valid")
+                if self.status == self.STAT_BUSY:
+                    logger.warning("Timed out waiting for communication response!")
+                    self._handle_error(None, self.ERR_TIMEOUT)
+                    self.reset_protocol()
+                    return
+                else:
+                    logger.debug("MHP is idle, timeout not relevant anymore")
+                    return
+        logger.debug("Timeout is not valid anymore")
 
     def init_entanglement_request(self, comm_q, storage_q):
         """
@@ -794,10 +811,10 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         # Extract info from the message
         respM, passM = reply_message.response_data, reply_message.pass_data
 
-        if self.timeout_handler:
-            logger.debug("Clearing timeout handler!")
-            self._dismiss(self.timeout_handler)
-            self.timeout_handler = None
+        # if self.timeout_handler:
+        #     logger.debug("Clearing timeout handler!")
+        #     self._dismiss(self.timeout_handler)
+        #     self.timeout_handler = None
 
         # Got some kind of command
         if isinstance(respM, int):

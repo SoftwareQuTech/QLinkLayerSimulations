@@ -229,6 +229,18 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
         additional_data["alphaA"] = alphaA
         additional_data["alphaB"] = alphaB
 
+    # Get start time
+    start_time = time()
+
+    # Check if any max_times should be infinite
+    if max_wall_time == 0:
+        max_wall_time = float('inf')
+    if max_sim_time == 0:
+        max_sim_time = float('inf')
+    if max_mhp_cycle == 0:
+        max_mhp_cycle = float('inf')
+    max_sim_time = min(max_sim_time, mhp_conn.t_cycle * max_mhp_cycle / SECOND)
+
     # Set up the Measure Immediately scenarios at nodes alice and bob
     if measure_directly:
         alice_scenario = MeasureBeforeSuccessScenario(egp=egpA)
@@ -251,21 +263,10 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
     if enable_pdb:
         pdb.set_trace()
 
-    logger.info("Beginning simulation")
-    start_time = time()
-
     # Start with a step size of 1 millisecond
-    if max_wall_time == 0:
-        max_wall_time = float('inf')
-    if max_sim_time == 0:
-        max_sim_time = float('inf')
-    if max_mhp_cycle == 0:
-        max_mhp_cycle = float('inf')
-    max_sim_time = min(max_sim_time, mhp_conn.t_cycle * max_mhp_cycle / SECOND)
     timestep = min(1e3, max_sim_time * SECOND)
-    print("max_sim_time: {}".format(max_sim_time))
-    print("timestep: {}".format(timestep))
-    print("mhp_cycle: {}".format(mhp_conn.t_cycle))
+
+    logger.info("Beginning simulation")
 
     last_time_log = time()
     try:
@@ -276,7 +277,6 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
             wall_time_sim_step_start = time()
             if timestep == float('inf') or timestep == -float('inf'):
                 raise RuntimeError()
-            print("timestep: {}".format(timestep))
             sim_run(duration=timestep)
             previous_timestep = timestep
             wall_time_sim_step_stop = time()
