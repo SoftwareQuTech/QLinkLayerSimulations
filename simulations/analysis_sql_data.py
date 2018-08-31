@@ -503,14 +503,6 @@ def get_key_and_run_from_path(results_path):
 
 
 def analyse_single_file(results_path, no_plot=False):
-    # TODO tmp
-    data = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A")
-    left_sum = 0
-    for entry in data:
-        print(entry)
-        left_sum += entry[1]
-    print("sum: {}".format(left_sum))
-
     # Get create and ok data from sql file to compute latencies and throughput
     (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path)
     # Check (u)successful creates
