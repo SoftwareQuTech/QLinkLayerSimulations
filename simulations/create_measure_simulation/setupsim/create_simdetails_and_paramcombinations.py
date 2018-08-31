@@ -140,18 +140,14 @@ for value in list(opt_params.values()):
 # and as values all possible combinations of the parameters
 # (that is, `paramcombinations` is like the cartesian product
 # of all parameter choices).
-# First try if user already defined this dictionary
-try:
-    paramcombinations
-except NameError:
-    paramcombinations = {}
-    counter = 0
-    for parametertuple in itertools.product(*allparams):
-        pardict = {}
-        for keyindex, key in enumerate(list(opt_params.keys())):
-            pardict[key] = parametertuple[keyindex]
-        paramcombinations[counter] = pardict
-        counter += 1
+paramcombinations = {}
+counter = 0
+for parametertuple in itertools.product(*allparams):
+    pardict = {}
+    for keyindex, key in enumerate(list(opt_params.keys())):
+        pardict[key] = parametertuple[keyindex]
+    paramcombinations[counter] = pardict
+    counter += 1
 
 
 # write the cartesian product to a file
