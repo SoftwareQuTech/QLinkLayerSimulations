@@ -627,6 +627,10 @@ def analyse_single_file(results_path, no_plot=False):
         if gen_attempts:
             print("Average probability of generating entanglement per attempt: {}".format(1 / avg_attempt_per_gen))
             print("Average probability of generating entanglement per MHP cycle: {}".format(1 / avg_attempt_per_gen * fractionA))
+        try:
+            print("Probability of midpoint declaring success: {}".format(additional_data["p_succ"]))
+        except KeyError:
+            pass
     except KeyError:
         pass
     try:

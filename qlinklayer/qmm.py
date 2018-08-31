@@ -2,6 +2,7 @@
 # Quantum Memory Management Unit
 #
 from easysquid.toolbox import create_logger, EasySquidException
+from easysquid.easygate import ZGate
 
 
 logger = create_logger("logger")
@@ -61,7 +62,7 @@ class QuantumMemoryManagement:
         :return: float
             The amount of time it takes to apply the z gate to the electron
         """
-        return self.node.qmem.get_z_time(0)
+        return self.node.qmem.get_operation_time(ZGate(), 0)
 
     def qubit_in_use(self, id):
         """
