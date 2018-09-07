@@ -187,6 +187,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         self.comm_timeout_handler = EventHandler(partial(self._comm_timeout_handler, ack_id=ack_id))
         comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
+        logger.debug("Scheduling communication timeout event after {}.".format(10 * comm_delay))
         self.comm_timeout_event = self._schedule_after(10 * comm_delay, self._EVT_COMM_TIMEOUT)
         self._wait_once(self.comm_timeout_handler, event=self.comm_timeout_event)
 
@@ -229,6 +230,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Set up a timeout event for passing to higher layers
         self.timed_out_items.append(queue_item)
+        logger.debug("Scheduling queue timeout event now.")
         self._schedule_now(self._EVT_QUEUE_TIMEOUT)
 
     def _schedule_item_handler(self, evt):
@@ -238,6 +240,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             The schedule event that triggered this handler
         """
         logger.debug("{} Schedule handler triggered in dist queue".format(self.node.nodeID))
+        logger.debug("Scheduling schedule event now.")
         self._schedule_now(self._EVT_SCHEDULE)
 
     def process_data(self):
@@ -422,6 +425,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             if self._throw_dist_queue_events:
                 self._last_aid_added = (qid, qseq)
+                logger.debug("Scheduling item added event now.")
                 self._schedule_now(self._EVT_ITEM_ADDED)
 
             # Send ack
@@ -481,6 +485,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             if self._throw_dist_queue_events:
                 self._last_aid_added = (qid, qseq)
+                logger.debug("Scheduling item added event now.")
                 self._schedule_now(self._EVT_ITEM_ADDED)
 
         # Schedule the item
@@ -689,6 +694,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         if self._throw_dist_queue_events:
             self._last_aid_added = (qid, queue_seq)
+            logger.debug("Scheduling item added event now.")
             self._schedule_now(self._EVT_ITEM_ADDED)
 
         # Check if we are waiting for any acks from the slave
@@ -725,6 +731,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         if self._throw_dist_queue_events:
             self._last_aid_added = (qid, queue_seq)
+            logger.debug("Scheduling item added event now.")
             self._schedule_now(self._EVT_ITEM_ADDED)
 
         # Send an add message to the other side

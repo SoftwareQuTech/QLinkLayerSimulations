@@ -168,8 +168,10 @@ class EGP(EasyProtocol):
         logger.debug("Issuing error {} with data {}".format(err, err_data))
         if self.err_callback:
             self.err_callback(result=(err, err_data))
+            logger.debug("Scheduling error event now.")
             self._schedule_now(self._EVT_ERROR)
         else:
+            logger.debug("Scheduling error event now.")
             self._schedule_now(self._EVT_ERROR)
             return err, err_data
 
@@ -453,6 +455,7 @@ class NodeCentricEGP(EGP):
 
             # Add the request to the DQP
             self._add_to_queue(creq)
+            logger.debug("Scheduling create event now.")
             self._schedule_now(self._EVT_CREATE)
             return (creq.create_id, creq.create_time)
 
@@ -496,7 +499,7 @@ class NodeCentricEGP(EGP):
         # Check if we can satisfy the request within the given time frame
         attempt_latency = self.mhp_service.get_cycle_time(self.node)
         min_time = attempt_latency * creq.num_pairs
-        if min_time > creq.max_time:
+        if (min_time > creq.max_time) and (creq.max_time != 0):
             logger.error("Requested max time is too short")
             return self.ERR_UNSUPP
 
@@ -872,12 +875,14 @@ class NodeCentricEGP(EGP):
         # Pass back the okay and clean up
         self.issue_ok(result)
         self.scheduler.mark_gen_completed(gen_id=(aid, comm_q, storage_q))
+        logger.debug("Scheduling entanglement completed event now.")
         self._schedule_now(self._EVT_ENT_COMPLETED)
 
         # Update number of remaining pairs on request, remove if completed
         if creq.num_pairs == 1:
             logger.debug("Generated final pair, removing request")
             self.scheduler.clear_request(aid=aid)
+            logger.debug("Scheduling request completed event now.")
             self._schedule_now(self._EVT_REQ_COMPLETED)
 
         elif creq.num_pairs >= 2:

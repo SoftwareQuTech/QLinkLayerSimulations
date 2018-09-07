@@ -62,6 +62,7 @@ class RequestScheduler(pydynaa.Entity):
         resume_handler = pydynaa.EventHandler(self._resume_generation)
         EVT_RESUME = pydynaa.EventType("RESUME", "Triggers when we believe peer finished correction")
         self._wait_once(resume_handler, entity=self, event_type=EVT_RESUME)
+        logger.debug("Scheduling resume event after {}.".format(t))
         self._schedule_after(t, EVT_RESUME)
 
     def _resume_generation(self, evt):
@@ -208,6 +209,7 @@ class RequestScheduler(pydynaa.Entity):
 
             if self._throw_outstanding_req_events:
                 self._last_aid_removed = aid
+                logger.debug("Scheduling remove outstanding request event now.")
                 self._schedule_now(self._EVT_REM_OUTSTANDING_REQ)
 
         return removed_gens
@@ -286,6 +288,7 @@ class RequestScheduler(pydynaa.Entity):
 
         if self._throw_outstanding_req_events:
             self._last_aid_added = aid
+            logger.debug("Scheduling add outstanding request event now.")
             self._schedule_now(self._EVT_ADD_OUTSTANDING_REQ)
 
         self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
@@ -313,6 +316,7 @@ class RequestScheduler(pydynaa.Entity):
             request = self.requests[aid]
             self.timed_out_requests.append(request)
             self.clear_request(aid=aid)
+            logger.debug("Scheduling request timeout event now.")
             self._schedule_now(self._EVT_REQ_TIMEOUT)
 
     def _prune_request_generations(self, aid):

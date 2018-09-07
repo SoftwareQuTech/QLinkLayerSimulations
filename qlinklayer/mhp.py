@@ -538,6 +538,7 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
         outcome = self.midPoint.measure(self.qubits[self.idA], self.qubits[self.idB])
         self.last_outcome = outcome
+        logger.debug("Scheduling entanglement event now.")
         self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         # Check current classical messages
@@ -754,6 +755,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return:
         """
         self.time_of_message_sent = sim_time()
+        logger.debug("Scheduling communication timeout event after {}.".format(self.message_timeout))
         self.timeout_event = self._schedule_after(self.message_timeout, self._EVT_COMM_TIMEOUT)
         self._wait_once(self.timeout_handler, event=self.timeout_event)
 
@@ -913,6 +915,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
             # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
+            logger.debug("Scheduling entanglement event now.")
             self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         except Exception as err_data:

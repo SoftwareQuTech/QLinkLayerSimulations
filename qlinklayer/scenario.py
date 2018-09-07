@@ -66,6 +66,7 @@ class EGPSimulationScenario(SimulationScenario):
         result = self.egp.create(creq=request)
         if result is not None:
             self.create_storage.append((self.egp.node.nodeID, request))
+            logger.debug("Scheduling create event now.")
             self._schedule_now(self._EVT_CREATE)
 
     def get_create_info(self, remove=True):
@@ -87,6 +88,7 @@ class EGPSimulationScenario(SimulationScenario):
             The result of our create request
         """
         self._ok_callback(result)
+        logger.debug("Scheduling OK event now.")
         self._schedule_now(self._EVT_OK)
 
     @abc.abstractmethod
@@ -105,6 +107,7 @@ class EGPSimulationScenario(SimulationScenario):
             Result information containing the error
         """
         self._err_callback(result)
+        logger.debug("Scheduling error event now.")
         self._schedule_now(self._EVT_ERR)
 
     @abc.abstractmethod
