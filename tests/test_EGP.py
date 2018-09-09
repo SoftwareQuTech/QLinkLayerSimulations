@@ -765,7 +765,7 @@ class TestNodeCentricEGP(unittest.TestCase):
                                       priority=10)
 
         # max_time that is too short for us to fulfill
-        unsupptime_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=0, purpose_id=1,
+        unsupptime_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1e-9, purpose_id=1,
                                         priority=10)
 
         egpA.create(creq=node_self_request)
