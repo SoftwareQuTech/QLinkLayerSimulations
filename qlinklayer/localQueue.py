@@ -99,8 +99,14 @@ class LocalQueue(Entity):
                 self._schedule_now(self._EVT_ITEM_REMOVED)
                 self._last_seq_removed = q.seq
 
-        if seq == self.popSeq:
-            self.popSeq = self._get_next_pop_seq()
+            if seq == self.popSeq:
+                self.popSeq = self._get_next_pop_seq()
+
+            return q
+
+        else:
+            logger.warning("Sequence number {} not found in local queue".format(seq))
+            return None
 
     def pop(self):
         """

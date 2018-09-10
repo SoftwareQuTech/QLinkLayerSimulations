@@ -189,6 +189,7 @@ class EGPQubErrSequence(EGPDataSequence):
 #         return data, True
 
 
+
 class EGPLocalQueueSequence(EGPDataSequence):
     """
     Collects additions and removals of items from a local queue.

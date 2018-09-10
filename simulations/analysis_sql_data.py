@@ -609,6 +609,7 @@ def plot_throughput(all_gens, results_path, no_plot=False, save_figs=False, anal
         plt.show()
 
 
+
 def get_key_and_run_from_path(results_path):
     """
     results_path is assumed to be of the form "path/timestamp_key_i_run_j.db".
@@ -925,8 +926,10 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
                         save_output=save_output, analysis_folder=analysis_folder)
         except KeyError:
             pass
+
     except KeyError:
         pass
+
     try:
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
         output_data("Probability of scheduling a request per request cycle was {} at node A and {} at node B".format(

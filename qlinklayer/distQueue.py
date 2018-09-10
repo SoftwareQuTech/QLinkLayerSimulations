@@ -92,6 +92,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Initialize queues
         self.queueList = []
+        self.numLocalQueues = numQueues
         for j in range(numQueues):
             q = TimeoutLocalQueue(throw_events=throw_local_queue_events)
             self.queueList.append(q)
@@ -591,6 +592,23 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Add to backlog for later processing
             logger.debug("ADD to backlog")
             self.backlogAdd.append(request)
+
+    def remove(self, qid, qseq):
+        # Check if the QID specified is valid
+        if qid < 0 or qid >= self.numLocalQueues:
+            logger.error("Invalid QID {} selected when specifying item removal".format(qid))
+
+        # Attempt to remove the item from the specified local queue
+        removed_item = self.queueList[qid].remove(qseq)
+
+        # Check if we actually removed anything
+        if removed_item is None:
+            logger.debug("Successfully removed queue item ({}, {}) from distributed queue".format(qid, qseq))
+
+        else:
+            logger.debug("Failed to remove queue item ({}, {}) from distributed queue".format(qid, qseq))
+
+        return removed_item
 
     def local_pop(self, qid=0):
         """

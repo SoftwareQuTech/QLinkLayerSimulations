@@ -139,6 +139,7 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
 def create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs, max_pairs, tmax_pair,
                      request_cycle, num_requests, measure_directly,
                      additional_data=None):
+
     if request_cycle == 0:
         # Use t_cycle of MHP for the request cycle
         request_cycle = egpA.mhp.conn.t_cycle

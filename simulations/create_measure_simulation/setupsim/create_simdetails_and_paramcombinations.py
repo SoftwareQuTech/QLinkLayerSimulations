@@ -105,7 +105,6 @@ general_params = {"EASYSQUIDDIR": easysquid_directory,
                   "NUMRUNS": number_of_runs,
                   "OUTPUTDIRNAME": outputdirname
                   }
-
 if "number_of_runs" in list(general_params.keys()):
     assert (type(number_of_runs) == int)
 
@@ -121,6 +120,7 @@ def save_to_ini(data, filename):
                 About to overwrite {}.
                 If this is fine with you, press enter.
                 If not, then abort using CTRL+C""".format(filename))
+
     with open(filename, 'w') as simdetailsfile:
         for key, value in data.items():
             if isinstance(value, str):
@@ -136,6 +136,7 @@ def save_to_json(data, filename):
                 About to overwrite {}.
                 If this is fine with you, press enter.
                 If not, then abort using CTRL+C""".format(filename))
+
     with open(filename, 'w') as simdetailsfile:
         json.dump(data, simdetailsfile, indent=4)
 
@@ -147,6 +148,7 @@ def save_to_csv(param_combinations_keys, nrruns, filename):
                 About to overwrite {}.
                 If this is fine with you, press enter.
                 If not, then abort using CTRL+C""".format(filename))
+
     with open(filename, 'w') as simdetailsfile:
         for key in param_combinations_keys:
             for i in range(nrruns):
