@@ -136,7 +136,7 @@ export PYTHONPATH=$PYTHONPATH:$NETSQUIDDIR
 echo '- Getting software versions of NetSquid and EasySquid'
 
 
-EASYSQUIDHASH=$(.$SIMULATOION_DIR/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")
+EASYSQUIDHASH=$(.$SIMULATION_DIR/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")
 NETSQUIDHASH=$(.$SIMULATION_DIR/readonly/get_git_hash.sh -dir "$NETSQUIDDIR")
 
 
