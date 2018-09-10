@@ -308,15 +308,21 @@ class RequestScheduler(pydynaa.Entity):
 
         self._process_outstanding_items()
 
-        logger.debug("Creating gen templates for request {}".format(vars(request)))
+    def _process_outstanding_items(self):
+        # Simply process the requests in FIFO order (for now...)
+        if not self.requests:
+            return
+
+        sorted_request_aids = sorted(self.requests.keys(), key=lambda aid: aid[1])
+        next_aid = sorted_request_aids[0]
+        next_request = self.requests[next_aid]
+
+        logger.debug("Creating gen templates for request {}".format(vars(next_request)))
 
         # Create templates for all generations part of this request
-        for i in range(request.num_pairs):
-            gen_template = [queue_item.ready, aid, None, None, None, None]
+        for i in range(next_request.num_pairs):
+            gen_template = [True, next_aid, None, None, None, None]
             self.outstanding_gens.append(gen_template)
-
-    def _process_outstanding_items(self):
-        pass
 
     def _handle_item_timeout(self, evt):
         """
