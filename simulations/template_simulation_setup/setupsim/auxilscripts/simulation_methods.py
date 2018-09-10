@@ -172,8 +172,8 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
 
     while (added_requests < num_requests) and (create_time < (max_sim_time * SECOND)):
 
-        # Randomly decide if we are creating a request this cycle
-        if random() <= create_prob:
+        # Randomly decide if we are creating a request this cycle (always create request if first cycle)
+        if (random() <= create_prob) or (added_requests == 0):
             added_requests += 1
 
             # Randomly select a number of pairs within the configured range
