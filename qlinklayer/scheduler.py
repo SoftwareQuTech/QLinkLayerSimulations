@@ -121,33 +121,12 @@ class RequestScheduler(pydynaa.Entity):
 
         # If there are outstanding generations and we have memory, overwrite with a request
         elif self.outstanding_gens:
-            logger.debug("Filling next available gen template")
+            next_gen = self.get_next_gen_template()
 
-            # Obtain the next template
-            gen_template = self.outstanding_gens[0]
-
-            # Obtain the request to check for generation options
-            aid = gen_template[1]
-            request = self.get_request(aid)
-
-            # Check if we have the resources to fulfill this generation
-            if self._has_resources_for_gen(request):
-                # Compute our new free memory after reservation
-                free_memory = self.qmm.get_free_mem_ad()
-                gen_template[-1] = free_memory
-
-                # Reserve resources in the quantum memory
-                comm_q, storage_q = self.reserve_resources_for_gen(request)
-
-                # Fill in the template
-                gen_template[2] = comm_q
-                gen_template[3] = storage_q
-
-                next_gen = tuple(gen_template)
-
-                logger.debug("Created gen request {}".format(next_gen))
-                self.outstanding_gens.pop(0)
-                self.curr_gen = next_gen
+        # If there are outstanding requests then create the gen templates and try to get one
+        elif self.outstanding_items:
+            self._process_outstanding_items()
+            next_gen = self.get_next_gen_template()
 
         return next_gen
 
@@ -159,6 +138,40 @@ class RequestScheduler(pydynaa.Entity):
         """
         self.my_free_memory = self.qmm.get_free_mem_ad()
         return False, None, None, None, None, self.my_free_memory
+
+    def get_next_gen_template(self):
+        logger.debug("Filling next available gen template")
+
+        # Obtain the next template
+        gen_template = self.outstanding_gens[0]
+
+        # Obtain the request to check for generation options
+        aid = gen_template[1]
+        request = self.get_request(aid)
+
+        # Check if we have the resources to fulfill this generation
+        if self._has_resources_for_gen(request):
+            # Compute our new free memory after reservation
+            free_memory = self.qmm.get_free_mem_ad()
+            gen_template[-1] = free_memory
+
+            # Reserve resources in the quantum memory
+            comm_q, storage_q = self.reserve_resources_for_gen(request)
+
+            # Fill in the template
+            gen_template[2] = comm_q
+            gen_template[3] = storage_q
+
+            next_gen = tuple(gen_template)
+
+            logger.debug("Created gen request {}".format(next_gen))
+            self.outstanding_gens.pop(0)
+            self.curr_gen = next_gen
+
+        else:
+            next_gen = self.get_default_gen()
+
+        return next_gen
 
     def mark_gen_completed(self, gen_id):
         """
@@ -208,6 +221,9 @@ class RequestScheduler(pydynaa.Entity):
                 self._last_aid_removed = aid
                 logger.debug("Scheduling remove outstanding request event now.")
                 self._schedule_now(self._EVT_REM_OUTSTANDING_REQ)
+
+        # Check if we have any requests to follow up with and begin processing them
+        self._process_outstanding_items()
 
         return removed_gens
 
@@ -290,12 +306,17 @@ class RequestScheduler(pydynaa.Entity):
 
         self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
 
+        self._process_outstanding_items()
+
         logger.debug("Creating gen templates for request {}".format(vars(request)))
 
         # Create templates for all generations part of this request
         for i in range(request.num_pairs):
             gen_template = [queue_item.ready, aid, None, None, None, None]
             self.outstanding_gens.append(gen_template)
+
+    def _process_outstanding_items(self):
+        pass
 
     def _handle_item_timeout(self, evt):
         """
