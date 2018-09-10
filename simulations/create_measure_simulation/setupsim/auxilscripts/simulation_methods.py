@@ -162,11 +162,8 @@ def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, mi
         if max_sim_time == float('inf'):
             raise ValueError("Cannot have infinite number of requests and infinite simulation time")
         else:
-            if request_overlap and (request_cycle == 0):
+            if request_cycle == 0:
                 raise ValueError("Cannot have infinite number of requests, request overlap and zero request cycle")
-            else:
-                if tmax_pair == 0:
-                    raise ValueError("Cannot have infinite number of requests, no request overlap and zero tmax_pair")
 
     if additional_data:
         additional_data["request_t_cycle"] = (request_cycle * SECOND)
@@ -292,7 +289,7 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
 
     # Hook up data collectors to the scenarios
     collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path, measure_directly, collect_queue_data=collect_queue_data)
-    
+
     # Schedule event handler to listen the probability of success being computed
     if save_additional_data:
         midpoint = mhp_conn.midPoint
@@ -315,7 +312,6 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
     try:
         # Run simulation
         while sim_time() < max_sim_time * SECOND:
-
             # Check wall time during this simulation step
             wall_time_sim_step_start = time()
             if timestep == float('inf') or timestep == -float('inf'):
@@ -375,4 +371,3 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
         # Debugging
         if enable_pdb:
             pdb.set_trace()
-
