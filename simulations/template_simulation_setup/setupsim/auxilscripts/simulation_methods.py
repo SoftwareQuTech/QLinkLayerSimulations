@@ -310,6 +310,8 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
 
     last_time_log = time()
     try:
+        # Counter used to update the timestep two times
+        timestep_changes = 0
         # Run simulation
         while sim_time() < max_sim_time * SECOND:
             # Check wall time during this simulation step
@@ -329,7 +331,11 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
                 # Just make the timestep 10 times bigger since last duration went very quick
                 timestep = timestep * 10
             else:
-                timestep = timestep * (wall_time_left / wall_time_sim_step_duration)
+                # Update the timestep to times to split if max wall time in 100 segments
+                if timestep_changes < 2:
+                    timestep_to_end = timestep * (wall_time_left / wall_time_sim_step_duration)
+                    timestep = timestep_to_end / 100
+                    timestep_changes += 1
 
 
             # Don't use a timestep that goes beyong max_sim_time
