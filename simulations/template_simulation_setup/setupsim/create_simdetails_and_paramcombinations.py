@@ -9,8 +9,8 @@ import sys
 #######################
 
 description_string = "Testing to setup a simulation"
-easysquid_directory = "/home/dahlberg/EasySquid/"  # full absolute path
-netsquid_directory = "/home/dahlberg/NetSQUID/"  # full absolute path
+easysquid_directory = "/Users/adahlberg/Documents/EasySquid/"  # full absolute path
+netsquid_directory = "/Users/adahlberg/Documents/NetSQUID/"  # full absolute path
 number_of_runs = 1
 outputdirname = "simulation_results"
 
@@ -19,7 +19,7 @@ outputdirname = "simulation_results"
 # Optional parameters
 #########################
 
-qlinklayer_directory = "/home/dahlberg/QLinkLayer/"
+qlinklayer_directory = "/Users/adahlberg/Documents/QLinkLayer/"
 config_dir = "simulations/template_simulation_setup/setupsim/config"
 config_files=[]
 for root, dirs, files in os.walk(qlinklayer_directory + config_dir):
@@ -32,18 +32,19 @@ opt_params = {
     "create_prob": 1,
     "min_pairs": 1,
     "max_pairs": 1,
-    "tmax_pair": 10000,
+    "tmax_pair": 0,
     "request_overlap": True,
     "request_cycle": 0,
     "num_requests": 0,
     "max_sim_time": 0,
-    "max_wall_time": 52 * 60,
-    "max_mhp_cycle": 20,
+    "max_wall_time": 1 * 60 * 60,
+    "max_mhp_cycle": 200000,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
     "measure_directly": True,
-    "t0": 20,
+    "t0": 0,
+    "wall_time_per_timestep": 60,
     "save_additional_data": True,
     "collect_queue_data": True}
 

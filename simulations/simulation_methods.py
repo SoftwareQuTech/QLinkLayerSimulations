@@ -1,24 +1,18 @@
 import netsquid as ns
 import pdb
 import json
-from argparse import ArgumentParser
 from time import time
 from os.path import exists
 from random import random, randint
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
-from easysquid.toolbox import create_logger
+from easysquid.toolbox import logger
 from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
-    MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence, EGPQubErrSequence, EGPLocalQueueSequence, \
-    EGPOutstandingRequestsSequence
+    MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence, EGPQubErrSequence, EGPLocalQueueSequence
 from qlinklayer.egp import EGPRequest, NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
-
-import logging
-
-logger = create_logger("logger", level=logging.INFO)
 
 # Here we add an entry into the Connection structre in Easysquid Easynetwork to give us access to load up configs
 # for the simulation using connections defined here in the QLinkLayer
@@ -238,7 +232,7 @@ def _calc_prob_success_handler(midpoint, additional_data):
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
                    request_overlap=False, request_cycle=0, num_requests=1, max_sim_time=float('inf'),
                    max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, measure_directly=False, t0=0, t_cycle=0,
-                   alphaA=0.1, alphaB=0.1, save_additional_data=True, collect_queue_data=False):
+                   alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True, collect_queue_data=False):
     # Save additional data
     if save_additional_data:
         additional_data = {}
@@ -308,10 +302,13 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
 
     logger.info("Beginning simulation")
 
-    last_time_log = time()
+    # Keep track of the number of steps taken
+    timesteps_taken = 0
+
+    # Keep track of total wall time (not including preparation)
+    wall_time_of_simulation = 0
+
     try:
-        # Counter used to update the timestep two times
-        timestep_changes = 0
         # Run simulation
         while sim_time() < max_sim_time * SECOND:
             # Check wall time during this simulation step
@@ -322,21 +319,17 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
             previous_timestep = timestep
             wall_time_sim_step_stop = time()
             wall_time_sim_step_duration = wall_time_sim_step_stop - wall_time_sim_step_start
-
-            # Calculate next duration
-            wall_time_left = max_wall_time - (time() - start_time)
+            wall_time_of_simulation += wall_time_sim_step_duration
+            wall_time_s_per_real_time_ns = wall_time_of_simulation / sim_time()
+            timesteps_taken += 1
 
             # Check if wall_time_sim_step_duration is zero
             if wall_time_sim_step_duration == 0:
                 # Just make the timestep 10 times bigger since last duration went very quick
                 timestep = timestep * 10
             else:
-                # Update the timestep to times to split if max wall time in 100 segments
-                if timestep_changes < 2:
-                    timestep_to_end = timestep * (wall_time_left / wall_time_sim_step_duration)
-                    timestep = timestep_to_end / 100
-                    timestep_changes += 1
-
+                # Update the timestep such that one timestep takes 'wall_time_per_timestep' seconds
+                timestep = wall_time_per_timestep / wall_time_s_per_real_time_ns
 
             # Don't use a timestep that goes beyong max_sim_time
             if (sim_time() + timestep) > (max_sim_time * SECOND):
@@ -346,34 +339,32 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
             now = time()
             logger.info("Wall clock advanced {} s during the last {} s real time. Will now advance {} s real time.".format(wall_time_sim_step_duration, previous_timestep / SECOND, timestep / SECOND))
             logger.info("Time advanced: {}/{} s real time.  {}/{} s wall time.".format(sim_time() / SECOND, max_sim_time, now - start_time, max_wall_time))
+
+            # Save additional data relevant for the simulation
+            if save_additional_data:
+                pass
+                # Collect simulation times
+                # additional_data["total_real_time"] = sim_time()
+                # additional_data["total_wall_time"] = time() - start_time
+                # with open(results_path + "_additional_data.json", 'w') as json_file:
+                #     json.dump(additional_data, json_file, indent=4)
+
+            # Commit the data collected in the data-sequences
+            # for collector in collectors:
+            #     collector.commit_data()
+
             if now - start_time > max_wall_time:
                 logger.info("Max wall time reached, ending simulation.")
                 break
-
-            elif now - last_time_log > 10:
-                logger.info("Current sim time: {}".format(sim_time()))
-                last_time_log = now
 
         stop_time = time()
         logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time,
                                                                                              sim_time() / SECOND))
     # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
     except Exception:
-        logger.exception("Ending simulation early!")
+        logger.exception("Something went wrong. Ending simulation early!")
 
     finally:
-        # Save additional data relevant for the simulation
-        if save_additional_data:
-            # Collect simulation times
-            additional_data["total_real_time"] = sim_time()
-            additional_data["total_wall_time"] = time() - start_time
-            with open(results_path + "_additional_data.json", 'w') as json_file:
-                json.dump(additional_data, json_file, indent=4)
-
-        # Commit the data collected in the data-sequences
-        for collector in collectors:
-            collector.commit_data()
-
         # Debugging
         if enable_pdb:
             pdb.set_trace()

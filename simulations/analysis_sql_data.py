@@ -2,15 +2,13 @@ import sqlite3
 from argparse import ArgumentParser
 from collections import defaultdict
 import numpy as np
-from easysquid.toolbox import create_logger
+from easysquid.toolbox import logger
 from netsquid.simutil import SECOND
 import json
 import math
 import matplotlib.pyplot as plt
 import os
 
-
-logger = create_logger("logger")
 
 
 def _check_table_name(table_name, base_table_name):
