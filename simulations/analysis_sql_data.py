@@ -29,7 +29,7 @@ def _check_table_name(table_name, base_table_name):
     return (table == base_table_name) and is_number
 
 
-def parse_table_data_from_sql(results_path, base_table_name):
+def parse_table_data_from_sql(results_path, base_table_name, max_real_time=None):
     """
     Parses data from all tables with name (base_table_name + "n") where n is an integer.
     If base_table_name is a list of str then data from each table is put in a dictionary with keys being
@@ -38,6 +38,8 @@ def parse_table_data_from_sql(results_path, base_table_name):
         Path to the sql-file (file.db)
     :param base_table_name: str or list of str
         Name of the tables
+    :param max_real_time: float or None
+        If specified, don't include any entries after max_real_time
     :return: list of any or dict of list of any
         Concatenated list of all entries in the corresponding tables
     """
@@ -65,6 +67,8 @@ def parse_table_data_from_sql(results_path, base_table_name):
             c.execute("SELECT * FROM {}".format(table_name))
             table_data += c.fetchall()
 
+        if max_real_time is not None:
+            table_data = [entry for entry in table_data if (entry[0] < max_real_time)]
         return table_data
 
 
@@ -87,7 +91,7 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
         total_requested_pairs - Number of pairs requested (successful + unsuccessful requests)
     """
     # Get the create and ok data
-    data_dct = parse_table_data_from_sql(results_path, ["EGP_Creates", "EGP_OKs"])
+    data_dct = parse_table_data_from_sql(results_path, ["EGP_Creates", "EGP_OKs"], max_real_time=max_real_time)
     creates_data = data_dct["EGP_Creates"]
     oks_data = data_dct["EGP_OKs"]
 
@@ -99,13 +103,12 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
         (timestamp, nodeID, create_id, create_time, max_time, measure_directly, min_fidelity, num_pairs, otherID,
          priority, purpose_id, store, succ) = entry
 
-        if (max_real_time is None) or (timestamp < max_real_time):
-            total_requested_pairs += num_pairs
+        total_requested_pairs += num_pairs
 
-            if create_id is not None and create_time is not None:
-                requests[(create_id, nodeID, otherID)] = [nodeID, otherID, num_pairs, create_id, create_time, max_time]
-            else:
-                rejected_requests.append([nodeID, otherID, num_pairs, timestamp])
+        if create_id is not None and create_time is not None:
+            requests[(create_id, nodeID, otherID)] = [nodeID, otherID, num_pairs, create_id, create_time, max_time]
+        else:
+            rejected_requests.append([nodeID, otherID, num_pairs, timestamp])
 
     # Parse the ok data
     gens = defaultdict(list)
@@ -114,14 +117,13 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
     for entry in oks_data:
         timestamp, createID, originID, otherID, MHPSeq, logical_id, goodness, t_goodness, t_create, succ = entry
 
-        if (max_real_time is None) or (timestamp < max_real_time):
-            if MHPSeq in recorded_mhp_seqs:
-                continue
-            else:
-                recorded_mhp_seqs.append(MHPSeq)
+        if MHPSeq in recorded_mhp_seqs:
+            continue
+        else:
+            recorded_mhp_seqs.append(MHPSeq)
 
-            gens[(createID, originID, otherID)].append([createID, originID, otherID, MHPSeq, t_create])
-            all_gens.append((t_create, (createID, originID, otherID, MHPSeq)))
+        gens[(createID, originID, otherID)].append([createID, originID, otherID, MHPSeq, t_create])
+        all_gens.append((t_create, (createID, originID, otherID, MHPSeq)))
 
     return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
 
@@ -147,7 +149,7 @@ def parse_attempt_data_from_sql(results_path, all_gens, gen_starts, max_real_tim
             Containing the number of attempts made for the generation
     """
     # Get the attempt data
-    attempt_data = parse_table_data_from_sql(results_path, "Node_EGP_Attempts")
+    attempt_data = parse_table_data_from_sql(results_path, "Node_EGP_Attempts", max_real_time=max_real_time)
 
     # Parse the attempt data
     gen_attempts = defaultdict(int)
@@ -155,14 +157,13 @@ def parse_attempt_data_from_sql(results_path, all_gens, gen_starts, max_real_tim
     for entry in attempt_data:
         timestamp, nodeID, succ = entry
 
-        if (max_real_time is None) or (timestamp < max_real_time):
-            node_attempts[nodeID] += 1
+        node_attempts[nodeID] += 1
 
-            for gen in all_gens:
-                genID = gen[1]
-                if gen_starts[genID] < timestamp < gen[0]:
-                    gen_attempts[genID] += 1
-                    break
+        for gen in all_gens:
+            genID = gen[1]
+            if gen_starts[genID] < timestamp < gen[0]:
+                gen_attempts[genID] += 1
+                break
 
     return node_attempts, gen_attempts
 
@@ -178,21 +179,20 @@ def parse_fidelities_from_sql(results_path, max_real_time=None):
     :rtype: list of float
     """
     # Get the states_data
-    states_data = parse_table_data_from_sql(results_path, "EGP_Qubit_States")
+    states_data = parse_table_data_from_sql(results_path, "EGP_Qubit_States", max_real_time=max_real_time)
 
     # Parse the states data to compute fidelities
     fidelities = []
     ts = []  # time associated to the fidelity (used for plotting)
     for entry in states_data:
         timestamp = entry[0]
-        if (max_real_time is None) or (timestamp < max_real_time):
-            if not (len(entry) == 35):
-                raise ValueError("Unknown quantum states format in data file")
-            ts.append(timestamp)
-            m_data = entry[2:34]
-            d_matrix = np.matrix(
-                [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
-            fidelities.append(calc_fidelity(d_matrix))
+        if not (len(entry) == 35):
+            raise ValueError("Unknown quantum states format in data file")
+        ts.append(timestamp)
+        m_data = entry[2:34]
+        d_matrix = np.matrix(
+            [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
+        fidelities.append(calc_fidelity(d_matrix))
 
     return fidelities
 
@@ -220,7 +220,7 @@ def parse_quberr_from_sql(results_path, max_real_time=None):
     :rtype: tuple of tuples of floats
     """
     # Get the states_data
-    quberr_data = parse_table_data_from_sql(results_path, "EGP_QubErr")
+    quberr_data = parse_table_data_from_sql(results_path, "EGP_QubErr", max_real_time=max_real_time)
 
     # Parse the states data to compute fideli    print("QubErrs:")
     Z_err = []
@@ -228,14 +228,12 @@ def parse_quberr_from_sql(results_path, max_real_time=None):
     Z_data_points = 0
     X_data_points = 0
     for entry in quberr_data:
-        timestamp = entry[0]
-        if (max_real_time is None) or (timestamp < max_real_time):
-            if entry[1] in [0, 1]:
-                Z_err.append(entry[1])
-                Z_data_points += 1
-            if entry[2] in [0, 1]:
-                X_err.append(entry[2])
-                X_data_points += 1
+        if entry[1] in [0, 1]:
+            Z_err.append(entry[1])
+            Z_data_points += 1
+        if entry[2] in [0, 1]:
+            X_err.append(entry[2])
+            X_data_points += 1
     if Z_data_points > 0:
         avg_Z_err = sum(Z_err) / Z_data_points
     else:
@@ -384,12 +382,12 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
     if max_real_time is None:
         tot_time_diff = times[-1] - times[1]
     else:
-        if queue_lens[-1] > 0: #Non-empty queue by max_real_time
+        if queue_lens[-1] > 0:  # Non-empty queue by max_real_time
             print("====")
             print("Non-empty QUEUE")
             print("====")
             tot_time_diff = max_real_time - times[1]
-        else: #Empty queue by max_real_time, stop when last item popped
+        else:  # Empty queue by max_real_time, stop when last item popped
             print("====")
             print("Empty QUEUE")
             print("====")
@@ -397,9 +395,9 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
     if min(queue_lens) < 0:
         raise RuntimeError("Something went wrong, negative queue length")
     if tot_time_diff == 0:
-        return (queue_lens, times, max(queue_lens), float('inf'), tot_time_in_queue)
+        return queue_lens, times, max(queue_lens), float('inf'), tot_time_in_queue
     else:
-        return (queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue)
+        return queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue
 
 
 def plot_queue_data(queue_lens, times):
@@ -552,7 +550,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None):
             pass
 
     # Get create and ok data from sql file to compute latencies and throughput
-    (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path)
+    (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path, max_real_time=max_real_time)
     # Check (u)successful creates
     satisfied_creates, unsatisfied_creates = extract_successful_unsuccessful_creates(requests, gens)
     # Compute latencies for requests, i.e. possibly more than one pair/request
@@ -561,19 +559,19 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None):
     gen_starts, gen_times = get_gen_latencies(requests, gens)
 
     # Get attempts data to compute number of attempts per generation and generation probability
-    node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, all_gens, gen_starts)
+    node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, all_gens, gen_starts, max_real_time=max_real_time)
 
     # Get fidelities
-    fidelities = parse_fidelities_from_sql(results_path)
+    fidelities = parse_fidelities_from_sql(results_path, max_real_time=max_real_time)
 
     # Get QubErr
-    Z_data, X_data = parse_quberr_from_sql(results_path)
+    Z_data, X_data = parse_quberr_from_sql(results_path, max_real_time=max_real_time)
     avg_Z_err, Z_data_points = Z_data
     avg_X_err, X_data_points = X_data
 
     # Get queue data
-    raw_queue_dataA = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A")
-    raw_queue_dataB = parse_table_data_from_sql(results_path, "EGP_Local_Queue_B")
+    raw_queue_dataA = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A", max_real_time=max_real_time)
+    raw_queue_dataB = parse_table_data_from_sql(results_path, "EGP_Local_Queue_B", max_real_time=max_real_time)
 
     print("-------------------")
     print("|Simulation data: |")
@@ -689,13 +687,13 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None):
 
     # Extract data from raw queue data
     if raw_queue_dataA:
-        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA = parse_raw_queue_data(raw_queue_dataA)
+        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA = parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
         print("")
         print("Max queue length at A: {}".format(max_queue_lenA))
         print("Average queue length at A: {}".format(avg_queue_lenA))
         print("Total time items spent in queue at A: {} ns".format(tot_time_in_queueA))
     if raw_queue_dataB:
-        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB = parse_raw_queue_data(raw_queue_dataA)
+        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB = parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
         print("")
         print("Max queue length at B: {}".format(max_queue_lenB))
         print("Average queue length at B: {}".format(avg_queue_lenB))
@@ -718,10 +716,10 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None):
             plot_throughput(all_gens)
 
 
-def main(results_path, no_plot):
+def main(results_path, no_plot, max_real_time=None):
     # Check if results_path is a single .db file or a folder containing such
     if results_path.endswith('.db'):
-        analyse_single_file(results_path, no_plot)
+        analyse_single_file(results_path, no_plot, max_real_time=max_real_time)
     else:
         if results_path.endswith('/'):
             results_path = results_path[:-1]
@@ -729,7 +727,7 @@ def main(results_path, no_plot):
             if entry.endswith('.db'):
                 print("")
                 print("====================================")
-                analyse_single_file(results_path + "/" + entry, no_plot)
+                analyse_single_file(results_path + "/" + entry, no_plot, max_real_time=max_real_time)
                 print("====================================")
                 print("")
 
@@ -738,7 +736,7 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument('--results-path', required=True, type=str,
                         help="Path to the directory containing the simulation results")
-    parser.add_argument('--max_real_time', default=None, type=float,
+    parser.add_argument('--max_real_time', required=False, type=float,
                         help="If specified, don't include data after max_real_time (ns)")
     parser.add_argument('--no-plot', default=False, action='store_true',
                         help="Whether to produce plots or not")
@@ -749,4 +747,5 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
+    print(args.max_real_time)
     main(results_path=args.results_path, no_plot=args.no_plot, max_real_time=args.max_real_time)
