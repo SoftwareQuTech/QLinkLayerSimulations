@@ -557,11 +557,11 @@ class TestNodeCentricEGP(unittest.TestCase):
             if node.nodeID == alice.nodeID:
                 if not conn.mhp_seq == 1:
                     logger.debug("Sending to {}".format(node.nodeID))
-                    conn.channel_M_to_A.put(data)
+                    conn.channel_M_to_A.send(data)
 
             elif node.nodeID == bob.nodeID:
                 logger.debug("Sending to {}".format(node.nodeID))
-                conn.channel_M_to_B.put(data)
+                conn.channel_M_to_B.send(data)
 
         egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
 

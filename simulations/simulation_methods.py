@@ -2,6 +2,7 @@ import netsquid as ns
 import pdb
 import json
 from time import time
+import math
 from os.path import exists
 from random import random, randint
 from easysquid.easynetwork import Connections, setup_physical_network
@@ -338,20 +339,20 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
             # Check clock once in a while
             now = time()
             logger.info("Wall clock advanced {} s during the last {} s real time. Will now advance {} s real time.".format(wall_time_sim_step_duration, previous_timestep / SECOND, timestep / SECOND))
-            logger.info("Time advanced: {}/{} s real time.  {}/{} s wall time.".format(sim_time() / SECOND, max_sim_time, now - start_time, max_wall_time))
+            mhp_cycles = math.floor(sim_time() / mhp_conn.t_cycle)
+            logger.info("Time advanced: {}/{} s real time.  {}/{} s wall time. {}/{} MHP cycles".format(sim_time() / SECOND, max_sim_time, now - start_time, max_wall_time, mhp_cycles, max_mhp_cycle))
 
             # Save additional data relevant for the simulation
             if save_additional_data:
-                pass
                 # Collect simulation times
-                # additional_data["total_real_time"] = sim_time()
-                # additional_data["total_wall_time"] = time() - start_time
-                # with open(results_path + "_additional_data.json", 'w') as json_file:
-                #     json.dump(additional_data, json_file, indent=4)
+                additional_data["total_real_time"] = sim_time()
+                additional_data["total_wall_time"] = time() - start_time
+                with open(results_path + "_additional_data.json", 'w') as json_file:
+                    json.dump(additional_data, json_file, indent=4)
 
             # Commit the data collected in the data-sequences
-            # for collector in collectors:
-            #     collector.commit_data()
+            for collector in collectors:
+                collector.commit_data()
 
             if now - start_time > max_wall_time:
                 logger.info("Max wall time reached, ending simulation.")

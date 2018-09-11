@@ -174,7 +174,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         :param qubit_id: int
             The qubit ID in memory that we want the state of
         """
-        qstate = self.node.qmem.get_qubit(qubit_id).qstate
+        qstate = self.node.qmem.peek(qubit_id).qstate
         formalism = get_qstate_formalism()
 
         if formalism == DM_FORMALISM and qstate.dm.shape == (4, 4):

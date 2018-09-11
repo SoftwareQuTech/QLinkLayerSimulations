@@ -198,9 +198,9 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
 
         # Send messages back to the node
         if receiver == self.idA:
-            self.channel_M_to_A.put(channel_data)
+            self.channel_M_to_A.send(channel_data)
         elif receiver == self.idB:
-            self.channel_M_to_B.put(channel_data)
+            self.channel_M_to_B.send(channel_data)
         else:
             raise EasySquidException("Unknown receiver")
 
@@ -258,10 +258,10 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
             The data to place on the channel to the node
         """
         if node.nodeID == self.nodeA.nodeID:
-            self.channel_M_to_A.put(data)
+            self.channel_M_to_A.send(data)
 
         elif node.nodeID == self.nodeB.nodeID:
-            self.channel_M_to_B.put(data)
+            self.channel_M_to_B.send(data)
 
         else:
             raise EasySquidException("Tried to send to unconnected node")
