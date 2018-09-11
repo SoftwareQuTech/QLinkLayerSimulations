@@ -29,7 +29,7 @@ config_dir = "simulations/template_simulation_setup/setupsim/config"
 # success probability and also significantly lower.
 
 config_to_p_succ = {
-    "no_losses/network_with_cav_no_conv.json": 0.18963995999999997,
+    "no_losses/network_with_cav_no_conv_no_losses.json": 0.18963995999999997,
     "no_losses/no_noise.json": 0.19,
     "lab_configs/network_no_cav_no_conv.json": 0.00011635855458816435,
     "lab_configs/network_no_cav_with_conv.json": 7.999995199289723e-07,
