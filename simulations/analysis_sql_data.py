@@ -398,13 +398,22 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
         return queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue
 
 
-def plot_queue_data(queue_lens, times):
+def plot_queue_data(queue_lens, times, path_to_folder, no_plot=False, save_figs=False):
     """
     Plots the queue length over time from data extracted using 'parse_raw_queue_data'
     :param queue_lens: [queue_lensA, queue_lensB]
     :param times: [qtimesA, qtimesB]
+    :param path_to_folder: str
+        Path to the results folder, used to save the fig
+    :param no_plot: bool
+        Whether to show the plot or not
+    :param save_figs: bool
+        Whether to save the plot or not
     :return: None
     """
+    if no_plot and (not save_figs):
+        return
+
     colors = ['red', 'green']
     labels = ['Node A', 'Node B']
     for i in range(2):
@@ -424,16 +433,30 @@ def plot_queue_data(queue_lens, times):
     plt.ylabel("Queue lengths")
     plt.xlabel("Real time (s)")
     plt.legend(loc='upper right')
-    plt.show()
+    if save_figs:
+        if not os.path.exists(path_to_folder + "/figs"):
+            os.makedirs(path_to_folder + "/figs")
+        plt.savefig(path_to_folder + "/figs/queue_lens.pdf")
+    if not no_plot:
+        plt.show()
 
 
-def plot_gen_attempts(gen_attempts):
+def plot_gen_attempts(gen_attempts, path_to_folder, no_plot=False, save_figs=False):
     """
     Plots a histogram and a distribution of the number of attempts for generations in the simulation
     :param gen_attempts: dict of key (createID, sourceID, otherID, mhpSeq)
                                  value int
         Containing the number of attempts made for the generation
+    :param path_to_folder: str
+        Path to the results folder, used to save the fig
+    :param no_plot: bool
+        Whether to show the plot or not
+    :param save_figs: bool
+        Whether to save the plot or not
     """
+    if no_plot and (not save_figs):
+        return
+
     plt.hist(gen_attempts.values(), 50)
 
     plt.xlabel('Attempts')
@@ -449,15 +472,29 @@ def plot_gen_attempts(gen_attempts):
 
     ax.set(xlabel='time (s)', title='Generation Latency Distribution')
     ax.grid()
-    plt.show()
+    if save_figs:
+        if not os.path.exists(path_to_folder + "/figs"):
+            os.makedirs(path_to_folder + "/figs")
+        plt.savefig(path_to_folder + "/figs/attempt_histogram.pdf")
+    if not no_plot:
+        plt.show()
 
 
-def plot_gen_times(gen_times):
+def plot_gen_times(gen_times, path_to_folder, no_plot=False, save_figs=False):
     """
     Plots a histogram and a distribution of the amount of time for generations in the simulation
     :param gen_times: list of floats
         The amount of time per generation
+    :param path_to_folder: str
+        Path to the results folder, used to save the fig
+    :param no_plot: bool
+        Whether to show the plot or not
+    :param save_figs: bool
+        Whether to save the plot or not
     """
+    if no_plot and (not save_figs):
+        return
+
     gen_times = [t / SECOND for t in gen_times]
     plt.hist(gen_times, 50)
 
@@ -474,16 +511,30 @@ def plot_gen_times(gen_times):
 
     ax.set(xlabel='attempts', title='Generation Attempt Count Distribution')
     ax.grid()
-    plt.show()
+    if save_figs:
+        if not os.path.exists(path_to_folder + "/figs"):
+            os.makedirs(path_to_folder + "/figs")
+        plt.savefig(path_to_folder + "/figs/gen_latency_histogram.pdf")
+    if not no_plot:
+        plt.show()
 
 
-def plot_throughput(all_gens):
+def plot_throughput(all_gens, path_to_folder, no_plot=False, save_figs=False):
     """
     Plots the instantaneous throughput of entanglement generation as a function of time over the
     duration of the simulation
     :param all_gens: list of (createTime, (createID, sourceID, otherID, mhpSeq))
         Contains the create time of the generations
+    :param path_to_folder: str
+        Path to the results folder, used to save the fig
+    :param no_plot: bool
+        Whether to show the plot or not
+    :param save_figs: bool
+        Whether to save the plot or not
     """
+    if no_plot and (not save_figs):
+        return
+
     window_size = SECOND
     t_actions = []
     throughput = [(0, 0)]
@@ -509,7 +560,13 @@ def plot_throughput(all_gens):
     ax.set(xlabel='time (s)', ylabel='Throughput (gen/s)',
            title='Instantaneous throughput of generation')
     ax.grid()
-    plt.show()
+
+    if save_figs:
+        if not os.path.exists(path_to_folder + "/figs"):
+            os.makedirs(path_to_folder + "/figs")
+        plt.savefig(path_to_folder + "/figs/throughput.pdf")
+    if not no_plot:
+        plt.show()
 
 
 def get_key_and_run_from_path(results_path):
@@ -532,7 +589,7 @@ def get_key_and_run_from_path(results_path):
     return key_str, run_str
 
 
-def analyse_single_file(results_path, no_plot=False, max_real_time=None):
+def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_figs=False):
     # Check if there is an additional data file
     try:
         with open(results_path[:-3] + "_additional_data.json", 'r') as json_file:
@@ -698,26 +755,22 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None):
         print("Total time items spent in queue at B: {} ns".format(tot_time_in_queueB))
 
     if raw_queue_dataA and raw_queue_dataB:
-        if not no_plot:
-            plot_queue_data([queue_lensA, queue_lensB], [qtimesA, qtimesB])
+        plot_queue_data([queue_lensA, queue_lensB], [qtimesA, qtimesB], path_to_folder, no_plot=no_plot, save_figs=save_figs)
 
     if gen_attempts:
-        if not no_plot:
-            plot_gen_attempts(gen_attempts)
+        plot_gen_attempts(gen_attempts, path_to_folder, no_plot=no_plot, save_figs=save_figs)
 
     if gen_times:
-        if not no_plot:
-            plot_gen_times(gen_times)
+        plot_gen_times(gen_times, path_to_folder, no_plot=no_plot, save_figs=save_figs)
 
     if all_gens:
-        if not no_plot:
-            plot_throughput(all_gens)
+        plot_throughput(all_gens, path_to_folder, no_plot=no_plot, save_figs=save_figs)
 
 
-def main(results_path, no_plot, max_real_time=None):
+def main(results_path, no_plot, max_real_time=None, save_figs=False):
     # Check if results_path is a single .db file or a folder containing such
     if results_path.endswith('.db'):
-        analyse_single_file(results_path, no_plot, max_real_time=max_real_time)
+        analyse_single_file(results_path, no_plot, max_real_time=max_real_time, save_figs=save_figs)
     else:
         if results_path.endswith('/'):
             results_path = results_path[:-1]
@@ -725,7 +778,7 @@ def main(results_path, no_plot, max_real_time=None):
             if entry.endswith('.db'):
                 print("")
                 print("====================================")
-                analyse_single_file(results_path + "/" + entry, no_plot, max_real_time=max_real_time)
+                analyse_single_file(results_path + "/" + entry, no_plot, max_real_time=max_real_time, save_figs=save_figs)
                 print("====================================")
                 print("")
 
@@ -738,6 +791,8 @@ def parse_args():
                         help="If specified, don't include data after max_real_time (ns)")
     parser.add_argument('--no-plot', default=False, action='store_true',
                         help="Whether to produce plots or not")
+    parser.add_argument('--save-figs', default=False, action='store_true',
+                        help="Whether to save figs (independent from --no-plot")
 
     args = parser.parse_args()
     return args
@@ -745,5 +800,4 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    print(args.max_real_time)
-    main(results_path=args.results_path, no_plot=args.no_plot, max_real_time=args.max_real_time)
+    main(results_path=args.results_path, no_plot=args.no_plot, max_real_time=args.max_real_time, save_figs=args.save_figs)
