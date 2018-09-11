@@ -1,8 +1,6 @@
 #!/bin/bash
 #SBATCH -p short # requested parition (normal, short, staging, ...)
 #SBATCH -t 1:00:00 # wall clock time
-#SBATCH -n 24 # requested processes
-
 # This script:
 # - creates a new folder <TIMESTAMP>_<OUTPUTDIRNAME>
 # - extracts information about the simulation setup and 
@@ -105,6 +103,11 @@ case $key in
 	shift
 	shift
 	;;
+	-pp|--postprocessing)
+	POST_PROC="$2"
+	shift
+	shift
+	;;
 	*)
 	echo "Unknown argument $key"
 	exit 1
@@ -118,6 +121,7 @@ OUTPUTLOGFILE=${OUTPUTLOGFILE:-'y'}
 LOGTOCONSOLE=${LOGTOCONSOLE:-'y'}
 PROFILING=${PROFILING:-'n'}
 RUNONCLUSTER=${RUNONCLUSTER:-'n'}
+POST_PROC=${POST_PROC:-'n'}
 
 
 # logging to the console
@@ -235,7 +239,7 @@ if [ "$RUNONCLUSTER" == 'y' ]; then
     fi
 
     # Schedule moving results files after simulation
-    sbatch --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -f $TMP_DIR) $resultsdir
+    sbatch --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -f $TMP_DIR) $resultsdir $POST_PROC
 
     # Get the number of cores
     nrcores=`sara-get-num-cores`

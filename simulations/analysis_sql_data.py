@@ -383,14 +383,12 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
         tot_time_diff = times[-1] - times[1]
     else:
         if queue_lens[-1] > 0:  # Non-empty queue by max_real_time
-            print("====")
-            print("Non-empty QUEUE")
-            print("====")
             tot_time_diff = max_real_time - times[1]
+
+            # Since there are still items in the queue by max_real_time
+            # we should add this to the tot_time_in_queue
+            tot_time_in_queue += (max_real_time - times[-1]) * queue_lens[-1]
         else:  # Empty queue by max_real_time, stop when last item popped
-            print("====")
-            print("Empty QUEUE")
-            print("====")
             tot_time_diff = times[-1] - times[1]
     if min(queue_lens) < 0:
         raise RuntimeError("Something went wrong, negative queue length")
