@@ -68,11 +68,13 @@ def parse_table_data_from_sql(results_path, base_table_name):
         return table_data
 
 
-def parse_request_data_from_sql(results_path):
+def parse_request_data_from_sql(results_path, max_real_time=None):
     """
     Parses collected request/ok data points from the sql database
     :param results_path: str
         Path to directory containing request.log
+    :param max_real_time: float or None
+        If specified, don't include any entries after max_real_time
     :return: dict, list, dict, list, int
         requests - dict of key (createID, sourceID, otherID)
                            value [sourceID, otherID, numPairs, createID, createTime,maxTime]
@@ -97,12 +99,13 @@ def parse_request_data_from_sql(results_path):
         (timestamp, nodeID, create_id, create_time, max_time, measure_directly, min_fidelity, num_pairs, otherID,
          priority, purpose_id, store, succ) = entry
 
-        total_requested_pairs += num_pairs
+        if (max_real_time is None) or (timestamp < max_real_time):
+            total_requested_pairs += num_pairs
 
-        if create_id is not None and create_time is not None:
-            requests[(create_id, nodeID, otherID)] = [nodeID, otherID, num_pairs, create_id, create_time, max_time]
-        else:
-            rejected_requests.append([nodeID, otherID, num_pairs, timestamp])
+            if create_id is not None and create_time is not None:
+                requests[(create_id, nodeID, otherID)] = [nodeID, otherID, num_pairs, create_id, create_time, max_time]
+            else:
+                rejected_requests.append([nodeID, otherID, num_pairs, timestamp])
 
     # Parse the ok data
     gens = defaultdict(list)
@@ -111,18 +114,19 @@ def parse_request_data_from_sql(results_path):
     for entry in oks_data:
         timestamp, createID, originID, otherID, MHPSeq, logical_id, goodness, t_goodness, t_create, succ = entry
 
-        if MHPSeq in recorded_mhp_seqs:
-            continue
-        else:
-            recorded_mhp_seqs.append(MHPSeq)
+        if (max_real_time is None) or (timestamp < max_real_time):
+            if MHPSeq in recorded_mhp_seqs:
+                continue
+            else:
+                recorded_mhp_seqs.append(MHPSeq)
 
-        gens[(createID, originID, otherID)].append([createID, originID, otherID, MHPSeq, t_create])
-        all_gens.append((t_create, (createID, originID, otherID, MHPSeq)))
+            gens[(createID, originID, otherID)].append([createID, originID, otherID, MHPSeq, t_create])
+            all_gens.append((t_create, (createID, originID, otherID, MHPSeq)))
 
     return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
 
 
-def parse_attempt_data_from_sql(results_path, all_gens, gen_starts):
+def parse_attempt_data_from_sql(results_path, all_gens, gen_starts, max_real_time=None):
     """
     Parses collected attempt data points from the sql database
     :param results_path: str
@@ -132,6 +136,8 @@ def parse_attempt_data_from_sql(results_path, all_gens, gen_starts):
     :param gen_starts: dict of key (createID, sourceID, otherID, mhpSeq)
                                value createTime
         Contains the completion time of each generation
+    :param max_real_time: float or None
+        If specified, don't include any entries after max_real_time
     :return: node_attempts, gen_attempts
         node_attempts - dict of key nodeID
                                 value num_attempts
@@ -148,22 +154,26 @@ def parse_attempt_data_from_sql(results_path, all_gens, gen_starts):
     node_attempts = defaultdict(int)
     for entry in attempt_data:
         timestamp, nodeID, succ = entry
-        node_attempts[nodeID] += 1
 
-        for gen in all_gens:
-            genID = gen[1]
-            if gen_starts[genID] < timestamp < gen[0]:
-                gen_attempts[genID] += 1
-                break
+        if (max_real_time is None) or (timestamp < max_real_time):
+            node_attempts[nodeID] += 1
+
+            for gen in all_gens:
+                genID = gen[1]
+                if gen_starts[genID] < timestamp < gen[0]:
+                    gen_attempts[genID] += 1
+                    break
 
     return node_attempts, gen_attempts
 
 
-def parse_fidelities_from_sql(results_path):
+def parse_fidelities_from_sql(results_path, max_real_time=None):
     """
     Parses quantum states from SQL file and computes fidelities to the state 1/sqrt(2)(|01>+|10>)
     :param results_path: The path to the SQL file
     :type results_path: str
+    :param max_real_time: float or None
+        If specified, don't include any entries after max_real_time
     :return: Fidelities of the generated states
     :rtype: list of float
     """
@@ -174,13 +184,15 @@ def parse_fidelities_from_sql(results_path):
     fidelities = []
     ts = []  # time associated to the fidelity (used for plotting)
     for entry in states_data:
-        if not (len(entry) == 35):
-            raise ValueError("Unknown quantum states format in data file")
-        ts.append(entry[0])
-        m_data = entry[2:34]
-        d_matrix = np.matrix(
-            [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
-        fidelities.append(calc_fidelity(d_matrix))
+        timestamp = entry[0]
+        if (max_real_time is None) or (timestamp < max_real_time):
+            if not (len(entry) == 35):
+                raise ValueError("Unknown quantum states format in data file")
+            ts.append(timestamp)
+            m_data = entry[2:34]
+            d_matrix = np.matrix(
+                [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
+            fidelities.append(calc_fidelity(d_matrix))
 
     return fidelities
 
@@ -197,11 +209,13 @@ def calc_fidelity(d_matrix):
     return np.real((psi.H * d_matrix * psi)[0, 0])
 
 
-def parse_quberr_from_sql(results_path):
+def parse_quberr_from_sql(results_path, max_real_time=None):
     """
     Parses quberrfrom SQL file.
     :param results_path: The path to the SQL file
     :type results_path: str
+    :param max_real_time: float or None
+        If specified, don't include any entries after max_real_time
     :return: Average QubErr
     :rtype: tuple of tuples of floats
     """
@@ -214,12 +228,14 @@ def parse_quberr_from_sql(results_path):
     Z_data_points = 0
     X_data_points = 0
     for entry in quberr_data:
-        if entry[1] in [0, 1]:
-            Z_err.append(entry[1])
-            Z_data_points += 1
-        if entry[2] in [0, 1]:
-            X_err.append(entry[2])
-            X_data_points += 1
+        timestamp = entry[0]
+        if (max_real_time is None) or (timestamp < max_real_time):
+            if entry[1] in [0, 1]:
+                Z_err.append(entry[1])
+                Z_data_points += 1
+            if entry[2] in [0, 1]:
+                X_err.append(entry[2])
+                X_data_points += 1
     if Z_data_points > 0:
         avg_Z_err = sum(Z_err) / Z_data_points
     else:
@@ -340,12 +356,14 @@ def get_gen_latencies(requests, gens):
     return gen_starts, gen_times
 
 
-def parse_raw_queue_data(raw_queue_data):
+def parse_raw_queue_data(raw_queue_data, max_real_time=None):
     """
     Computes average and max queue length and total time items spent in queue
     given data from the sqlite file
     :param raw_queue_data: list
         data extracted from the sqlite file
+    :param max_real_time: float or None
+        If specified, don't include any entries after max_real_time
     :return: tuple
         (queue_lens, times, max_queue_len, avg_queue_len, tot_time_in_queue)
         queue_lens: List of queue lengths at times in 'times
@@ -363,10 +381,25 @@ def parse_raw_queue_data(raw_queue_data):
         tot_time_in_queue += time_diff * queue_lens[-1]
         queue_lens.append(queue_lens[-1] + change)
         times.append(time)
-    tot_time_diff = times[-1] - times[1]
+    if max_real_time is None:
+        tot_time_diff = times[-1] - times[1]
+    else:
+        if queue_lens[-1] > 0: #Non-empty queue by max_real_time
+            print("====")
+            print("Non-empty QUEUE")
+            print("====")
+            tot_time_diff = max_real_time - times[1]
+        else: #Empty queue by max_real_time, stop when last item popped
+            print("====")
+            print("Empty QUEUE")
+            print("====")
+            tot_time_diff = times[-1] - times[1]
     if min(queue_lens) < 0:
         raise RuntimeError("Something went wrong, negative queue length")
-    return (queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue)
+    if tot_time_diff == 0:
+        return (queue_lens, times, max(queue_lens), float('inf'), tot_time_in_queue)
+    else:
+        return (queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue)
 
 
 def plot_queue_data(queue_lens, times):
@@ -503,7 +536,21 @@ def get_key_and_run_from_path(results_path):
     return key_str, run_str
 
 
-def analyse_single_file(results_path, no_plot=False):
+def analyse_single_file(results_path, no_plot=False, max_real_time=None):
+    # Check if there is an additional data file
+    try:
+        with open(results_path[:-3] + "_additional_data.json", 'r') as json_file:
+            additional_data = json.load(json_file)
+    except FileNotFoundError:
+        additional_data = {}
+
+    # If max_real_time is not set, check if there is a total_real_time in the data
+    if max_real_time is None:
+        try:
+            max_real_time=additional_data["total_real_time"]
+        except KeyError:
+            pass
+
     # Get create and ok data from sql file to compute latencies and throughput
     (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path)
     # Check (u)successful creates
@@ -528,12 +575,6 @@ def analyse_single_file(results_path, no_plot=False):
     raw_queue_dataA = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A")
     raw_queue_dataB = parse_table_data_from_sql(results_path, "EGP_Local_Queue_B")
 
-    # Check if there is an additional data file
-    try:
-        with open(results_path[:-3] + "_additional_data.json", 'r') as json_file:
-            additional_data = json.load(json_file)
-    except FileNotFoundError:
-        additional_data = {}
     print("-------------------")
     print("|Simulation data: |")
     print("-------------------")
@@ -697,6 +738,8 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument('--results-path', required=True, type=str,
                         help="Path to the directory containing the simulation results")
+    parser.add_argument('--max_real_time', default=None, type=float,
+                        help="If specified, don't include data after max_real_time (ns)")
     parser.add_argument('--no-plot', default=False, action='store_true',
                         help="Whether to produce plots or not")
 
@@ -706,4 +749,4 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    main(results_path=args.results_path, no_plot=args.no_plot)
+    main(results_path=args.results_path, no_plot=args.no_plot, max_real_time=args.max_real_time)
