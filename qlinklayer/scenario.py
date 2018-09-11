@@ -1,12 +1,10 @@
 import abc
 from functools import partial
 from collections import OrderedDict
-from easysquid.toolbox import create_logger, SimulationScheduler
+from easysquid.toolbox import logger, SimulationScheduler
 from netsquid.pydynaa import Entity, EventType
 from netsquid.simutil import sim_time
 from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FORMALISM
-
-logger = create_logger("logger")
 
 
 class SimulationScenario(Entity, metaclass=abc.ABCMeta):

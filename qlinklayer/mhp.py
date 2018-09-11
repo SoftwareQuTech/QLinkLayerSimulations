@@ -4,12 +4,10 @@ from math import exp, isclose
 from easysquid.services import Service, TimedServiceProtocol
 from easysquid.simpleLink import NodeCentricMHP
 from easysquid.easyfibre import HeraldedFibreConnection
-from easysquid.toolbox import EasySquidException, create_logger
+from easysquid.toolbox import EasySquidException, logger
 from netsquid.qubits.qubitapi import create_qubits
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
-
-logger = create_logger("logger")
 
 
 class MHPMessage:

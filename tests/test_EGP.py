@@ -8,13 +8,10 @@ from easysquid.entanglementGenerator import NV_PairPreparation
 from easysquid.puppetMaster import PM_Controller, PM_Test
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
-from easysquid.toolbox import SimulationScheduler, create_logger
+from easysquid.toolbox import SimulationScheduler, logger
 from netsquid.simutil import sim_reset, sim_run
 from qlinklayer.egp import NodeCentricEGP, EGPRequest
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
-
-
-logger = create_logger("logger")
 
 
 def store_result(storage, result):

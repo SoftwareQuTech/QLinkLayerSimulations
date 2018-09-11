@@ -38,7 +38,8 @@ def setup_data_directory(dir_path):
         pass
 
 
-def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, measure_directly, collect_queue_data=False):
+def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, measure_directly,
+                          collect_queue_data=False):
     # Create simulation data directory (simple timestamp) containing data collected by the datasequences
     setup_data_directory(dir_path)
 
@@ -77,13 +78,16 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
         # DataSequence for local queues
         # lqAs = scenarioA.egp.dqp.queueList
         # lqBs = scenarioB.egp.dqp.queueList
-        # lqA_ds = [EGPLocalQueueSequence(name="EGP Local Queue A {}".format(qid), dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqAs))]
-        # lqB_ds = [EGPLocalQueueSequence(name="EGP Local Queue B {}".format(qid), dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqBs))]
+        # lqA_ds = [EGPLocalQueueSequence(name="EGP Local Queue A {}".format(qid),
+        #           dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqAs))]
+        # lqB_ds = [EGPLocalQueueSequence(name="EGP Local Queue B {}".format(qid),
+        #           dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqBs))]
         lqA_ds = EGPLocalQueueSequence(name="EGP Local Queue A", dbFile=data_file, maxSteps=collection_duration)
         lqB_ds = EGPLocalQueueSequence(name="EGP Local Queue B", dbFile=data_file, maxSteps=collection_duration)
-        # outstandingA_ds = EGPOutstandingRequestsSequence(name="EGP Outstand Req A", dbFile=data_file, maxSteps=collection_duration)
-        # outstandingB_ds = EGPOutstandingRequestsSequence(name="EGP Outstand Req B", dbFile=data_file, maxSteps=collection_duration)
-
+        # outstandingA_ds = EGPOutstandingRequestsSequence(name="EGP Outstand Req A",
+        #                   dbFile=data_file, maxSteps=collection_duration)
+        # outstandingB_ds = EGPOutstandingRequestsSequence(name="EGP Outstand Req B",
+        #                   dbFile=data_file, maxSteps=collection_duration)
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=create_ds)
@@ -134,7 +138,8 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
 
 
 def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, min_pairs, max_pairs, tmax_pair,
-                              request_overlap, request_cycle, num_requests, max_sim_time, measure_directly, additional_data=None):
+                              request_overlap, request_cycle, num_requests, max_sim_time, measure_directly,
+                              additional_data=None):
     idA = scenarioA.egp.node.nodeID
     idB = scenarioB.egp.node.nodeID
 
@@ -225,15 +230,19 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=
 
     return egpA, egpB
 
+
 def _calc_prob_success_handler(midpoint, additional_data):
     p_succ = midpoint._prob_of_success
     additional_data["p_succ"] = p_succ
 
+
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
                    request_overlap=False, request_cycle=0, num_requests=1, max_sim_time=float('inf'),
-                   max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, measure_directly=False, t0=0, t_cycle=0,
-                   alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True, collect_queue_data=False):
+                   max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, measure_directly=False,
+                   t0=0, t_cycle=0,
+                   alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True,
+                   collect_queue_data=False):
     # Save additional data
     if save_additional_data:
         additional_data = {}
@@ -278,12 +287,14 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
         alice_scenario = MeasureAfterSuccessScenario(egp=egpA)
         bob_scenario = MeasureAfterSuccessScenario(egp=egpB)
     sim_duration = schedule_scenario_actions(alice_scenario, bob_scenario, origin_bias, create_prob, min_pairs,
-                                             max_pairs, tmax_pair, request_overlap, request_cycle, num_requests, max_sim_time, measure_directly, additional_data) + 1
+                                             max_pairs, tmax_pair, request_overlap, request_cycle, num_requests,
+                                             max_sim_time, measure_directly, additional_data) + 1
 
     sim_duration = min(max_wall_time, sim_duration)
 
     # Hook up data collectors to the scenarios
-    collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path, measure_directly, collect_queue_data=collect_queue_data)
+    collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path, measure_directly,
+                                       collect_queue_data=collect_queue_data)
 
     # Schedule event handler to listen the probability of success being computed
     if save_additional_data:
@@ -338,9 +349,17 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
 
             # Check clock once in a while
             now = time()
-            logger.info("Wall clock advanced {} s during the last {} s real time. Will now advance {} s real time.".format(wall_time_sim_step_duration, previous_timestep / SECOND, timestep / SECOND))
+            logger.info(
+                "Wall clock advanced {} s during the last {} s real time. Will now advance {} s real time.".format(
+                    wall_time_sim_step_duration, previous_timestep / SECOND, timestep / SECOND))
             mhp_cycles = math.floor(sim_time() / mhp_conn.t_cycle)
-            logger.info("Time advanced: {}/{} s real time.  {}/{} s wall time. {}/{} MHP cycles".format(sim_time() / SECOND, max_sim_time, now - start_time, max_wall_time, mhp_cycles, max_mhp_cycle))
+            logger.info(
+                "Time advanced: {}/{} s real time.  {}/{} s wall time. {}/{} MHP cycles".format(sim_time() / SECOND,
+                                                                                                max_sim_time,
+                                                                                                now - start_time,
+                                                                                                max_wall_time,
+                                                                                                mhp_cycles,
+                                                                                                max_mhp_cycle))
 
             # Save additional data relevant for the simulation
             if save_additional_data:

@@ -2,10 +2,7 @@
 # Scheduler
 #
 from netsquid import pydynaa
-from netsquid.simutil import sim_time
-from easysquid.toolbox import create_logger
-
-logger = create_logger("logger")
+from easysquid.toolbox import logger
 
 
 class RequestScheduler(pydynaa.Entity):
@@ -339,4 +336,3 @@ class RequestScheduler(pydynaa.Entity):
         """
         self._last_aid_added = None
         self._last_aid_removed = None
-

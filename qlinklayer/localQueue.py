@@ -6,9 +6,7 @@
 from netsquid.simutil import sim_time
 from netsquid.pydynaa import Entity, EventType, EventHandler
 from qlinklayer.general import LinkLayerException
-from easysquid.toolbox import create_logger
-
-logger = create_logger("logger")
+from easysquid.toolbox import logger
 
 
 class LocalQueue(Entity):
@@ -136,7 +134,6 @@ class LocalQueue(Entity):
             # Increment lower bound of sequence numbers to return next
             self.popSeq = self._get_next_pop_seq()
 
-
             # Return item
             return q
 
@@ -217,7 +214,8 @@ class TimeoutLocalQueue(LocalQueue):
         :param scheduleAfter: float
             Default schedule delay for added queue items
         """
-        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter, throw_events=throw_events)
+        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter,
+                                                throw_events=throw_events)
         self._EVT_PROC_TIMEOUT = EventType("QUEUE ITEM REMOVED", "Triggers when an item has successfully been removed")
         self._EVT_SCHEDULE = EventType("LOCAL QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
         self.timed_out_items = []

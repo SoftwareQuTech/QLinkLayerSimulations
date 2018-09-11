@@ -13,10 +13,7 @@ from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
 from netsquid.pydynaa import EventType, EventHandler
 from qlinklayer.localQueue import TimeoutLocalQueue
 from qlinklayer.general import LinkLayerException
-from easysquid.toolbox import create_logger
-
-logger = create_logger("logger")
-from netsquid.simutil import sim_time
+from easysquid.toolbox import logger
 
 
 class DistributedQueue(EasyProtocol, ClassicalProtocol):
@@ -48,7 +45,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
     DQ_REJECT = 2  # Operation REJECT
     DQ_ERR = 3  # Operation ERROR
 
-    def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 32, throw_local_queue_events=False, throw_dist_queue_events=False):
+    def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 32,
+                 throw_local_queue_events=False, throw_dist_queue_events=False):
 
         super(DistributedQueue, self).__init__(node, connection)
 

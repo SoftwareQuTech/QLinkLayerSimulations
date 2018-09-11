@@ -1,11 +1,8 @@
 #
 # Quantum Memory Management Unit
 #
-from easysquid.toolbox import create_logger, EasySquidException
+from easysquid.toolbox import logger, EasySquidException
 from easysquid.easygate import ZGate
-
-
-logger = create_logger("logger")
 
 
 class QuantumMemoryManagement:

@@ -10,14 +10,13 @@ from qlinklayer.distQueue import DistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
-from easysquid.toolbox import create_logger
+from easysquid.toolbox import logger
 import random
-
-logger = create_logger("logger")
 
 
 class EGPRequest:
-    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None, store=True, measure_directly=False):
+    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None, store=True,
+                 measure_directly=False):
         """
         Stores required parameters of Entanglement Generation Protocol Request
         :param otherID: int
@@ -58,7 +57,8 @@ class EGPRequest:
             A copy of the EGPRequest object
         """
         c = type(self)(otherID=self.otherID, num_pairs=self.num_pairs, min_fidelity=self.min_fidelity,
-                       max_time=self.max_time, purpose_id=self.purpose_id, priority=self.priority, store=self.store, measure_directly=self.measure_directly)
+                       max_time=self.max_time, purpose_id=self.purpose_id, priority=self.priority, store=self.store,
+                       measure_directly=self.measure_directly)
         c.assign_create_id(self.create_id, self.create_time)
         return c
 
@@ -245,7 +245,8 @@ class NodeCentricEGP(EGP):
         self.dqp.add_callback = self._add_to_queue_callback
 
         # Create the request scheduler
-        self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm, throw_outstanding_req_events=throw_queue_events)
+        self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm,
+                                          throw_outstanding_req_events=throw_queue_events)
         self.request_timeout_handler = EventHandler(self._request_timeout_handler)
         self._wait(self.request_timeout_handler, entity=self.scheduler, event_type=self.scheduler._EVT_REQ_TIMEOUT)
 
@@ -902,4 +903,3 @@ class NodeCentricEGP(EGP):
         scheduler = evt.source
         request = scheduler.timed_out_requests.pop(0)
         self.issue_err(err=self.ERR_TIMEOUT, err_data=request.create_id)
-

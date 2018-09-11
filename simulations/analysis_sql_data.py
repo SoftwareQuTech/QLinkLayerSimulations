@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import os
 
 
-
 def _check_table_name(table_name, base_table_name):
     """
     Checks if (table_name == (base_table_name + "n")) where n is an integer
@@ -28,6 +27,7 @@ def _check_table_name(table_name, base_table_name):
     except ValueError:
         is_number = False
     return (table == base_table_name) and is_number
+
 
 def parse_table_data_from_sql(results_path, base_table_name):
     """
@@ -67,6 +67,7 @@ def parse_table_data_from_sql(results_path, base_table_name):
 
         return table_data
 
+
 def parse_request_data_from_sql(results_path):
     """
     Parses collected request/ok data points from the sql database
@@ -93,8 +94,8 @@ def parse_request_data_from_sql(results_path):
     rejected_requests = []
     total_requested_pairs = 0
     for entry in creates_data:
-        timestamp, nodeID, create_id, create_time, max_time, measure_directly, min_fidelity, num_pairs, otherID,\
-            priority, purpose_id, store, succ = entry
+        (timestamp, nodeID, create_id, create_time, max_time, measure_directly, min_fidelity, num_pairs, otherID,
+         priority, purpose_id, store, succ) = entry
 
         total_requested_pairs += num_pairs
 
@@ -194,6 +195,7 @@ def calc_fidelity(d_matrix):
     """
     psi = np.matrix([[0, 1, 1, 0]]).transpose() / np.sqrt(2)
     return np.real((psi.H * d_matrix * psi)[0, 0])
+
 
 def parse_quberr_from_sql(results_path):
     """
@@ -480,6 +482,7 @@ def plot_throughput(all_gens):
     ax.grid()
     plt.show()
 
+
 def get_key_and_run_from_path(results_path):
     """
     results_path is assumed to be of the form "path/timestamp_key_i_run_j.db".
@@ -552,7 +555,8 @@ def analyse_single_file(results_path, no_plot=False):
     except KeyError:
         pass
     try:
-        print("Bright state population used was: alphaA={}, alphaB={}".format(additional_data["alphaA"], additional_data["alphaB"]))
+        print("Bright state population used was: alphaA={}, alphaB={}".format(additional_data["alphaA"],
+                                                                              additional_data["alphaB"]))
     except KeyError:
         pass
     print("")
@@ -601,7 +605,8 @@ def analyse_single_file(results_path, no_plot=False):
 
     print("Total number of generated pairs: {} of total requested {}".format(len(all_gens), total_requested_pairs))
     print("Total number of entanglement attempts for successful generations: {}".format(sum(gen_attempts.values()) / 2))
-    print("Total node attempts during simulation: " + "".join(["Node {}: {}, ".format(node, attempts) for node, attempts in node_attempts.items()]))
+    print("Total node attempts during simulation: " + "".join(
+        ["Node {}: {}, ".format(node, attempts) for node, attempts in node_attempts.items()]))
     print("")
     print("----------------------------------")
     print("|Data useful for queuing theory: |")
@@ -611,20 +616,22 @@ def analyse_single_file(results_path, no_plot=False):
     try:
         mhp_t_cycle = additional_data["mhp_t_cycle"]
         request_t_cycle = additional_data["request_t_cycle"]
-        print("The time cycle for MHP was {} ns and for the scheduled requests {} ns".format(mhp_t_cycle, request_t_cycle))
+        print("The time cycle for MHP was {} ns and for the scheduled requests {} ns".format(mhp_t_cycle,
+                                                                                             request_t_cycle))
 
         # Compute the total number of MHP cycles
         total_real_time = additional_data["total_real_time"]
         number_mhp_cycles = math.floor(total_real_time / mhp_t_cycle)
         print("Total number of complete MHP cycles was {}".format(number_mhp_cycles))
-        fractionA = node_attempts[0]/ number_mhp_cycles
+        fractionA = node_attempts[0] / number_mhp_cycles
         # fractionB = node_attempts[1]/ number_mhp_cycles
         # TODO ASSUMING THAT NUMBER OF ATTEMPTS ARE EQUAL FOR A AND B
         print("Number of attempted entanglement generations at / Number of MHP cycles = {}".format(fractionA))
         print("")
         if gen_attempts:
             print("Average probability of generating entanglement per attempt: {}".format(1 / avg_attempt_per_gen))
-            print("Average probability of generating entanglement per MHP cycle: {}".format(1 / avg_attempt_per_gen * fractionA))
+            print("Average probability of generating entanglement per MHP cycle: {}".format(
+                1 / avg_attempt_per_gen * fractionA))
         try:
             print("Probability of midpoint declaring success: {}".format(additional_data["p_succ"]))
         except KeyError:
@@ -633,7 +640,8 @@ def analyse_single_file(results_path, no_plot=False):
         pass
     try:
         print("")
-        print("Probability of scheduling a request per request cycle was {}".format(additional_data["create_request_prob"]))
+        print("Probability of scheduling a request per request cycle was {}".format(
+            additional_data["create_request_prob"]))
         print("Probability that a scheduled request was on A {}".format(additional_data["create_request_origin_bias"]))
     except KeyError:
         pass
