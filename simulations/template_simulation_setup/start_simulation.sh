@@ -294,7 +294,7 @@ for ((i=1; i<=processes; i++)); do
 
         # Schedule the simulation
         if [ "$PROFILING" == 'y' ]; then
-            profile_file="$resultsdir"/"$timestamp"_key_"$actual_key"_run_"$runindex".prof
+            profile_file="${resultsdir}/${timestamp}_key_${actual_key}_run_${runindex}.prof"
             python3 -m cProfile -o $profile_file $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
         else
             python3 $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
