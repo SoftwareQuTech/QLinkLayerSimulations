@@ -12,7 +12,9 @@ TMP_DIR=$2
 RESULT_DIR=$3
 POST_PROC=$4
 timestamp=$5
-paramsetfile=$6
+OUTPUTDIRNAME=$6
+paramsetfile=$7
+RUNONCLUSTER=$8
 
 # Concatenate output CSV files and move to project space
 mkdir -p $RESULT_DIR
@@ -30,8 +32,15 @@ rmdir $TMP_DIR
 if [ "$POST_PROC" == "y" ]; then
     outfile="${RESULT_DIR}/post_proc_output.out"
     post_proc_file="${SIMULATION_DIR}/setupsim/post_processing.sh"
-    sbatch $post_proc_file $RESULT_DIR $timestamp $paramsetfile
+    if [ "$RUNONCLUSTER" == 'y' ]; then
+        sbatch $post_proc_file $RESULT_DIR $timestamp $paramsetfile
+    else
+        $post_proc_file $RESULT_DIR $timestamp $paramsetfile
+    fi
 else
+    # Move to folder to not include absolute
+    cd $SIMULATION_DIR
+
     # Zip the results directory
-    zip -r "${RESULT_DIR}.zip" $RESULT_DIR
+    zip -r "${timestamp}\_${OUTPUTDIRNAME}.zip" "${timestamp}\_${OUTPUTDIRNAME}"
 fi

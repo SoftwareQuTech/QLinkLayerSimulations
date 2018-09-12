@@ -59,7 +59,7 @@ opt_params = {
     "alphaB": 0.1,
     "measure_directly": True,
     "t0": 0,
-    "wall_time_per_timestep": 10 * 60,
+    "wall_time_per_timestep": 1 * 10,
     "save_additional_data": True,
     "collect_queue_data": True}
 

@@ -6,6 +6,14 @@ RESULT_DIR=$1
 timestamp=$2
 paramsetfile=$3
 
+############################
+# Create a tmp CSV file with
+# The keys of the paramsets.
+# To be used by stopos
+############################
+$tmp_key_file="${RESULT_DIR}/tmp_key_file.csv"
+
+
 ########################
 # Setup stopos pool
 # to run post processing
@@ -17,6 +25,10 @@ stopos create
 stopos add $paramsetfile
 
 processes=`sara-get-num-cores`
+
+#######################
+# Start post processing
+#######################
 
 for ((i=1; i<=processes; i++)); do
 (

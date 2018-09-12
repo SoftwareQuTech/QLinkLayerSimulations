@@ -238,8 +238,8 @@ if [ "$RUNONCLUSTER" == 'y' ]; then
         jobname=${SLURM_JOB_ID}
     fi
 
-    # Schedule moving results files after simulation
-    sbatch --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -f $TMP_DIR) $resultsdir $POST_PROC $timestamp $paramsetfile
+    # Schedule moving results files after simulation (and possibly post-processing
+    sbatch --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -f $TMP_DIR) $resultsdir $POST_PROC $timestamp $OUTPUTDIRNAME $paramsetfile $RUNONCLUSTER
 
     # Get the number of cores
     nrcores=`sara-get-num-cores`
