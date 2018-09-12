@@ -312,3 +312,11 @@ for ((i=1; i<=processes; i++)); do
 ) &
 done
 wait
+
+# Check if we should do post-processing
+if ! [ "$RUNONCLUSTER" == 'y' ]; then
+    if [ "$POST_PROC" == 'y' ]; then
+        post_proc_file="${SIMULATION_DIR}/readonly/post_processing.sh"
+        $post_proc_file $resultsdir $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
+    fi
+fi

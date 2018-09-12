@@ -30,17 +30,14 @@ rmdir $TMP_DIR
 
 # Run post-processing
 if [ "$POST_PROC" == "y" ]; then
-    outfile="${RESULT_DIR}/post_proc_output.out"
-    post_proc_file="${SIMULATION_DIR}/setupsim/post_processing.sh"
-    if [ "$RUNONCLUSTER" == 'y' ]; then
-        sbatch $post_proc_file $RESULT_DIR $timestamp $paramsetfile
-    else
-        $post_proc_file $RESULT_DIR $timestamp $paramsetfile
-    fi
+    post_proc_file="${SIMULATION_DIR}/readonly/post_processing.sh"
+
+    # Note that this script will only be called if we are on the cluster
+    sbatch $post_proc_file $RESULT_DIR $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
 else
     # Move to folder to not include absolute
     cd $SIMULATION_DIR
 
     # Zip the results directory
-    zip -r "${timestamp}\_${OUTPUTDIRNAME}.zip" "${timestamp}\_${OUTPUTDIRNAME}"
+    zip -r "${timestamp}_${OUTPUTDIRNAME}.zip" "${timestamp}_${OUTPUTDIRNAME}"
 fi

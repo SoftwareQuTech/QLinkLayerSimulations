@@ -15,10 +15,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
         "create_prob": 0.037927991999999994
     },
     "1": {
@@ -37,10 +37,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
         "create_prob": 0.15171196799999997
     },
     "2": {
@@ -59,10 +59,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/no_noise.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/no_noise.json",
         "create_prob": 0.038000000000000006
     },
     "3": {
@@ -81,10 +81,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/no_noise.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/no_losses/no_noise.json",
         "create_prob": 0.15200000000000002
     },
     "4": {
@@ -103,10 +103,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_no_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_no_conv.json",
         "create_prob": 2.327171091763287e-05
     },
     "5": {
@@ -125,10 +125,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_no_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_no_conv.json",
         "create_prob": 9.308684367053148e-05
     },
     "6": {
@@ -147,10 +147,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_with_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_with_conv.json",
         "create_prob": 1.5999990398579446e-07
     },
     "7": {
@@ -169,10 +169,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_with_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_no_cav_with_conv.json",
         "create_prob": 6.399996159431779e-07
     },
     "8": {
@@ -191,10 +191,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_no_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_no_conv.json",
         "create_prob": 0.00021541544073166394
     },
     "9": {
@@ -213,10 +213,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_no_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_no_conv.json",
         "create_prob": 0.0008616617629266558
     },
     "10": {
@@ -235,10 +235,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_with_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_with_conv.json",
         "create_prob": 7.200511852909425e-05
     },
     "11": {
@@ -257,10 +257,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_with_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/lab_configs/network_with_cav_with_conv.json",
         "create_prob": 0.000288020474116377
     },
     "12": {
@@ -279,10 +279,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
         "create_prob": 1.5999990398579446e-07
     },
     "13": {
@@ -301,10 +301,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
         "create_prob": 6.399996159431779e-07
     },
     "14": {
@@ -323,10 +323,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
         "create_prob": 1.5999990398579446e-07
     },
     "15": {
@@ -345,10 +345,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
         "create_prob": 6.399996159431779e-07
     },
     "16": {
@@ -367,10 +367,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
         "create_prob": 1.5999990398579446e-07
     },
     "17": {
@@ -389,10 +389,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
         "create_prob": 6.399996159431779e-07
     },
     "18": {
@@ -411,10 +411,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
         "create_prob": 1.7907796090185066e-05
     },
     "19": {
@@ -433,10 +433,10 @@
         "alphaB": 0.1,
         "measure_directly": true,
         "t0": 0,
-        "wall_time_per_timestep": 10,
+        "wall_time_per_timestep": 600,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/home/dahlberg/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
+        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/template_simulation_setup/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
         "create_prob": 7.163118436074026e-05
     }
 }

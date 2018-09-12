@@ -8,8 +8,8 @@ import sys
 #######################
 
 description_string = "Simulation of EGP under CREATE+measure scenariou"
-easysquid_directory = "/home/dahlberg/EasySquid/"  # full absolute path
-netsquid_directory = "/home/dahlberg/NetSQUID/"  # full absolute path
+easysquid_directory = "/Users/adahlberg/Documents/EasySquid/"  # full absolute path
+netsquid_directory = "/Users/adahlberg/Documents/NetSQUID/"  # full absolute path
 number_of_runs = 1
 outputdirname = "CREATE_and_measure"
 
@@ -17,7 +17,7 @@ outputdirname = "CREATE_and_measure"
 # Optional parameters
 #########################
 
-qlinklayer_directory = "/home/dahlberg/QLinkLayer/"
+qlinklayer_directory = "/Users/adahlberg/Documents/QLinkLayer/"
 config_dir = "simulations/template_simulation_setup/setupsim/config"
 # config_files=[]
 # for root, dirs, files in os.walk(qlinklayer_directory + config_dir):
@@ -59,7 +59,7 @@ opt_params = {
     "alphaB": 0.1,
     "measure_directly": True,
     "t0": 0,
-    "wall_time_per_timestep": 1 * 10,
+    "wall_time_per_timestep": 10 * 60,
     "save_additional_data": True,
     "collect_queue_data": True}
 

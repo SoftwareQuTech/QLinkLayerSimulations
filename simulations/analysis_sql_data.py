@@ -461,7 +461,10 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
     plt.ylabel('Generation Count')
     plt.title('Attempt Histogram')
     plt.grid(True)
-    plt.show()
+    if save_figs:
+        save_plot("attempt_histogram.pdf", results_path, analysis_folder=analysis_folder)
+    if not no_plot:
+        plt.show()
 
     t = gen_attempts.values()
     s = [0] * len(t)
@@ -471,7 +474,7 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
     ax.set(xlabel='time (s)', title='Generation Latency Distribution')
     ax.grid()
     if save_figs:
-        save_plot("attempt_histogram.pdf", results_path, analysis_folder=analysis_folder)
+        save_plot("gen_latency_dist.pdf", results_path, analysis_folder=analysis_folder)
     if not no_plot:
         plt.show()
 
@@ -498,7 +501,10 @@ def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, anal
     plt.ylabel('Generation Count')
     plt.title('Generation Latency Histogram')
     plt.grid(True)
-    plt.show()
+    if save_figs:
+        save_plot("gen_latency_histogram.pdf", results_path, analysis_folder=analysis_folder)
+    if not no_plot:
+        plt.show()
 
     t = gen_times
     s = [0] * len(t)
@@ -508,7 +514,7 @@ def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, anal
     ax.set(xlabel='attempts', title='Generation Attempt Count Distribution')
     ax.grid()
     if save_figs:
-        save_plot("gen_latency_histogram.pdf", results_path, analysis_folder=analysis_folder)
+        save_plot("gen_attempt_count_dist.pdf", results_path, analysis_folder=analysis_folder)
     if not no_plot:
         plt.show()
 
