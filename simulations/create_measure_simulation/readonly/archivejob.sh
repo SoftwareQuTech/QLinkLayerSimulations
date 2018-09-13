@@ -33,7 +33,7 @@ if [ "$POST_PROC" == "y" ]; then
     post_proc_file="${SIMULATION_DIR}/readonly/post_processing.sh"
 
     # Note that this script will only be called if we are on the cluster
-    sbatch $post_proc_file $RESULT_DIR $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
+    sbatch --out="${RESULT_DIR}/post_processing_log.out" $post_proc_file $RESULT_DIR $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
 else
     # Move to folder to not include absolute
     cd $SIMULATION_DIR

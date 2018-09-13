@@ -738,7 +738,10 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         total_real_time = additional_data["total_real_time"]
         number_mhp_cycles = math.floor(total_real_time / mhp_t_cycle)
         output_data("Total number of complete MHP cycles was {}".format(number_mhp_cycles), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        fractionA = node_attempts[0] / number_mhp_cycles
+        if number_mhp_cycles > 0:
+            fractionA = node_attempts[0] / number_mhp_cycles
+        else:
+            fractionA = float('inf')
         # fractionB = node_attempts[1]/ number_mhp_cycles
         # TODO ASSUMING THAT NUMBER OF ATTEMPTS ARE EQUAL FOR A AND B
         output_data("Number of attempted entanglement generations at / Number of MHP cycles = {}".format(fractionA), results_path, save_output=save_output, analysis_folder=analysis_folder)

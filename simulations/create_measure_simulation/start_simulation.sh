@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -p short # requested parition (normal, short, staging, ...)
-#SBATCH -t 0:10:00 # wall clock time
+#SBATCH -p fat # requested parition (normal, short, staging, ...)
+#SBATCH -t 5-00:00:00 # wall clock time
 # This script:
 # - creates a new folder <TIMESTAMP>_<OUTPUTDIRNAME>
 # - extracts information about the simulation setup and 
@@ -239,7 +239,7 @@ if [ "$RUNONCLUSTER" == 'y' ]; then
     fi
 
     # Schedule moving results files after simulation (and possibly post-processing
-    sbatch --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -f $TMP_DIR) $resultsdir $POST_PROC $timestamp $OUTPUTDIRNAME $paramsetfile $RUNONCLUSTER
+    sbatch --out="${resultsdir}/archiving_log.out" --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -f $TMP_DIR) $resultsdir $POST_PROC $timestamp $OUTPUTDIRNAME $paramsetfile $RUNONCLUSTER
 
     # Get the number of cores
     nrcores=`sara-get-num-cores`
