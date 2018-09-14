@@ -758,8 +758,8 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         pass
     try:
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Probability of scheduling a request per request cycle was {}".format(
-            additional_data["create_request_prob"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Probability of scheduling a request per request cycle was {} at node A and {} at node B".format(
+            additional_data["create_request_probA"], additional_data["create_request_probB"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
         output_data("Probability that a scheduled request was on A {}".format(additional_data["create_request_origin_bias"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
     except KeyError:
         pass
