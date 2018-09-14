@@ -4,12 +4,10 @@ from math import exp, isclose
 from easysquid.services import Service, TimedServiceProtocol
 from easysquid.simpleLink import NodeCentricMHP
 from easysquid.easyfibre import HeraldedFibreConnection
-from easysquid.toolbox import EasySquidException, create_logger
+from easysquid.toolbox import EasySquidException, logger
 from netsquid.qubits.qubitapi import create_qubits
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
-
-logger = create_logger("logger")
 
 
 class MHPMessage:
@@ -198,9 +196,9 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
 
         # Send messages back to the node
         if receiver == self.idA:
-            self.channel_M_to_A.put(channel_data)
+            self.channel_M_to_A.send(channel_data)
         elif receiver == self.idB:
-            self.channel_M_to_B.put(channel_data)
+            self.channel_M_to_B.send(channel_data)
         else:
             raise EasySquidException("Unknown receiver")
 
@@ -258,10 +256,10 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
             The data to place on the channel to the node
         """
         if node.nodeID == self.nodeA.nodeID:
-            self.channel_M_to_A.put(data)
+            self.channel_M_to_A.send(data)
 
         elif node.nodeID == self.nodeB.nodeID:
-            self.channel_M_to_B.put(data)
+            self.channel_M_to_B.send(data)
 
         else:
             raise EasySquidException("Tried to send to unconnected node")
@@ -538,6 +536,7 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
         outcome = self.midPoint.measure(self.qubits[self.idA], self.qubits[self.idB])
         self.last_outcome = outcome
+        logger.debug("Scheduling entanglement event now.")
         self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         # Check current classical messages
@@ -754,6 +753,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return:
         """
         self.time_of_message_sent = sim_time()
+        logger.debug("Scheduling communication timeout event after {}.".format(self.message_timeout))
         self.timeout_event = self._schedule_after(self.message_timeout, self._EVT_COMM_TIMEOUT)
         self._wait_once(self.timeout_handler, event=self.timeout_event)
 
@@ -913,6 +913,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
             # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
+            logger.debug("Scheduling entanglement event now.")
             self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         except Exception as err_data:

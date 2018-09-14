@@ -8,13 +8,10 @@ from easysquid.entanglementGenerator import NV_PairPreparation
 from easysquid.puppetMaster import PM_Controller, PM_Test
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
-from easysquid.toolbox import SimulationScheduler, create_logger
+from easysquid.toolbox import SimulationScheduler, logger
 from netsquid.simutil import sim_reset, sim_run
 from qlinklayer.egp import NodeCentricEGP, EGPRequest
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
-
-
-logger = create_logger("logger")
 
 
 def store_result(storage, result):
@@ -557,11 +554,11 @@ class TestNodeCentricEGP(unittest.TestCase):
             if node.nodeID == alice.nodeID:
                 if not conn.mhp_seq == 1:
                     logger.debug("Sending to {}".format(node.nodeID))
-                    conn.channel_M_to_A.put(data)
+                    conn.channel_M_to_A.send(data)
 
             elif node.nodeID == bob.nodeID:
                 logger.debug("Sending to {}".format(node.nodeID))
-                conn.channel_M_to_B.put(data)
+                conn.channel_M_to_B.send(data)
 
         egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
 
@@ -765,7 +762,7 @@ class TestNodeCentricEGP(unittest.TestCase):
                                       priority=10)
 
         # max_time that is too short for us to fulfill
-        unsupptime_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=0, purpose_id=1,
+        unsupptime_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1e-9, purpose_id=1,
                                         priority=10)
 
         egpA.create(creq=node_self_request)

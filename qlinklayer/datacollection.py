@@ -19,6 +19,7 @@ class EGPErrorSequence(EGPDataSequence):
     """
     Collects error events and their error codes thrown by an EGP
     """
+
     def get_column_names(self):
         return ["Timestamp", "Node ID", "Error Code", "Success"]
 
@@ -32,6 +33,7 @@ class EGPCreateSequence(EGPDataSequence):
     """
     Collects CREATE events from an EGP including the CREATE events
     """
+
     def get_column_names(self):
         # TODO ITEMS AFTER "Timestamp and "Node ID" currently have to be sorted....
         return ["Timestamp", "Node ID", "Create ID", "Create_Time", "Max Time", "Measure Directly", "Min Fidelity",
@@ -49,6 +51,7 @@ class EGPOKSequence(EGPDataSequence):
     """
     Collects OK events from an EGP including the CREATE events
     """
+
     def get_column_names(self):
         return ["Timestamp", "Create ID", "Origin ID", "Other ID", "MHP Seq", "Logical ID", "Goodness", "Goodness Time",
                 "Create Time", "Success"]
@@ -63,6 +66,7 @@ class EGPStateSequence(EGPDataSequence):
     """
     Collects qubit states of generated entangled pairs
     """
+
     def get_column_names(self):
         matrix_columns = ["{}, {}, {}".format(i, j, k) for i in range(4) for j in range(4) for k in ['real', 'imag']]
         return ["Timestamp", "Node ID"] + matrix_columns + ["Success"]
@@ -89,6 +93,7 @@ class EGPQubErrSequence(EGPDataSequence):
         0 : No qub-error
         1 : Qub-error
     """
+
     def get_column_names(self):
         return ["Timestamp", "Z_err", "X_err", "Success"]
 
@@ -158,28 +163,31 @@ class EGPQubErrSequence(EGPDataSequence):
                 return [-1, 1], True
 
 
-class EGPLocalQueueSequence(EGPDataSequence):
-    """
-    Collects additions and removals of items from a local queue.
-    """
-    def get_column_names(self):
-        return ["Timestamp", "Add or Rem", "Seq", "Success"]
-    def getData(self, time, source=None):
-        local_queue = source[0]
-        if local_queue._last_seq_added is not None:
-            data = 1, local_queue._last_seq_added
+# class EGPLocalQueueSequence(EGPDataSequence):
+#     """
+#     Collects additions and removals of items from a local queue.
+#     """
+#
+#     def get_column_names(self):
+#         return ["Timestamp", "Add or Rem", "Seq", "Success"]
+#
+#     def getData(self, time, source=None):
+#         local_queue = source[0]
+#         if local_queue._last_seq_added is not None:
+#             data = 1, local_queue._last_seq_added
+#
+#             # Check for consistency
+#             if local_queue._last_seq_removed is not None:
+#                 raise RuntimeError("Got both addition and removal in queue collection.")
+#         else:
+#             if local_queue._last_seq_removed is not None:
+#                 data = -1, local_queue._last_seq_removed
+#             else:
+#                 raise RuntimeError("Got no addition or removal in queue collection.")
+#         local_queue._reset_data()
+#
+#         return data, True
 
-            # Check for consistency
-            if local_queue._last_seq_removed is not None:
-                raise RuntimeError("Got both addition and removal in queue collection.")
-        else:
-            if local_queue._last_seq_removed is not None:
-                data = -1, local_queue._last_seq_removed
-            else:
-                raise RuntimeError("Got no addition or removal in queue collection.")
-        local_queue._reset_data()
-
-        return data, True
 
 class EGPLocalQueueSequence(EGPDataSequence):
     """
@@ -187,8 +195,10 @@ class EGPLocalQueueSequence(EGPDataSequence):
     NOTE: THIS IS A TEMPORARY HACKY CLASS FOR BEING ABLE TO EXTRACT
     THIS DATA UNTIL WE FIX CHANGE WHEN ITEMS ARE POPPED FROM THE QUEUES
     """
+
     def get_column_names(self):
         return ["Timestamp", "Add or Rem", "Queue ID", "Queue Seq", "Success"]
+
     def getData(self, time, source=None):
         dist_queue = source[0]
         scheduler = source[1]
@@ -213,8 +223,10 @@ class EGPOutstandingRequestsSequence(EGPDataSequence):
     """
     Collects additions and removals of items from a local queue.
     """
+
     def get_column_names(self):
         return ["Timestamp", "Add or Rem", "qid", "qseq", "Success"]
+
     def getData(self, time, source=None):
         scheduler = source[0]
         if scheduler._last_aid_added is not None:
@@ -237,6 +249,7 @@ class MHPNodeEntanglementAttemptSequence(EGPDataSequence):
     """
     Collects entanglement attempts that occur at the end nodes
     """
+
     def get_column_names(self):
         return ["Timestamp", "Node ID", "Success"]
 
@@ -250,6 +263,7 @@ class MHPMidpointEntanglementAttemptSequence(EGPDataSequence):
     """
     Collects entanglement attempts that occur at the end nodes
     """
+
     def get_column_names(self):
         return ["Timestamp", "Outcome", "Success"]
 

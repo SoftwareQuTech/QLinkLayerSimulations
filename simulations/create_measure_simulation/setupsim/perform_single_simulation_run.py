@@ -8,7 +8,7 @@ This script:
 # TODO: doing the importing makes this example simulation slow! Can/should we cache this somehow?
 from easysquid.simulationinputparser import SimulationInputParser
 import sys
-import auxilscripts.simulation_methods as sim_methods
+from simulations.simulation_methods import run_simulation
 
 # get parameters
 params_received_from_start_simulation = sys.argv[1:]
@@ -22,4 +22,4 @@ paramsdict = sip.inputdict
 filebasename = sip.filebasename
 
 # Run the simulation
-sim_methods.run_simulation(results_path=filebasename, **paramsdict)
+run_simulation(results_path=filebasename, **paramsdict)

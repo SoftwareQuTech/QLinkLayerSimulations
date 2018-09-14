@@ -1,11 +1,8 @@
 #
 # Quantum Memory Management Unit
 #
-from easysquid.toolbox import create_logger, EasySquidException
+from easysquid.toolbox import logger, EasySquidException
 from easysquid.easygate import ZGate
-
-
-logger = create_logger("logger")
 
 
 class QuantumMemoryManagement:
@@ -17,7 +14,7 @@ class QuantumMemoryManagement:
 
     def __init__(self, node):
         self.node = node
-        self.reserved_qubits = [self.qubit_in_use(i) for i in range(self.node.qmem.max_num)]
+        self.reserved_qubits = [self.qubit_in_use(i) for i in range(self.node.qmem.num_positions)]
 
     def is_busy(self):
         return self.node.qmem.busy
@@ -49,7 +46,7 @@ class QuantumMemoryManagement:
             The amount of time it takes to move the electron state to the carbon
         """
         # If we are storing the entangled pair into the electron then the move time is 0
-        if self.node.qmem.max_num > 1:
+        if self.node.qmem.num_positions > 1:
             return self.node.qmem.get_move_time(0, 1)
 
         else:

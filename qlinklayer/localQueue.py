@@ -6,9 +6,7 @@
 from netsquid.simutil import sim_time
 from netsquid.pydynaa import Entity, EventType, EventHandler
 from qlinklayer.general import LinkLayerException
-from easysquid.toolbox import create_logger
-
-logger = create_logger("logger")
+from easysquid.toolbox import logger
 
 
 class LocalQueue(Entity):
@@ -70,6 +68,7 @@ class LocalQueue(Entity):
         logger.debug("Adding item with seq={} to local queue".format(seq))
 
         if self.throw_events:
+            logger.debug("Scheduling item added event now.")
             self._schedule_now(self._EVT_ITEM_ADDED)
             self._last_seq_added = seq
 
@@ -96,6 +95,7 @@ class LocalQueue(Entity):
             logger.debug("Removing item with seq={} to local queue".format(q.seq))
 
             if self.throw_events:
+                logger.debug("Scheduling item removed event now.")
                 self._schedule_now(self._EVT_ITEM_REMOVED)
                 self._last_seq_removed = q.seq
 
@@ -127,12 +127,12 @@ class LocalQueue(Entity):
             logger.debug("Removing item with seq={} to local queue".format(q.seq))
 
             if self.throw_events:
+                logger.debug("Scheduling item added event now.")
                 self._schedule_now(self._EVT_ITEM_REMOVED)
                 self._last_seq_removed = q.seq
 
             # Increment lower bound of sequence numbers to return next
             self.popSeq = self._get_next_pop_seq()
-
 
             # Return item
             return q
@@ -214,7 +214,8 @@ class TimeoutLocalQueue(LocalQueue):
         :param scheduleAfter: float
             Default schedule delay for added queue items
         """
-        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter, throw_events=throw_events)
+        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter,
+                                                throw_events=throw_events)
         self._EVT_PROC_TIMEOUT = EventType("QUEUE ITEM REMOVED", "Triggers when an item has successfully been removed")
         self._EVT_SCHEDULE = EventType("LOCAL QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
         self.timed_out_items = []
@@ -235,6 +236,9 @@ class TimeoutLocalQueue(LocalQueue):
 
         # Check if the item specifies a max queue time
         lifetime = getattr(request, 'max_time', 0.0)
+
+        if lifetime == 0:
+            lifetime = None
 
         # Store the item and attach the timeout event
         lq = _TimeoutLocalQueueItem(request, seq, sa, lifetime=lifetime)
@@ -276,6 +280,7 @@ class TimeoutLocalQueue(LocalQueue):
 
             # Store the item for retrieval by higher layers
             self.timed_out_items.append(queue_item)
+            logger.debug("Scheduling processing timeout event now.")
             self._schedule_now(self._EVT_PROC_TIMEOUT)
 
         else:
@@ -288,6 +293,7 @@ class TimeoutLocalQueue(LocalQueue):
             The event that triggered the handler
         """
         logger.debug("Schedule handler triggered in local queue")
+        logger.debug("Scheduling schedule event now.")
         self._schedule_now(self._EVT_SCHEDULE)
 
 
@@ -332,10 +338,12 @@ class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
             else:
                 start = sim_time()
             deadline = start + self.lifetime
+            logger.debug("Scheduling timeout event at {}.".format(deadline))
             self._schedule_at(deadline, self._EVT_TIMEOUT)
 
     def schedule(self):
         """
         Schedules the item's schedule event for triggering pickup by the local queue
         """
+        logger.debug("Scheduling timeout event at {}.".format(self.scheduleAt))
         self._schedule_at(self.scheduleAt, self._EVT_SCHEDULE)

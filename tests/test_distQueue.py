@@ -2,13 +2,11 @@
 
 import unittest
 import numpy as np
-import logging
 from qlinklayer.distQueue import DistributedQueue
 from easysquid.qnode import QuantumNode
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.easyprotocol import TimedProtocol
-from easysquid.toolbox import create_logger
 from netsquid.simutil import sim_run, sim_reset
 
 
@@ -53,9 +51,6 @@ class TestProtocol(FastTestProtocol):
 
 
 class TestDistributedQueue(unittest.TestCase):
-
-    def setUp(self):
-        self.logger = create_logger("testlogger", level=logging.INFO)
 
     def test_init(self):
 

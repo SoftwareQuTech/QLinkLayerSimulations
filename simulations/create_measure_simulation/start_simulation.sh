@@ -1,8 +1,6 @@
 #!/bin/bash
-#SBATCH -p short # requested parition (normal, short, staging, ...)
-#SBATCH -t 1:00:00 # wall clock time
-#SBATCH -n 24 # requested processes
-
+#SBATCH -p fat # requested parition (normal, short, staging, ...)
+#SBATCH -t 5-00:00:00 # wall clock time
 # This script:
 # - creates a new folder <TIMESTAMP>_<OUTPUTDIRNAME>
 # - extracts information about the simulation setup and 
@@ -105,6 +103,11 @@ case $key in
 	shift
 	shift
 	;;
+	-pp|--postprocessing)
+	POST_PROC="$2"
+	shift
+	shift
+	;;
 	*)
 	echo "Unknown argument $key"
 	exit 1
@@ -118,6 +121,7 @@ OUTPUTLOGFILE=${OUTPUTLOGFILE:-'y'}
 LOGTOCONSOLE=${LOGTOCONSOLE:-'y'}
 PROFILING=${PROFILING:-'n'}
 RUNONCLUSTER=${RUNONCLUSTER:-'n'}
+POST_PROC=${POST_PROC:-'n'}
 
 
 # logging to the console
@@ -136,8 +140,8 @@ export PYTHONPATH=$PYTHONPATH:$NETSQUIDDIR
 echo '- Getting software versions of NetSquid and EasySquid'
 
 
-EASYSQUIDHASH=$(.$SIMULATOION_DIR/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")
-NETSQUIDHASH=$(.$SIMULATION_DIR/readonly/get_git_hash.sh -dir "$NETSQUIDDIR")
+EASYSQUIDHASH=$($SIMULATION_DIR/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")
+NETSQUIDHASH=$($SIMULATION_DIR/readonly/get_git_hash.sh -dir "$NETSQUIDDIR")
 
 
 #####################################
@@ -234,8 +238,8 @@ if [ "$RUNONCLUSTER" == 'y' ]; then
         jobname=${SLURM_JOB_ID}
     fi
 
-    # Schedule moving results files after simulation
-    sbatch --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -f $TMP_DIR) $resultsdir
+    # Schedule moving results files after simulation (and possibly post-processing
+    sbatch --out="${resultsdir}/archiving_log.out" --dependency=afterany:$SLURM_JOB_ID $archivejobfile $jobname $(readlink -f $TMP_DIR) $resultsdir $POST_PROC $timestamp $OUTPUTDIRNAME $paramsetfile $RUNONCLUSTER
 
     # Get the number of cores
     nrcores=`sara-get-num-cores`
@@ -294,7 +298,7 @@ for ((i=1; i<=processes; i++)); do
 
         # Schedule the simulation
         if [ "$PROFILING" == 'y' ]; then
-            profile_file="$resultsdir"/"$timestamp"_key_"$actual_key"_run_"$runindex".prof
+            profile_file="${resultsdir}/${timestamp}_key_${actual_key}_run_${runindex}.prof"
             python3 -m cProfile -o $profile_file $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
         else
             python3 $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
@@ -308,3 +312,11 @@ for ((i=1; i<=processes; i++)); do
 ) &
 done
 wait
+
+# Check if we should do post-processing
+if ! [ "$RUNONCLUSTER" == 'y' ]; then
+    if [ "$POST_PROC" == 'y' ]; then
+        post_proc_file="${SIMULATION_DIR}/readonly/post_processing.sh"
+        $post_proc_file $resultsdir $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
+    fi
+fi

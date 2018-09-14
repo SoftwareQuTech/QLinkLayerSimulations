@@ -53,7 +53,7 @@ class PhysicalLayerGeneration(TimedProtocol):
 
         # Find a free memory slot
         freeID = -1
-        for j in range(self.node.qmem.max_num):
+        for j in range(self.node.qmem.num_positions):
             if not self.node.qmem.in_use(j):
                 freeID = j
                 break
@@ -99,7 +99,7 @@ class PhysicalLayerGeneration(TimedProtocol):
         # We are done, release all memory and qubits
         self.otherIDs = {}
         self.recOutcomes = {}
-        for j in range(self.node.qmem.max_num):
+        for j in range(self.node.qmem.num_positions):
             self.node.qmem.release_qubit(j)
 
     def start(self):

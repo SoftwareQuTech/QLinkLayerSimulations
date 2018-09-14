@@ -10,14 +10,13 @@ from qlinklayer.distQueue import DistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
-from easysquid.toolbox import create_logger
+from easysquid.toolbox import logger
 import random
-
-logger = create_logger("logger")
 
 
 class EGPRequest:
-    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None, store=True, measure_directly=False):
+    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None, store=True,
+                 measure_directly=False):
         """
         Stores required parameters of Entanglement Generation Protocol Request
         :param otherID: int
@@ -58,7 +57,8 @@ class EGPRequest:
             A copy of the EGPRequest object
         """
         c = type(self)(otherID=self.otherID, num_pairs=self.num_pairs, min_fidelity=self.min_fidelity,
-                       max_time=self.max_time, purpose_id=self.purpose_id, priority=self.priority, store=self.store, measure_directly=self.measure_directly)
+                       max_time=self.max_time, purpose_id=self.purpose_id, priority=self.priority, store=self.store,
+                       measure_directly=self.measure_directly)
         c.assign_create_id(self.create_id, self.create_time)
         return c
 
@@ -168,8 +168,10 @@ class EGP(EasyProtocol):
         logger.debug("Issuing error {} with data {}".format(err, err_data))
         if self.err_callback:
             self.err_callback(result=(err, err_data))
+            logger.debug("Scheduling error event now.")
             self._schedule_now(self._EVT_ERROR)
         else:
+            logger.debug("Scheduling error event now.")
             self._schedule_now(self._EVT_ERROR)
             return err, err_data
 
@@ -243,7 +245,8 @@ class NodeCentricEGP(EGP):
         self.dqp.add_callback = self._add_to_queue_callback
 
         # Create the request scheduler
-        self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm, throw_outstanding_req_events=throw_queue_events)
+        self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm,
+                                          throw_outstanding_req_events=throw_queue_events)
         self.request_timeout_handler = EventHandler(self._request_timeout_handler)
         self._wait(self.request_timeout_handler, entity=self.scheduler, event_type=self.scheduler._EVT_REQ_TIMEOUT)
 
@@ -453,6 +456,7 @@ class NodeCentricEGP(EGP):
 
             # Add the request to the DQP
             self._add_to_queue(creq)
+            logger.debug("Scheduling create event now.")
             self._schedule_now(self._EVT_CREATE)
             return (creq.create_id, creq.create_time)
 
@@ -496,7 +500,7 @@ class NodeCentricEGP(EGP):
         # Check if we can satisfy the request within the given time frame
         attempt_latency = self.mhp_service.get_cycle_time(self.node)
         min_time = attempt_latency * creq.num_pairs
-        if min_time > creq.max_time:
+        if (min_time > creq.max_time) and (creq.max_time != 0):
             logger.error("Requested max time is too short")
             return self.ERR_UNSUPP
 
@@ -872,12 +876,14 @@ class NodeCentricEGP(EGP):
         # Pass back the okay and clean up
         self.issue_ok(result)
         self.scheduler.mark_gen_completed(gen_id=(aid, comm_q, storage_q))
+        logger.debug("Scheduling entanglement completed event now.")
         self._schedule_now(self._EVT_ENT_COMPLETED)
 
         # Update number of remaining pairs on request, remove if completed
         if creq.num_pairs == 1:
             logger.debug("Generated final pair, removing request")
             self.scheduler.clear_request(aid=aid)
+            logger.debug("Scheduling request completed event now.")
             self._schedule_now(self._EVT_REQ_COMPLETED)
 
         elif creq.num_pairs >= 2:
@@ -897,4 +903,3 @@ class NodeCentricEGP(EGP):
         scheduler = evt.source
         request = scheduler.timed_out_requests.pop(0)
         self.issue_err(err=self.ERR_TIMEOUT, err_data=request.create_id)
-
