@@ -1,34 +1,79 @@
 import abc
-from functools import partial
+import random
 from collections import OrderedDict
-from easysquid.toolbox import logger, SimulationScheduler
-from netsquid.pydynaa import Entity, EventType
+from easysquid.toolbox import logger
+from easysquid.easyprotocol import TimedProtocol
+from netsquid.pydynaa import EventType
 from netsquid.simutil import sim_time
 from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FORMALISM
+from qlinklayer.egp import EGPRequest
 
 
-class SimulationScenario(Entity, metaclass=abc.ABCMeta):
-    """
-    Simple scenario class that allow scheduling functions at specified timestemps in pydynaa discrete simulator
-    """
-    def __init__(self):
-        self.sim_scheduler = SimulationScheduler()
-
-    def _schedule_action(self, func, sim_time):
-        self.sim_scheduler.schedule_function(func=func, t=sim_time)
-
-
-class EGPSimulationScenario(SimulationScenario):
-    def __init__(self, egp):
+class EGPSimulationScenario(TimedProtocol):
+    def __init__(self, egp, request_cycle, request_prob=1, min_pairs=1, max_pairs=1, min_fidelity=0.2, tmax_pair=0,
+                 num_requests=0, purpose_id=1, priority=10, store=False, measure_directly=False, t0=0):
         """
         EGP simulation scenario that schedules create calls onto the EGP and acts as a higher layer protocol that can
-        collect the ok messages and errors returned by the EGP operation
+        collect the ok messages and errors returned by the EGP operation.
+        A request is scheduled every 'request_cycle' with probability 'request_prob'.
+        The number of pairs per request is a random integer between 'min_pairs' and 'max_pairs'.
+        If 'num_requests > 0', then only 'num_requests' are created.
         :param egp: obj `~qlinklayer.egp.EGP`
             The EGP we want to call to for entanglement generation
+        :param request_cycle: float
+            Every 'request_cycle' there is an request with probability 'request_cycle'.
+        :param request_prob: float
+            Every 'request_cycle' there is an request with probability 'request_cycle'.
+        :param min_pairs: int
+            Minimum number of pairs per request.
+        :param max_pairs: int
+            Maximum number of pairs per request.
+        :param min_fidelity: float
+            Minimum fidelity for request.
+        :param tmax_pair: float
+            Maximum waiting time per pair for request. Maximum waiting time for request is then 'num_pairs*tmax_pair'.
+        :param num_requests: int
+            Maximum number of requests (0 is treated as infinite)
+        :param purpose_id: int
+            The purpose ID of this request.
+        :param priority: int
+            The priority of this request.
+        :param store: bool
+            Whether to move the qubit to a memory qubit after entanglement is generated.
+        :param measure_directly:
+            Whether the communication qubit should be measured directly after a photon is emitted.
+        :param t0: float
+            When this protocol should start.
+
         """
-        super(EGPSimulationScenario, self).__init__()
+        super(EGPSimulationScenario, self).__init__(timeStep=request_cycle, t0=t0, node=egp.node)
+        # Check input
+        if min_pairs > max_pairs:
+            raise ValueError("'min_pairs' cannot be larger than 'max_pairs'.")
+
         # Our EGP
         self.egp = egp
+
+        # Request probability
+        self.request_prob = request_prob
+
+        # Request data
+        self.otherID = self._get_other_node_ID()
+        self.min_pairs = min_pairs
+        self.max_pairs = max_pairs
+        self.min_fidelity = min_fidelity
+        self.tmax_pair = tmax_pair
+        if num_requests > 0:
+            self.num_requests = num_requests
+        else:
+            self.num_requests = float('inf')
+        self.purpose_id = purpose_id
+        self.priority = priority
+        self.store = store
+        self.measure_directly = measure_directly
+
+        # Store the current number of created requests
+        self.created_requests = 0
 
         # Hook up a handler to the ok events
         self.egp.ok_callback = self.ok_callback
@@ -42,16 +87,42 @@ class EGPSimulationScenario(SimulationScenario):
         self.create_storage = []
         self._EVT_CREATE = EventType("EGP CREATE", "Triggers when create was called")
 
-    def schedule_create(self, request, t):
+    def run_protocol(self):
         """
-        Given a request and timestep will schedule a call to the egp's "create" method
-        :param request: obj `~qlinklayer.egp.EGPRequest`
-            The request to pass to egp's create
-        :param t: float
-            Timestamp in simulation to call the create
+        Calls the EGP to make a request for entanglement
+        :return: None
         """
-        func_create = partial(self._create, request=request)
-        self._schedule_action(func_create, sim_time=t)
+        if self.created_requests >= self.num_requests:
+            return
+        if random.random() <= self.request_prob:
+            # Number of pairs
+            num_pairs = random.randint(self.min_pairs, self.max_pairs)
+
+            # Max time for request
+            max_time = num_pairs * self.tmax_pair
+
+            # Create a request
+            request = EGPRequest(otherID=self.otherID, num_pairs=num_pairs, min_fidelity=self.min_fidelity,
+                                 max_time=max_time, purpose_id=self.purpose_id, priority=self.priority,
+                                 store=self.store, measure_directly=self.measure_directly)
+
+            # Give the request to the egp
+            self._create(request)
+
+            self.created_requests += 1
+
+    def _get_other_node_ID(self):
+        """
+        Returns the node ID of the other node.
+        :return: int
+        """
+        idA = self.egp.conn.idA
+        idB = self.egp.conn.idB
+
+        if self.node.nodeID == idA:
+            return idB
+        else:
+            return idA
 
     def _create(self, request):
         """
@@ -119,16 +190,48 @@ class EGPSimulationScenario(SimulationScenario):
 
 
 class MeasureAfterSuccessScenario(EGPSimulationScenario):
-    def __init__(self, egp):
+    def __init__(self, egp, request_cycle, request_prob=1, min_pairs=1, max_pairs=1, min_fidelity=0.2, tmax_pair=0,
+                 num_requests=0, purpose_id=1, priority=10, store=False, t0=0):
         """
-        A simulation scenario that will immediately measure any entangled qubits generated by the EGP
+        A simulation scenario that will immediately measure any entangled qubits generated by the EGP.
+        EGP simulation scenario that schedules create calls onto the EGP and acts as a higher layer protocol that can
+        collect the ok messages and errors returned by the EGP operation.
+        A request is scheduled every 'request_cycle' with probability 'request_prob'.
+        The number of pairs per request is a random integer between 'min_pairs' and 'max_pairs'.
+        If 'num_requests > 0', then only 'num_requests' are created.
         :param egp: obj `~qlinklayer.egp.EGP`
-            The egp we will make create requests to and collect entanglement from
+            The EGP we want to call to for entanglement generation
+        :param request_cycle: float
+            Every 'request_cycle' there is an request with probability 'request_cycle'.
+        :param request_prob: float
+            Every 'request_cycle' there is an request with probability 'request_cycle'.
+        :param min_pairs: int
+            Minimum number of pairs per request.
+        :param max_pairs: int
+            Maximum number of pairs per request.
+        :param min_fidelity: float
+            Minimum fidelity for request.
+        :param tmax_pair: float
+            Maximum waiting time per pair for request. Maximum waiting time for request is then 'num_pairs*tmax_pair'.
+        :param num_requests: int
+            Maximum number of requests (0 is treated as infinite)
+        :param purpose_id: int
+            The purpose ID of this request.
+        :param priority: int
+            The priority of this request.
+        :param store: bool
+            Whether to move the qubit to a memory qubit after entanglement is generated.
+        :param t0: float
+            When this protocol should start.
+
         """
-        super(MeasureAfterSuccessScenario, self).__init__(egp=egp)
+        super(MeasureAfterSuccessScenario, self).__init__(egp=egp, request_cycle=request_cycle,
+                                                          request_prob=request_prob, min_pairs=min_pairs,
+                                                          max_pairs=max_pairs, min_fidelity=min_fidelity,
+                                                          tmax_pair=tmax_pair, num_requests=num_requests,
+                                                          purpose_id=purpose_id, priority=priority, store=store, t0=t0)
 
         # EGP internal objects
-        self.node = egp.node
         self.qmm = egp.qmm
 
         # Data storage from collected info
@@ -239,16 +342,52 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
 
 
 class MeasureBeforeSuccessScenario(EGPSimulationScenario):
-    """
-    Scenario for when spin is measured directly after photon is emitted, i.e. before messages is returned
-    from midpoint. The classical information from the choice of measurement basis and measurement
-    outcome can be used to compute QubErr and/or produce key.
-    """
-    def __init__(self, egp):
-        super(MeasureBeforeSuccessScenario, self).__init__(egp=egp)
+    def __init__(self, egp, request_cycle, request_prob=1, min_pairs=1, max_pairs=1, min_fidelity=0.2, tmax_pair=0,
+                 num_requests=0, purpose_id=1, priority=10, store=False, t0=0):
+        """
+        Scenario for when spin is measured directly after photon is emitted, i.e. before messages is returned
+        from midpoint. The classical information from the choice of measurement basis and measurement
+        outcome can be used to compute QubErr and/or produce key.
+      i  EGP simulation scenario that schedules create calls onto the EGP and acts as a higher layer protocol that can
+        collect the ok messages and errors returned by the EGP operation.
+        A request is scheduled every 'request_cycle' with probability 'request_prob'.
+        The number of pairs per request is a random integer between 'min_pairs' and 'max_pairs'.
+        If 'num_requests > 0', then only 'num_requests' are created.
+        :param egp: obj `~qlinklayer.egp.EGP`
+            The EGP we want to call to for entanglement generation
+        :param request_cycle: float
+            Every 'request_cycle' there is an request with probability 'request_cycle'.
+        :param request_prob: float
+            Every 'request_cycle' there is an request with probability 'request_cycle'.
+        :param min_pairs: int
+            Minimum number of pairs per request.
+        :param max_pairs: int
+            Maximum number of pairs per request.
+        :param min_fidelity: float
+            Minimum fidelity for request.
+        :param tmax_pair: float
+            Maximum waiting time per pair for request. Maximum waiting time for request is then 'num_pairs*tmax_pair'.
+        :param num_requests: int
+            Maximum number of requests (0 is treated as infinite)
+        :param purpose_id: int
+            The purpose ID of this request.
+        :param priority: int
+            The priority of this request.
+        :param store: bool
+            Whether to move the qubit to a memory qubit after entanglement is generated.
+        :param t0: float
+            When this protocol should start.
+
+        """
+
+        super(MeasureBeforeSuccessScenario, self).__init__(egp=egp, request_cycle=request_cycle,
+                                                           request_prob=request_prob, min_pairs=min_pairs,
+                                                           max_pairs=max_pairs, min_fidelity=min_fidelity,
+                                                           tmax_pair=tmax_pair, num_requests=num_requests,
+                                                           purpose_id=purpose_id, priority=priority, store=store,
+                                                           measure_directly=True, t0=t0)
 
         # EGP internal objects
-        self.node = egp.node
         self.qmm = egp.qmm
 
         # Data storage from collected info

@@ -4,18 +4,17 @@ import json
 from time import time
 import math
 from os.path import exists
-from random import random, randint
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import logger
 from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
     MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence, EGPQubErrSequence, EGPLocalQueueSequence
-from qlinklayer.egp import EGPRequest, NodeCentricEGP
+from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 
-# Here we add an entry into the Connection structre in Easysquid Easynetwork to give us access to load up configs
+# Here we add an entry into the Connection structure in Easysquid Easynetwork to give us access to load up configs
 # for the simulation using connections defined here in the QLinkLayer
 Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibre_connection"
 Connections._CONN_BY_NAME[Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION] = NodeCentricMHPHeraldedConnection
@@ -137,73 +136,35 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
     return collectors
 
 
-def schedule_scenario_actions(scenarioA, scenarioB, origin_bias, create_prob, min_pairs, max_pairs, tmax_pair,
-                              request_overlap, request_cycle, num_requests, max_sim_time, measure_directly,
+def create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs, max_pairs, tmax_pair,
+                              request_cycle, num_requests, measure_directly,
                               additional_data=None):
-    idA = scenarioA.egp.node.nodeID
-    idB = scenarioB.egp.node.nodeID
-
-    create_time = 0
-    sim_duration = 0
-    added_requests = 0
-
-    if num_requests == 0:
-        num_requests = float('inf')
-
-    if min_pairs > max_pairs:
-        max_pairs = min_pairs
-
     if request_cycle == 0:
         # Use t_cycle of MHP for the request cycle
-        request_cycle = scenarioA.egp.mhp.conn.t_cycle / SECOND
-
-    # Check so we don't have an infinite loop
-    if num_requests == float('inf'):
-        if max_sim_time == float('inf'):
-            raise ValueError("Cannot have infinite number of requests and infinite simulation time")
-        else:
-            if request_cycle == 0:
-                raise ValueError("Cannot have infinite number of requests, request overlap and zero request cycle")
+        request_cycle = egpA.mhp.conn.t_cycle
 
     if additional_data:
         additional_data["request_t_cycle"] = (request_cycle * SECOND)
-        additional_data["create_request_prob"] = create_prob
-        additional_data["create_request_origin_bias"] = origin_bias
+        additional_data["create_request_probA"] = create_probA
+        additional_data["create_request_probB"] = create_probB
 
-    while (added_requests < num_requests) and (create_time < (max_sim_time * SECOND)):
+    # Set up the Measure Immediately scenarios at nodes alice and bob
+    other_request_info = {"min_pairs": min_pairs, "max_pairs": max_pairs, "tmax_pair": tmax_pair,
+                          "num_requests": num_requests}
+    if measure_directly:
+        alice_scenario = MeasureBeforeSuccessScenario(egp=egpA, request_cycle=request_cycle, request_prob=create_probA,
+                                                      **other_request_info)
+        bob_scenario = MeasureBeforeSuccessScenario(egp=egpB, request_cycle=request_cycle, request_prob=create_probB,
+                                                    **other_request_info)
+    else:
+        alice_scenario = MeasureAfterSuccessScenario(egp=egpA, request_cycle=request_cycle, request_prob=create_probA,
+                                                     **other_request_info)
+        bob_scenario = MeasureAfterSuccessScenario(egp=egpB, request_cycle=request_cycle, request_prob=create_probB,
+                                                   **other_request_info)
+    alice_scenario.start()
+    bob_scenario.start()
 
-        # Randomly decide if we are creating a request this cycle (always create request if first cycle)
-        if (random() <= create_prob) or (added_requests == 0):
-            added_requests += 1
-
-            # Randomly select a number of pairs within the configured range
-            num_pairs = randint(min_pairs, max_pairs)
-
-            # Provision time for the request based on total number of pairs
-            max_time = num_pairs * tmax_pair * SECOND
-
-            # Randomly choose the node that will create the request
-            scenario = scenarioA if random() <= origin_bias else scenarioB
-            otherID = idB if scenario == scenarioA else idA
-            request = EGPRequest(otherID=otherID, num_pairs=num_pairs, min_fidelity=0.2, max_time=max_time,
-                                 purpose_id=1, priority=10, store=False, measure_directly=measure_directly)
-            logger.debug("Scheduling request at time {}".format(create_time))
-            scenario.schedule_create(request=request, t=create_time)
-
-            # If we want overlap then the next create occurs at the specified frequency
-            if request_overlap:
-                create_time += request_cycle * SECOND
-
-            # Otherwise schedule the next request once this one has already completed
-            else:
-                create_time += max_time
-
-            sim_duration = create_time + max_time
-
-        else:
-            create_time += request_cycle * SECOND
-
-    return sim_duration
+    return alice_scenario, bob_scenario
 
 
 def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=False):
@@ -237,8 +198,8 @@ def _calc_prob_success_handler(midpoint, additional_data):
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, min_pairs=1, max_pairs=3, tmax_pair=2,
-                   request_overlap=False, request_cycle=0, num_requests=1, max_sim_time=float('inf'),
+def run_simulation(results_path, config=None, create_probA=1, create_probB=0, min_pairs=1, max_pairs=1, tmax_pair=0,
+                   request_cycle=0, num_requests=1, max_sim_time=float('inf'),
                    max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, measure_directly=False,
                    t0=0, t_cycle=0,
                    alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True,
@@ -279,21 +240,13 @@ def run_simulation(results_path, config=None, origin_bias=0.5, create_prob=1, mi
         max_mhp_cycle = float('inf')
     max_sim_time = min(max_sim_time, mhp_conn.t_cycle * max_mhp_cycle / SECOND)
 
-    # Set up the Measure Immediately scenarios at nodes alice and bob
-    if measure_directly:
-        alice_scenario = MeasureBeforeSuccessScenario(egp=egpA)
-        bob_scenario = MeasureBeforeSuccessScenario(egp=egpB)
-    else:
-        alice_scenario = MeasureAfterSuccessScenario(egp=egpA)
-        bob_scenario = MeasureAfterSuccessScenario(egp=egpB)
-    sim_duration = schedule_scenario_actions(alice_scenario, bob_scenario, origin_bias, create_prob, min_pairs,
-                                             max_pairs, tmax_pair, request_overlap, request_cycle, num_requests,
-                                             max_sim_time, measure_directly, additional_data) + 1
-
-    sim_duration = min(max_wall_time, sim_duration)
+    # Create scenarios which act as higher layers communicating with the EGPs
+    alice_scenario, bob_scenario = create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs,
+                                             max_pairs, tmax_pair, request_cycle, num_requests,
+                                             measure_directly, additional_data)
 
     # Hook up data collectors to the scenarios
-    collectors = setup_data_collection(alice_scenario, bob_scenario, sim_duration, results_path, measure_directly,
+    collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, results_path, measure_directly,
                                        collect_queue_data=collect_queue_data)
 
     # Schedule event handler to listen the probability of success being computed

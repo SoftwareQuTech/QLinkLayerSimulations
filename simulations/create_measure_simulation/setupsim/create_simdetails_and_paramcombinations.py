@@ -44,11 +44,10 @@ config_to_p_succ = {
 # create paramcombinations
 
 opt_params = {
-    "origin_bias": 1,
+    "create_probB": 0,
     "min_pairs": 1,
     "max_pairs": 1,
     "tmax_pair": 0,
-    "request_overlap": True,
     "request_cycle": 0,
     "num_requests": 0,
     "max_sim_time": 0,
@@ -71,7 +70,7 @@ for config_file, p_succ in config_to_p_succ.items():
         param_set = {}
         param_set.update(opt_params)
         param_set["config"] = qlinklayer_directory + config_dir + "/" + config_file
-        param_set["create_prob"] = factor * p_succ
+        param_set["create_probA"] = factor * p_succ
         paramcombinations[counter] = param_set
         counter += 1
 
