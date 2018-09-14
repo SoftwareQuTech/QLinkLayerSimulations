@@ -18,7 +18,7 @@ outputdirname = "CREATE_and_measure"
 #########################
 
 qlinklayer_directory = "/Users/adahlberg/Documents/QLinkLayer/"
-config_dir = "simulations/template_simulation_setup/setupsim/config"
+config_dir = "simulations/create_measure_simulation/setupsim/config"
 # config_files=[]
 # for root, dirs, files in os.walk(qlinklayer_directory + config_dir):
 #     for filename in files:
@@ -100,6 +100,7 @@ if not sim_dir[-1] == '/':
 #########################
 general_params = {"EASYSQUIDDIR": easysquid_directory,
                   "NETSQUIDDIR": netsquid_directory,
+                  "QLINKLAYERDIR": qlinklayer_directory,
                   "DESCRIPTION": description_string,
                   "NUMRUNS": number_of_runs,
                   "OUTPUTDIRNAME": outputdirname

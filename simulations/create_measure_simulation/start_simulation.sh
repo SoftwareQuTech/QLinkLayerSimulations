@@ -132,6 +132,7 @@ echo $'Preparing simulation\n--------------------'
 # TODO should we do this here?
 export PYTHONPATH=$PYTHONPATH:$EASYSQUIDDIR
 export PYTHONPATH=$PYTHONPATH:$NETSQUIDDIR
+export PYTHONPATH=$PYTHONPATH:$QLINKLAYERDIR
 
 #########################
 # Get software versions #
@@ -142,6 +143,7 @@ echo '- Getting software versions of NetSquid and EasySquid'
 
 EASYSQUIDHASH=$($SIMULATION_DIR/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")
 NETSQUIDHASH=$($SIMULATION_DIR/readonly/get_git_hash.sh -dir "$NETSQUIDDIR")
+QLINKLAYERHASH=$($SIMULATION_DIR/readonly/get_git_hash.sh -dir "$QLINKLAYERDIR")
 
 
 #####################################
@@ -187,6 +189,8 @@ then
 	echo $NETSQUIDHASH >> $descrfilename
 	echo $'\nEasySquid:' >> $descrfilename
 	echo $EASYSQUIDHASH >> $descrfilename
+	echo $'\nQLinkLayer:' >> $descrfilename
+	echo $QLINKLAYERHASH >> $descrfilename
 	echo $'\n\nParameter choices\n-----------------\n' >> $descrfilename
 	echo $OPTPARAMS >> $descrfilename
 
