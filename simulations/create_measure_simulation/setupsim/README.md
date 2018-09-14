@@ -10,16 +10,16 @@ These are set in the file `setupsim/paramcombinations.json` which is generated b
 How to use this file and how it's used by the simulation, see the README in the `template_simulation_setup` of EasySquid.
 
  - `config`: The path to the config file for the physical network.
- - `origin_bias`: The probability that the request comes from node A.
+ - `create_probA`: The probability for there being a request from A each `request_cycle`.
+    That is, after each `request_cycle` a request to create entanglement will be given to the EGP with probability `create_prob` (below).
+    Currently this is set to separately for each config-scenario such that we run one simulation where the `create_prob` is 0.2 times (low req. freq.) the probability of the midpoint declaring success and one where it is 0.8 times (low req. freq.) this probability.
+ - `create_probB`: The probability for there being a request from B each `request_cycle`.
+    Currently set to zero.
  - `min_pairs`: The minimum number of pairs per request.
  - `max_pairs`: The maximum number of pairs per request.
  - `tmax_pair`: The maximum waiting time (s) for a request to be fulfilled.
-A `tmax_pair=0` will be treated as infinite.
- - `request_overlap`: Whether to allow for request submissions to overlap, this causes requests to be submitted before previous request's `max_time` has expired.
- - `requst_cycle`: The time cycle for scheduling requests.
-That is, after each `request_cycle` a request to create entanglement will be given to the EGP with probability `create_prob` (below).
- - `create_prob`: The probability for there being a request each `request_cycle`.
-Currently this is set to separately for each config-scenario such that we run one simulation where the `create_prob` is 0.2 times (low req. freq.) the probability of the midpoint declaring success and one where it is 0.8 times (low req. freq.) this probability.
+    A `tmax_pair=0` will be treated as infinite.
+ - `requst_cycle`: The time cycle (ns) for scheduling requests.
  - `num_requests`: The total number of request. If `num_requests=0` requests will be scheduled for the total duration of the simulation.
  - `max_sim_time`: The maximum simulation/real/matrix/pydynaa time (depending on what you want to call it). `max_sim_time=0` is treated as infinite.
  - `max_wall_time`: The max wall time of the simulation. `max_wall_time` is treated as infinite.
