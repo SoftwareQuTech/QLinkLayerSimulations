@@ -137,8 +137,8 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
 
 
 def create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs, max_pairs, tmax_pair,
-                              request_cycle, num_requests, measure_directly,
-                              additional_data=None):
+                     request_cycle, num_requests, measure_directly,
+                     additional_data=None):
     if request_cycle == 0:
         # Use t_cycle of MHP for the request cycle
         request_cycle = egpA.mhp.conn.t_cycle
@@ -242,8 +242,8 @@ def run_simulation(results_path, config=None, create_probA=1, create_probB=0, mi
 
     # Create scenarios which act as higher layers communicating with the EGPs
     alice_scenario, bob_scenario = create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs,
-                                             max_pairs, tmax_pair, request_cycle, num_requests,
-                                             measure_directly, additional_data)
+                                                    max_pairs, tmax_pair, request_cycle, num_requests,
+                                                    measure_directly, additional_data)
 
     # Hook up data collectors to the scenarios
     collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, results_path, measure_directly,

@@ -9,6 +9,7 @@
 
 import sys
 
+
 def main(paramsetfile, tmp_key_file):
     """
     Creates a CSV file with the name 'tmp_key_file' which
@@ -26,6 +27,7 @@ def main(paramsetfile, tmp_key_file):
     with open(tmp_key_file, 'w') as f:
         for key in keys:
             f.write(key + '\n')
+
 
 if __name__ == '__main__':
     paramsetfile = sys.argv[1]

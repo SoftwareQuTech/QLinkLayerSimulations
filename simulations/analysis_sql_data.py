@@ -598,7 +598,7 @@ def output_data(data, results_path, save_output=False, analysis_folder=None):
                 out_file.write(data + "\n")
         else:
             with open(results_path[-3] + "_analysis_output.txt", 'a') as out_file:
-                out_file.write(data+ "\n")
+                out_file.write(data + "\n")
 
 
 def save_plot(fig_name, results_path, analysis_folder=None):
@@ -610,7 +610,8 @@ def save_plot(fig_name, results_path, analysis_folder=None):
         plt.savefig(results_path[-3] + "_" + fig_name)
 
 
-def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_figs=False, save_output=False, analysis_folder=None):
+def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_figs=False, save_output=False,
+                        analysis_folder=None):
     # Check if there is an additional data file
     try:
         with open(results_path[:-3] + "_additional_data.json", 'r') as json_file:
@@ -621,12 +622,13 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     # If max_real_time is not set, check if there is a total_real_time in the data
     if max_real_time is None:
         try:
-            max_real_time=additional_data["total_real_time"]
+            max_real_time = additional_data["total_real_time"]
         except KeyError:
             pass
 
     # Get create and ok data from sql file to compute latencies and throughput
-    (requests, rejected_requests), (gens, all_gens), total_requested_pairs = parse_request_data_from_sql(results_path, max_real_time=max_real_time)
+    (requests, rejected_requests), (gens, all_gens), total_requested_pairs =\
+        parse_request_data_from_sql(results_path, max_real_time=max_real_time)
     # Check (u)successful creates
     satisfied_creates, unsatisfied_creates = extract_successful_unsuccessful_creates(requests, gens)
     # Compute latencies for requests, i.e. possibly more than one pair/request
@@ -635,7 +637,8 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     gen_starts, gen_times = get_gen_latencies(requests, gens)
 
     # Get attempts data to compute number of attempts per generation and generation probability
-    node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, all_gens, gen_starts, max_real_time=max_real_time)
+    node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, all_gens, gen_starts,
+                                                              max_real_time=max_real_time)
 
     # Get fidelities
     fidelities = parse_fidelities_from_sql(results_path, max_real_time=max_real_time)
@@ -652,26 +655,32 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     output_data("-------------------", results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("|Simulation data: |", results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("-------------------", results_path, save_output=save_output, analysis_folder=analysis_folder)
-    output_data("Analysing data in file {}".format(results_path), results_path, save_output=save_output, analysis_folder=analysis_folder)
+    output_data("Analysing data in file {}".format(results_path), results_path, save_output=save_output,
+                analysis_folder=analysis_folder)
     key_str, run_str = get_key_and_run_from_path(results_path)
     path_to_folder = "/".join(results_path.split('/')[:-1])
     with open(path_to_folder + "/paramcombinations.json") as json_file:
         arguments = json.load(json_file)[key_str]
-    output_data("Arguments in paramcombinations.py for this simulation was:", results_path, save_output=save_output, analysis_folder=analysis_folder)
+    output_data("Arguments in paramcombinations.py for this simulation was:", results_path, save_output=save_output,
+                analysis_folder=analysis_folder)
     for arg_name, arg in arguments.items():
-        output_data("    {}={}".format(arg_name, arg), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("    {}={}".format(arg_name, arg), results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
     output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
     try:
-        output_data("Total 'real time' was {} ns".format(additional_data["total_real_time"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Total 'real time' was {} ns".format(additional_data["total_real_time"]), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
     except KeyError:
         pass
     try:
-        output_data("Total 'wall time' was {} s".format(additional_data["total_wall_time"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Total 'wall time' was {} s".format(additional_data["total_wall_time"]), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
     except KeyError:
         pass
     try:
         output_data("Bright state population used was: alphaA={}, alphaB={}".format(additional_data["alphaA"],
-                                                                              additional_data["alphaB"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
+                                                                                    additional_data["alphaB"]),
+                    results_path, save_output=save_output, analysis_folder=analysis_folder)
     except KeyError:
         pass
     output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
@@ -679,79 +688,111 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     output_data("-----------------------", results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("|Performance metrics: |", results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("-----------------------", results_path, save_output=save_output, analysis_folder=analysis_folder)
-    output_data("Number of satisfied CREATE requests: {} out of total {}".format(len(satisfied_creates), len(requests)), results_path, save_output=save_output, analysis_folder=analysis_folder)
+    output_data("Number of satisfied CREATE requests: {} out of total {}".format(len(satisfied_creates), len(requests)),
+                results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
     if request_times:
-        output_data("Average request latency: {} s".format(sum(request_times) / len(request_times) / SECOND), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Minimum request latency: {} s".format(min(request_times) / SECOND), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Maximum request latency: {} s".format(max(request_times) / SECOND), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Average request latency: {} s".format(sum(request_times) / len(request_times) / SECOND),
+                    results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Minimum request latency: {} s".format(min(request_times) / SECOND), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Maximum request latency: {} s".format(max(request_times) / SECOND), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
     if gen_times:
-        output_data("Average generation time: {} s".format(sum(gen_times) / len(all_gens) / SECOND), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Minimum generation time: {} s".format(min(gen_times) / SECOND), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Maximum generation time: {} s".format(max(gen_times) / SECOND), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Average generation time: {} s".format(sum(gen_times) / len(all_gens) / SECOND), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Minimum generation time: {} s".format(min(gen_times) / SECOND), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Maximum generation time: {} s".format(max(gen_times) / SECOND), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
     if fidelities:
-        output_data("Average fidelity: {} s".format(sum(fidelities) / len(fidelities)), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Minimum fidelity: {} s".format(min(fidelities)), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Maximum fidelity: {} s".format(max(fidelities)), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Average fidelity: {} s".format(sum(fidelities) / len(fidelities)), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Minimum fidelity: {} s".format(min(fidelities)), results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
+        output_data("Maximum fidelity: {} s".format(max(fidelities)), results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
     if avg_Z_err:
-        output_data("Average QubErr in Z-basis {} (from {} data points)".format(avg_Z_err, Z_data_points), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Average QubErr in Z-basis {} (from {} data points)".format(avg_Z_err, Z_data_points), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
     else:
-        output_data("Average QubErr in Z-basis NO_DATA", results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Average QubErr in Z-basis NO_DATA", results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
     if avg_X_err:
-        output_data("Average QubErr in X-basis {} (from {} data points)".format(avg_X_err, X_data_points), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Average QubErr in X-basis {} (from {} data points)".format(avg_X_err, X_data_points), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
     else:
-        output_data("Average QubErr in X-basis NO_DATA", results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Average QubErr in X-basis NO_DATA", results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
     if gen_attempts:
         avg_attempt_per_gen = sum(gen_attempts.values()) / 2 / len(all_gens)
-        output_data("Average number of attempts per successful generation: {}".format(avg_attempt_per_gen), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Minimum number of attempts for a generation: {}".format(min(gen_attempts.values())), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Maximum number of attempts for a generation: {}".format(max(gen_attempts.values())), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Average number of attempts per successful generation: {}".format(avg_attempt_per_gen),
+                    results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Minimum number of attempts for a generation: {}".format(min(gen_attempts.values())), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Maximum number of attempts for a generation: {}".format(max(gen_attempts.values())), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
-    output_data("Total number of generated pairs: {} of total requested {}".format(len(all_gens), total_requested_pairs), results_path, save_output=save_output, analysis_folder=analysis_folder)
-    output_data("Total number of entanglement attempts for successful generations: {}".format(sum(gen_attempts.values()) / 2), results_path, save_output=save_output, analysis_folder=analysis_folder)
+    output_data(
+        "Total number of generated pairs: {} of total requested {}".format(len(all_gens), total_requested_pairs),
+        results_path, save_output=save_output, analysis_folder=analysis_folder)
+    output_data(
+        "Total number of entanglement attempts for successful generations: {}".format(sum(gen_attempts.values()) / 2),
+        results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("Total node attempts during simulation: " + "".join(
-        ["Node {}: {}, ".format(node, attempts) for node, attempts in node_attempts.items()]), results_path, save_output=save_output, analysis_folder=analysis_folder)
+                ["Node {}: {}, ".format(node, attempts) for node, attempts in node_attempts.items()]), results_path,
+                save_output=save_output, analysis_folder=analysis_folder)
     output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
-    output_data("----------------------------------", results_path, save_output=save_output, analysis_folder=analysis_folder)
-    output_data("|Data useful for queuing theory: |", results_path, save_output=save_output, analysis_folder=analysis_folder)
-    output_data("----------------------------------", results_path, save_output=save_output, analysis_folder=analysis_folder)
+    output_data("----------------------------------", results_path, save_output=save_output,
+                analysis_folder=analysis_folder)
+    output_data("|Data useful for queuing theory: |", results_path, save_output=save_output,
+                analysis_folder=analysis_folder)
+    output_data("----------------------------------", results_path, save_output=save_output,
+                analysis_folder=analysis_folder)
 
     # Check mhp_t_cycle and request_cycle
     try:
         mhp_t_cycle = additional_data["mhp_t_cycle"]
         request_t_cycle = additional_data["request_t_cycle"]
         output_data("The time cycle for MHP was {} ns and for the scheduled requests {} ns".format(mhp_t_cycle,
-                                                                                             request_t_cycle), results_path, save_output=save_output, analysis_folder=analysis_folder)
+                                                                                                   request_t_cycle),
+                    results_path, save_output=save_output, analysis_folder=analysis_folder)
 
         # Compute the total number of MHP cycles
         total_real_time = additional_data["total_real_time"]
         number_mhp_cycles = math.floor(total_real_time / mhp_t_cycle)
-        output_data("Total number of complete MHP cycles was {}".format(number_mhp_cycles), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Total number of complete MHP cycles was {}".format(number_mhp_cycles), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
         if number_mhp_cycles > 0:
             fractionA = node_attempts[0] / number_mhp_cycles
         else:
             fractionA = float('inf')
         # fractionB = node_attempts[1]/ number_mhp_cycles
         # TODO ASSUMING THAT NUMBER OF ATTEMPTS ARE EQUAL FOR A AND B
-        output_data("Number of attempted entanglement generations at / Number of MHP cycles = {}".format(fractionA), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Number of attempted entanglement generations at / Number of MHP cycles = {}".format(fractionA),
+                    results_path, save_output=save_output, analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
         if gen_attempts:
-            output_data("Average probability of generating entanglement per attempt: {}".format(1 / avg_attempt_per_gen), results_path, save_output=save_output, analysis_folder=analysis_folder)
+            output_data(
+                "Average probability of generating entanglement per attempt: {}".format(1 / avg_attempt_per_gen),
+                results_path, save_output=save_output, analysis_folder=analysis_folder)
             output_data("Average probability of generating entanglement per MHP cycle: {}".format(
-                1 / avg_attempt_per_gen * fractionA), results_path, save_output=save_output, analysis_folder=analysis_folder)
+                1 / avg_attempt_per_gen * fractionA), results_path, save_output=save_output,
+                analysis_folder=analysis_folder)
         try:
-            output_data("Probability of midpoint declaring success: {}".format(additional_data["p_succ"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
+            output_data("Probability of midpoint declaring success: {}".format(additional_data["p_succ"]), results_path,
+                        save_output=save_output, analysis_folder=analysis_folder)
         except KeyError:
             pass
     except KeyError:
@@ -759,30 +800,43 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     try:
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
         output_data("Probability of scheduling a request per request cycle was {} at node A and {} at node B".format(
-            additional_data["create_request_probA"], additional_data["create_request_probB"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Probability that a scheduled request was on A {}".format(additional_data["create_request_origin_bias"]), results_path, save_output=save_output, analysis_folder=analysis_folder)
+            additional_data["create_request_probA"], additional_data["create_request_probB"]), results_path,
+            save_output=save_output, analysis_folder=analysis_folder)
+        output_data(
+            "Probability that a scheduled request was on A {}".format(additional_data["create_request_origin_bias"]),
+            results_path, save_output=save_output, analysis_folder=analysis_folder)
     except KeyError:
         pass
 
     # Extract data from raw queue data
     if raw_queue_dataA:
-        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA = parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
+        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA =\
+            parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Max queue length at A: {}".format(max_queue_lenA), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Average queue length at A: {}".format(avg_queue_lenA), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Total time items spent in queue at A: {} ns".format(tot_time_in_queueA), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Max queue length at A: {}".format(max_queue_lenA), results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
+        output_data("Average queue length at A: {}".format(avg_queue_lenA), results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
+        output_data("Total time items spent in queue at A: {} ns".format(tot_time_in_queueA), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
     if raw_queue_dataB:
-        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB = parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
+        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB =\
+            parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Max queue length at B: {}".format(max_queue_lenB), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Average queue length at B: {}".format(avg_queue_lenB), results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Total time items spent in queue at B: {} ns".format(tot_time_in_queueB), results_path, save_output=save_output, analysis_folder=analysis_folder)
+        output_data("Max queue length at B: {}".format(max_queue_lenB), results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
+        output_data("Average queue length at B: {}".format(avg_queue_lenB), results_path, save_output=save_output,
+                    analysis_folder=analysis_folder)
+        output_data("Total time items spent in queue at B: {} ns".format(tot_time_in_queueB), results_path,
+                    save_output=save_output, analysis_folder=analysis_folder)
 
     if raw_queue_dataA and raw_queue_dataB:
-        plot_queue_data([queue_lensA, queue_lensB], [qtimesA, qtimesB], results_path, no_plot=no_plot, save_figs=save_figs, analysis_folder=analysis_folder)
+        plot_queue_data([queue_lensA, queue_lensB], [qtimesA, qtimesB], results_path, no_plot=no_plot,
+                        save_figs=save_figs, analysis_folder=analysis_folder)
 
     if gen_attempts:
-        plot_gen_attempts(gen_attempts, results_path, no_plot=no_plot, save_figs=save_figs, analysis_folder=analysis_folder)
+        plot_gen_attempts(gen_attempts, results_path, no_plot=no_plot, save_figs=save_figs,
+                          analysis_folder=analysis_folder)
 
     if gen_times:
         plot_gen_times(gen_times, results_path, no_plot=no_plot, save_figs=save_figs, analysis_folder=analysis_folder)
@@ -794,16 +848,20 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output=False, analysis_folder=None):
     # Check if results_path is a single .db file or a folder containing such
     if results_path.endswith('.db'):
-        analyse_single_file(results_path, no_plot, max_real_time=max_real_time, save_figs=save_figs, save_output=save_output, analysis_folder=analysis_folder)
+        analyse_single_file(results_path, no_plot, max_real_time=max_real_time, save_figs=save_figs,
+                            save_output=save_output, analysis_folder=analysis_folder)
     else:
         if results_path.endswith('/'):
             results_path = results_path[:-1]
         for entry in os.listdir(results_path):
             if entry.endswith('.db'):
                 output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
-                output_data("====================================", results_path, save_output=save_output, analysis_folder=analysis_folder)
-                analyse_single_file(results_path + "/" + entry, no_plot, max_real_time=max_real_time, save_figs=save_figs, save_output=save_output, analysis_folder=analysis_folder)
-                output_data("====================================", results_path, save_output=save_output, analysis_folder=analysis_folder)
+                output_data("====================================", results_path, save_output=save_output,
+                            analysis_folder=analysis_folder)
+                analyse_single_file(results_path + "/" + entry, no_plot, max_real_time=max_real_time,
+                                    save_figs=save_figs, save_output=save_output, analysis_folder=analysis_folder)
+                output_data("====================================", results_path, save_output=save_output,
+                            analysis_folder=analysis_folder)
                 output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
 
@@ -828,4 +886,5 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    main(results_path=args.results_path, no_plot=args.no_plot, max_real_time=args.max_real_time, save_figs=args.save_figs, save_output=args.save_output, analysis_folder=args.analysis_folder)
+    main(results_path=args.results_path, no_plot=args.no_plot, max_real_time=args.max_real_time,
+         save_figs=args.save_figs, save_output=args.save_output, analysis_folder=args.analysis_folder)
