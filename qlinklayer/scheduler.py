@@ -17,7 +17,6 @@ class RequestScheduler(pydynaa.Entity):
 
         # Queue service timeout handler
         self.service_timeout_handler = pydynaa.EventHandler(self._handle_item_timeout)
-        self._wait(self.service_timeout_handler, entity=self.distQueue, event_type=self.distQueue._EVT_QUEUE_TIMEOUT)
         self._EVT_REQ_TIMEOUT = pydynaa.EventType("REQ TIMEOUT", "Triggers when request was not completed in time")
 
         # Queue item schedule handler
@@ -140,6 +139,12 @@ class RequestScheduler(pydynaa.Entity):
         return False, None, None, None, None, self.my_free_memory
 
     def get_next_gen_template(self):
+        """
+        Returns the next entanglement generation template to process.  Verifies that there are resources available
+        before filling in the template and passing it back to be used.
+        :return: tuple
+            Represents the information to be used for the next entanglement generation attempts
+        """
         logger.debug("Filling next available gen template")
 
         # Obtain the next template
@@ -162,6 +167,7 @@ class RequestScheduler(pydynaa.Entity):
             gen_template[2] = comm_q
             gen_template[3] = storage_q
 
+            # Convert to a tuple
             next_gen = tuple(gen_template)
 
             logger.debug("Created gen request {}".format(next_gen))
@@ -222,6 +228,11 @@ class RequestScheduler(pydynaa.Entity):
                 logger.debug("Scheduling remove outstanding request event now.")
                 self._schedule_now(self._EVT_REM_OUTSTANDING_REQ)
 
+        qid, qseq = aid
+        queue_item = self.distQueue.remove(qid, qseq)
+        if queue_item is None:
+            logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
+
         # Check if we have any requests to follow up with and begin processing them
         self._process_outstanding_items()
 
@@ -281,12 +292,7 @@ class RequestScheduler(pydynaa.Entity):
         """
         # Get the queue that has an item ready
         queue = evt.source
-
-        # Get the qid to pop from in the distQueue
-        qid = self.next_pop()
-
-        # Get the item and request
-        queue_item = queue.local_pop(qid)
+        qid, queue_item = queue.ready_items.pop(0)
         qseq = queue_item.seq
 
         # Store the request under the absolute queue id
@@ -309,10 +315,16 @@ class RequestScheduler(pydynaa.Entity):
         self._process_outstanding_items()
 
     def _process_outstanding_items(self):
-        # Simply process the requests in FIFO order (for now...)
-        if not self.requests:
+        """
+        Makes decisions on which request to process next.  Currently sorts the requests by queue sequence number
+        and chooses the lowest to process first.
+        :return:
+        """
+        # Check if we are already processing a generation request or if we have any requests to service
+        if not self.requests and not self.curr_gen:
             return
 
+        # Simply process the requests in FIFO order (for now...)
         sorted_request_aids = sorted(self.requests.keys(), key=lambda aid: aid[1])
         next_aid = sorted_request_aids[0]
         next_request = self.requests[next_aid]

@@ -330,6 +330,5 @@ class TestDistributedQueue(unittest.TestCase):
             self.assertIsNotNone(q_item)
 
 
-
 if __name__ == "__main__":
     unittest.main()

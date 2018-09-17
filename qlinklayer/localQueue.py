@@ -80,7 +80,17 @@ class LocalQueue(Entity):
         return seq
 
     def add_with_id(self, originID, seq, request):
-
+        """
+        Stores the request within the queue at the specified sequence number along with the information specifying the
+        origin of the request
+        :param originID: int
+            The ID of the node that placed the request in the queue
+        :param seq: int
+            The sequence number in the queue of the request item
+        :param request: obj
+            The request item that we are storing within the queue
+        :return: None
+        """
         # Compute the minimum time at which this request can be served
         now = sim_time()
         sa = now + self.scheduleAfter
@@ -90,9 +100,16 @@ class LocalQueue(Entity):
         self.queue[seq] = lq
 
     def remove(self, seq):
+        """
+        Removes the queue item corresponding to the provided sequence number from the queue
+        :param seq: int
+            Identifier of the queue item we wish to remove
+        :return: obj `~qlinklayer.localQueue.LocalQueueItem`
+            The queue item that we removed if any, else None
+        """
         if seq in self.queue:
             q = self.queue.pop(seq)
-            logger.debug("Removing item with seq={} to local queue".format(q.seq))
+            logger.debug("Removing item with seq={} from local queue".format(q.seq))
 
             if self.throw_events:
                 logger.debug("Scheduling item removed event now.")
@@ -171,6 +188,12 @@ class LocalQueue(Entity):
         return self.queue[self.popSeq].scheduleAt
 
     def contains(self, seq):
+        """
+        Checks if the queue contains the provided sequence number
+        :param seq: int
+            The sequence number to check for
+        :return: bool
+        """
         if seq in self.queue:
             return True
         else:
@@ -210,7 +233,7 @@ class LocalQueue(Entity):
 
 
 class TimeoutLocalQueue(LocalQueue):
-    def __init__(self, wsize=None, maxSeq=None, scheduleAfter=0.0, throw_events=False):
+    def __init__(self, qid=None, wsize=None, maxSeq=None, scheduleAfter=0.0, throw_events=False):
         """
         Implements a local queue that supports timing out queue items asynchronously
         :param wsize: int
@@ -225,6 +248,8 @@ class TimeoutLocalQueue(LocalQueue):
         self._EVT_PROC_TIMEOUT = EventType("QUEUE ITEM REMOVED", "Triggers when an item has successfully been removed")
         self._EVT_SCHEDULE = EventType("LOCAL QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
         self.timed_out_items = []
+        self.ready_items = []
+        self.qid = qid
 
     def add_with_id(self, originID, seq, request):
         """
@@ -300,6 +325,8 @@ class TimeoutLocalQueue(LocalQueue):
         """
         logger.debug("Schedule handler triggered in local queue")
         logger.debug("Scheduling schedule event now.")
+        queue_item = evt.source
+        self.ready_items.append(queue_item)
         self._schedule_now(self._EVT_SCHEDULE)
 
 
