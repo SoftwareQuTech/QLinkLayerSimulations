@@ -194,7 +194,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if not self.comm_delay:
             self.comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
 
-        logger.debug("Scheduling communication timeout event after {}.".format(10 * comm_delay))
+        logger.debug("Scheduling communication timeout event after {}.".format(10 * self.comm_delay))
         self.comm_timeout_event = self._schedule_after(10 * self.comm_delay, self._EVT_COMM_TIMEOUT)
         self._wait_once(self.comm_timeout_handler, event=self.comm_timeout_event)
 

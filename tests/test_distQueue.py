@@ -2,6 +2,7 @@
 
 import unittest
 import numpy as np
+from random import randint
 from qlinklayer.distQueue import DistributedQueue
 from easysquid.qnode import QuantumNode
 from easysquid.easyfibre import ClassicalFibreConnection
