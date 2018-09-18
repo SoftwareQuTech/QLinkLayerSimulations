@@ -75,18 +75,14 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
         # TODO this should be used when we changed how items are popped from the queue
         # TODO see issue #108
         # DataSequence for local queues
-        # lqAs = scenarioA.egp.dqp.queueList
-        # lqBs = scenarioB.egp.dqp.queueList
-        # lqA_ds = [EGPLocalQueueSequence(name="EGP Local Queue A {}".format(qid),
-        #           dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqAs))]
-        # lqB_ds = [EGPLocalQueueSequence(name="EGP Local Queue B {}".format(qid),
-        #           dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqBs))]
-        lqA_ds = EGPLocalQueueSequence(name="EGP Local Queue A", dbFile=data_file, maxSteps=collection_duration)
-        lqB_ds = EGPLocalQueueSequence(name="EGP Local Queue B", dbFile=data_file, maxSteps=collection_duration)
-        # outstandingA_ds = EGPOutstandingRequestsSequence(name="EGP Outstand Req A",
-        #                   dbFile=data_file, maxSteps=collection_duration)
-        # outstandingB_ds = EGPOutstandingRequestsSequence(name="EGP Outstand Req B",
-        #                   dbFile=data_file, maxSteps=collection_duration)
+        lqAs = scenarioA.egp.dqp.queueList
+        lqBs = scenarioB.egp.dqp.queueList
+        lqA_ds = [EGPLocalQueueSequence(name="EGP Local Queue A {}".format(qid),
+                  dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqAs))]
+        lqB_ds = [EGPLocalQueueSequence(name="EGP Local Queue B {}".format(qid),
+                  dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqBs))]
+        # lqA_ds = EGPLocalQueueSequence(name="EGP Local Queue A", dbFile=data_file, maxSteps=collection_duration)
+        # lqB_ds = EGPLocalQueueSequence(name="EGP Local Queue B", dbFile=data_file, maxSteps=collection_duration)
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=create_ds)
@@ -114,31 +110,32 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
     if collect_queue_data:
         # TODO this should be used when we changed how items are popped from the queue
         # TODO see issue #108
-        # for qid in range(len(lqAs)):
-        #     lq = lqAs[qid]
-        #     pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqA_ds[qid])
-        # for qid in range(len(lqBs)):
-        #     lq = lqBs[qid]
-        #     pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqB_ds[qid])
-        dqpA = scenarioA.egp.dqp
-        dqpB = scenarioB.egp.dqp
-        schedulerA = scenarioA.egp.scheduler
-        schedulerB = scenarioB.egp.scheduler
-        pm.addEventAny([dqpA, schedulerA], [dqpA._EVT_ITEM_ADDED, schedulerA._EVT_REM_OUTSTANDING_REQ], ds=lqA_ds)
-        pm.addEventAny([dqpB, schedulerB], [dqpB._EVT_ITEM_ADDED, schedulerB._EVT_REM_OUTSTANDING_REQ], ds=lqB_ds)
+        for qid in range(len(lqAs)):
+            lq = lqAs[qid]
+            pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqA_ds[qid])
+        for qid in range(len(lqBs)):
+            lq = lqBs[qid]
+            pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqB_ds[qid])
+        # dqpA = scenarioA.egp.dqp
+        # dqpB = scenarioB.egp.dqp
+        # schedulerA = scenarioA.egp.scheduler
+        # schedulerB = scenarioB.egp.scheduler
+        # pm.addEventAny([dqpA, schedulerA], [dqpA._EVT_ITEM_ADDED, schedulerA._EVT_REM_OUTSTANDING_REQ], ds=lqA_ds)
+        # pm.addEventAny([dqpB, schedulerB], [dqpB._EVT_ITEM_ADDED, schedulerB._EVT_REM_OUTSTANDING_REQ], ds=lqB_ds)
 
     if measure_directly:
         collectors = [create_ds, ok_ds, quberr_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
     else:
         collectors = [create_ds, ok_ds, state_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
     if collect_queue_data:
-        collectors += [lqA_ds, lqB_ds]
+        collectors += lqA_ds + lqB_ds
     return collectors
 
 
 def create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs, max_pairs, tmax_pair,
                      request_cycle, num_requests, measure_directly,
                      additional_data=None):
+
     if request_cycle == 0:
         # Use t_cycle of MHP for the request cycle
         request_cycle = egpA.mhp.conn.t_cycle
@@ -176,8 +173,8 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=
     dqp_conn = network.get_connection(nodeA, nodeB, "dqp_conn")
 
     # Create our EGP instances and connect them
-    egpA = NodeCentricEGP(nodeA, throw_queue_events=collect_queue_data)
-    egpB = NodeCentricEGP(nodeB, throw_queue_events=collect_queue_data)
+    egpA = NodeCentricEGP(nodeA, throw_local_queue_events=collect_queue_data)
+    egpB = NodeCentricEGP(nodeB, throw_local_queue_events=collect_queue_data)
     egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn,
                                   alphaA=alphaA, alphaB=alphaB)
 

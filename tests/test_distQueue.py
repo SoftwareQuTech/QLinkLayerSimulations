@@ -2,6 +2,7 @@
 
 import unittest
 import numpy as np
+from random import randint
 from qlinklayer.distQueue import DistributedQueue
 from easysquid.qnode import QuantumNode
 from easysquid.easyfibre import ClassicalFibreConnection
@@ -271,6 +272,63 @@ class TestDistributedQueue(unittest.TestCase):
 
         # Check that we incremented the comms_seq
         self.assertEqual(aliceDQ.comms_seq, num_adds)
+
+    def test_remove(self):
+        # Set up two nodes and run a simulation in which items
+        # are randomly added at specific time intervals
+        sim_reset()
+        alice = QuantumNode("Alice", 1)
+        bob = QuantumNode("Bob", 2)
+
+        conn = ClassicalFibreConnection(alice, bob, length=.0001)
+        aliceDQ = DistributedQueue(alice, conn)
+        bobDQ = DistributedQueue(bob, conn)
+
+        aliceProto = TestProtocol(alice, aliceDQ, 1)
+        bobProto = TestProtocol(bob, bobDQ, 1)
+
+        nodes = [
+            (alice, [aliceProto]),
+            (bob, [bobProto]),
+        ]
+        conns = [
+            (conn, "dqp_conn", [aliceProto, bobProto])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        sim_run(50000)
+
+        # Check the Queue contains ordered elements from Alice and Bob
+        qA = aliceDQ.queueList[0].queue
+        qB = bobDQ.queueList[0].queue
+
+        # First they should have the same length
+        self.assertEqual(len(qA), len(qB))
+
+        # Check the items are the same and the sequence numbers are ordered
+        count = 0
+        for k in range(len(qA)):
+            self.assertEqual(qA[k].request, qB[k].request)
+            self.assertEqual(qA[k].seq, qB[k].seq)
+            self.assertEqual(qA[k].seq, count)
+            count = count + 1
+
+        # Check that we can remove the items (locally) at both nodes
+        rqid = 0
+        rqseqs = set([randint(0, len(qA) - 1) for t in range(10)])
+        for qseq in rqseqs:
+            q_item = aliceDQ.remove_item(rqid, qseq)
+            self.assertIsNotNone(q_item)
+            self.assertFalse(aliceDQ.queueList[rqid].contains(qseq))
+
+        # Check that we can pop the remaining items in the correct order
+        remaining = set(range(len(qB))) - rqseqs
+        for qseq in remaining:
+            self.assertEqual(aliceDQ.queueList[rqid].popSeq, qseq)
+            q_item = aliceDQ.local_pop(rqid)
+            self.assertIsNotNone(q_item)
 
 
 if __name__ == "__main__":
