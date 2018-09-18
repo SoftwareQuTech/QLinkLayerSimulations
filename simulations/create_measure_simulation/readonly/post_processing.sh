@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -p short
-#SBATCH -t 1:00:00
+#SBATCH -p normal
+#SBATCH -t 24:00:00
 
 RESULT_DIR=$1
 timestamp=$2
@@ -15,7 +15,7 @@ OUTPUTDIRNAME=$5
 # and will be removed.
 ############################
 
-tmp_key_file="${RESULT_DIR}/tmp_key_file.csv"
+tmp_key_file="${RESULT_DIR}/tmp_key_file_${SLURM_JOB_ID}.csv"
 python3 "${SIMULATION_DIR}/readonly/make_key_pool.py" $paramsetfile $tmp_key_file
 
 
