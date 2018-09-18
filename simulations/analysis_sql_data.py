@@ -389,6 +389,10 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
             # Since there are still items in the queue by max_real_time
             # we should add this to the tot_time_in_queue
             tot_time_in_queue += (max_real_time - times[-1]) * queue_lens[-1]
+
+            # Add also last point to queue lens
+            queue_lens.append(queue_lens[-1])
+            times.append(max_real_time)
         else:  # Empty queue by max_real_time, stop when last item popped
             tot_time_diff = times[-1] - times[1]
     # if min(queue_lens) < 0:
@@ -399,7 +403,7 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
         return queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue
 
 
-def plot_single_queue_data(queue_lens, times, color=None, label=None, no_plot=False, save_figs=False, clear_figure=True):
+def plot_single_queue_data(queue_lens, times, color=None, label=None, clear_figure=True):
     """
     Plots the queue length over time from data extracted using 'parse_raw_queue_data'
     :param queue_lens: list of int
@@ -439,7 +443,8 @@ def plot_single_queue_data(queue_lens, times, color=None, label=None, no_plot=Fa
             plt.plot(x_points, y_points)
 
 
-def plot_queue_data(queue_lens, times, results_path, no_plot=False, save_figs=False, analysis_folder=None, clear_figure=True):
+def plot_queue_data(queue_lens, times, results_path, no_plot=False, save_figs=False, analysis_folder=None,
+                    clear_figure=True):
     colors = ['red', 'green']
     labels = ['Node A', 'Node B']
     if clear_figure:
@@ -457,7 +462,8 @@ def plot_queue_data(queue_lens, times, results_path, no_plot=False, save_figs=Fa
         plt.show()
 
 
-def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False, analysis_folder=None, plot_dist=False, clear_figure=True):
+def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False, analysis_folder=None, plot_dist=False,
+                      clear_figure=True):
     """
     Plots a histogram and a distribution of the number of attempts for generations in the simulation
     :param gen_attempts: dict of key (createID, sourceID, otherID, mhpSeq)
@@ -506,7 +512,8 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
             plt.show()
 
 
-def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, analysis_folder=None, plot_dist=False, clear_figure=True):
+def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, analysis_folder=None, plot_dist=False,
+                   clear_figure=True):
     """
     Plots a histogram and a distribution of the amount of time for generations in the simulation
     :param gen_times: list of floats
@@ -607,7 +614,6 @@ def plot_throughput(all_gens, results_path, no_plot=False, save_figs=False, anal
         plt.show()
 
 
-
 def get_key_and_run_from_path(results_path):
     """
     results_path is assumed to be of the form "path/timestamp_key_i_run_j.db".
@@ -649,6 +655,7 @@ def save_plot(fig_name, results_path, analysis_folder=None):
         plt.savefig(analysis_folder + "/" + fig_name)
     else:
         plt.savefig(results_path[-3] + "_" + fig_name)
+
 
 def get_data_from_single_file(path_to_file, max_real_time=None):
     """
@@ -713,6 +720,7 @@ def get_data_from_single_file(path_to_file, max_real_time=None):
 
     return data_dct
 
+
 def get_data(results_path, max_real_time=None):
     """
     Returns a dictionary of all the data from the simulation(s)
@@ -721,14 +729,14 @@ def get_data(results_path, max_real_time=None):
     :param max_real_time:
     :return: dct
     """
-    if isinstance(results_path, list): # list of paths
+    if isinstance(results_path, list):  # list of paths
         data_dct = {}
         for path in results_path:
             data_dct[path] = get_data(path, max_real_time)
         return data_dct
-    elif results_path.endswith(".db"): # single data file
+    elif results_path.endswith(".db"):  # single data file
         return get_data_from_single_file(results_path, max_real_time)
-    else: # path to folder
+    else:  # path to folder
         if results_path.endswith('/'):
             results_path = results_path[:-1]
         if not os.path.isdir(results_path):
@@ -756,7 +764,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
             pass
 
     # Get create and ok data from sql file to compute latencies and throughput
-    (requests, rejected_requests), (gens, all_gens), total_requested_pairs =\
+    (requests, rejected_requests), (gens, all_gens), total_requested_pairs = \
         parse_request_data_from_sql(results_path, max_real_time=max_real_time)
     # Check (u)successful creates
     satisfied_creates, unsatisfied_creates = extract_successful_unsuccessful_creates(requests, gens)
@@ -942,7 +950,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 
     # Extract data from raw queue data
     if raw_queue_dataA:
-        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA =\
+        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA = \
             parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
         output_data("Max queue length at A: {}".format(max_queue_lenA), results_path, save_output=save_output,
@@ -952,7 +960,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         output_data("Total time items spent in queue at A: {} ns".format(tot_time_in_queueA), results_path,
                     save_output=save_output, analysis_folder=analysis_folder)
     if raw_queue_dataB:
-        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB =\
+        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB = \
             parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
         output_data("Max queue length at B: {}".format(max_queue_lenB), results_path, save_output=save_output,

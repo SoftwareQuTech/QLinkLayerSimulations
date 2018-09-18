@@ -8,8 +8,6 @@ from netsquid.pydynaa import Entity, EventType, EventHandler
 from qlinklayer.general import LinkLayerException
 from easysquid.toolbox import logger
 
-import inspect
-
 
 class LocalQueue(Entity):
     """
