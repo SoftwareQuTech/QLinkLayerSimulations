@@ -99,7 +99,7 @@ class LocalQueue(Entity):
             self._schedule_now(self._EVT_ITEM_ADDED)
             self._last_seq_added = seq
 
-    def remove(self, seq):
+    def remove_item(self, seq):
         """
         Removes the queue item corresponding to the provided sequence number from the queue
         :param seq: int

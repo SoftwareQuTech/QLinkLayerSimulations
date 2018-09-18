@@ -215,7 +215,7 @@ class RequestScheduler(pydynaa.Entity):
             self.outstanding_items.pop(key, None)
 
         qid, qseq = aid
-        queue_item = self.distQueue.remove(qid, qseq)
+        queue_item = self.distQueue.remove_item(qid, qseq)
         if queue_item is None:
             logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
 

@@ -319,7 +319,7 @@ class TestDistributedQueue(unittest.TestCase):
         rqid = 0
         rqseqs = set([randint(0, len(qA) - 1) for t in range(10)])
         for qseq in rqseqs:
-            q_item = aliceDQ.remove(rqid, qseq)
+            q_item = aliceDQ.remove_item(rqid, qseq)
             self.assertIsNotNone(q_item)
             self.assertFalse(aliceDQ.queueList[rqid].contains(qseq))
 

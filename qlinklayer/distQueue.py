@@ -204,7 +204,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             # Remove the item from the local queue
             qid, queue_seq, request = self.waitAddAcks.pop(ack_id)
-            self.queueList[qid].remove(queue_seq)
+            self.queueList[qid].remove_item(queue_seq)
 
             # If our peer failed to add our item we should remove any Acks we should provide for
             # subsequent items they attempted to add
@@ -597,7 +597,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             logger.debug("ADD to backlog")
             self.backlogAdd.append(request)
 
-    def remove(self, qid, qseq):
+    def remove_item(self, qid, qseq):
         """
         Removes the specified item from our local portion of the distributed queue
         :param qid: int
@@ -612,7 +612,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             logger.error("Invalid QID {} selected when specifying item removal".format(qid))
 
         # Attempt to remove the item from the specified local queue
-        removed_item = self.queueList[qid].remove(qseq)
+        removed_item = self.queueList[qid].remove_item(qseq)
 
         # Check if we actually removed anything
         if removed_item is not None:
