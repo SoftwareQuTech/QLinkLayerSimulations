@@ -452,7 +452,7 @@ def plot_queue_data(queue_lens, times, results_path, no_plot=False, save_figs=Fa
     for i in range(len(queue_lens)):
         qls = queue_lens[i]
         ts = times[i]
-        plot_single_queue_data(qls, ts, color=colors[i], label=labels[i], no_plot=True, clear_figure=False)
+        plot_single_queue_data(qls, ts, color=colors[i], label=labels[i], clear_figure=False)
     plt.ylabel("Queue lengths")
     plt.xlabel("Real time (s)")
     plt.legend(loc='upper right')
