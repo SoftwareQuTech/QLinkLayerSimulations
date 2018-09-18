@@ -8,6 +8,8 @@ from netsquid.pydynaa import Entity, EventType, EventHandler
 from qlinklayer.general import LinkLayerException
 from easysquid.toolbox import logger
 
+import inspect
+
 
 class LocalQueue(Entity):
     """
@@ -275,6 +277,11 @@ class TimeoutLocalQueue(LocalQueue):
         lq = _TimeoutLocalQueueItem(request, seq, sa, lifetime=lifetime)
         self.queue[seq] = lq
         lq.prepare()
+
+        if self.throw_events:
+            logger.debug("Scheduling item added event now.")
+            self._schedule_now(self._EVT_ITEM_ADDED)
+            self._last_seq_added = seq
 
     def add_timeout_event(self, qseq):
         """

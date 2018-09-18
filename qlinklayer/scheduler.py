@@ -4,6 +4,8 @@
 from netsquid import pydynaa
 from easysquid.toolbox import logger
 
+import inspect
+
 
 class RequestScheduler(pydynaa.Entity):
     """

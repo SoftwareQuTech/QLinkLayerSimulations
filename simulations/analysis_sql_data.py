@@ -374,7 +374,8 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
     queue_lens = [0]
     times = [0]
     for entry in raw_queue_data:
-        time, change, _, _, _ = entry
+        time = entry[0]
+        change = entry[1]
         time_diff = time - times[-1]
         tot_time_in_queue += time_diff * queue_lens[-1]
         queue_lens.append(queue_lens[-1] + change)
@@ -390,8 +391,8 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
             tot_time_in_queue += (max_real_time - times[-1]) * queue_lens[-1]
         else:  # Empty queue by max_real_time, stop when last item popped
             tot_time_diff = times[-1] - times[1]
-    if min(queue_lens) < 0:
-        raise RuntimeError("Something went wrong, negative queue length")
+    # if min(queue_lens) < 0:
+    #     raise RuntimeError("Something went wrong, negative queue length")
     if tot_time_diff == 0:
         return queue_lens, times, max(queue_lens), float('inf'), tot_time_in_queue
     else:

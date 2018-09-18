@@ -94,7 +94,8 @@ class EGPSimulationScenario(TimedProtocol):
         """
         if self.created_requests >= self.num_requests:
             return
-        if random.random() <= self.request_prob:
+        # Note that we always schedule the first event, to see something interesting in the simulations
+        if (random.random() <= self.request_prob) or (self.created_requests == 0 and self.request_prob > 0):
             # Number of pairs
             num_pairs = random.randint(self.min_pairs, self.max_pairs)
 

@@ -163,85 +163,28 @@ class EGPQubErrSequence(EGPDataSequence):
                 return [-1, 1], True
 
 
-# class EGPLocalQueueSequence(EGPDataSequence):
-#     """
-#     Collects additions and removals of items from a local queue.
-#     """
-#
-#     def get_column_names(self):
-#         return ["Timestamp", "Add or Rem", "Seq", "Success"]
-#
-#     def getData(self, time, source=None):
-#         local_queue = source[0]
-#         if local_queue._last_seq_added is not None:
-#             data = 1, local_queue._last_seq_added
-#
-#             # Check for consistency
-#             if local_queue._last_seq_removed is not None:
-#                 raise RuntimeError("Got both addition and removal in queue collection.")
-#         else:
-#             if local_queue._last_seq_removed is not None:
-#                 data = -1, local_queue._last_seq_removed
-#             else:
-#                 raise RuntimeError("Got no addition or removal in queue collection.")
-#         local_queue._reset_data()
-#
-#         return data, True
-
-
-
 class EGPLocalQueueSequence(EGPDataSequence):
     """
     Collects additions and removals of items from a local queue.
-    NOTE: THIS IS A TEMPORARY HACKY CLASS FOR BEING ABLE TO EXTRACT
-    THIS DATA UNTIL WE FIX CHANGE WHEN ITEMS ARE POPPED FROM THE QUEUES
     """
 
     def get_column_names(self):
-        return ["Timestamp", "Add or Rem", "Queue ID", "Queue Seq", "Success"]
+        return ["Timestamp", "Add or Rem", "Seq", "Success"]
 
     def getData(self, time, source=None):
-        dist_queue = source[0]
-        scheduler = source[1]
-        if dist_queue._last_aid_added is not None:
-            data = (1,) + dist_queue._last_aid_added
+        local_queue = source[0]
+        if local_queue._last_seq_added is not None:
+            data = 1, local_queue._last_seq_added
 
             # Check for consistency
-            if scheduler._last_aid_removed is not None:
+            if local_queue._last_seq_removed is not None:
                 raise RuntimeError("Got both addition and removal in queue collection.")
         else:
-            if scheduler._last_aid_removed is not None:
-                data = (-1,) + scheduler._last_aid_removed
+            if local_queue._last_seq_removed is not None:
+                data = -1, local_queue._last_seq_removed
             else:
                 raise RuntimeError("Got no addition or removal in queue collection.")
-        dist_queue._reset_data()
-        scheduler._reset_outstanding_req_data()
-
-        return data, True
-
-
-class EGPOutstandingRequestsSequence(EGPDataSequence):
-    """
-    Collects additions and removals of items from a local queue.
-    """
-
-    def get_column_names(self):
-        return ["Timestamp", "Add or Rem", "qid", "qseq", "Success"]
-
-    def getData(self, time, source=None):
-        scheduler = source[0]
-        if scheduler._last_aid_added is not None:
-            data = (1,) + scheduler._last_aid_added
-
-            # Check for consistency
-            if scheduler._last_aid_removed is not None:
-                raise RuntimeError("Got both addition and removal in queue collection.")
-        else:
-            if scheduler._last_aid_removed is not None:
-                data = (-1,) + scheduler._last_aid_removed
-            else:
-                raise RuntimeError("Got no addition or removal in queue collection.")
-        scheduler._reset_outstanding_req_data()
+        local_queue._reset_data()
 
         return data, True
 

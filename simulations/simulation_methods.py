@@ -128,7 +128,7 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
     else:
         collectors = [create_ds, ok_ds, state_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
     if collect_queue_data:
-        collectors += [lqA_ds, lqB_ds]
+        collectors += lqA_ds + lqB_ds
     return collectors
 
 
