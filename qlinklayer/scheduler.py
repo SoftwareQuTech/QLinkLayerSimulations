@@ -10,7 +10,7 @@ class RequestScheduler(pydynaa.Entity):
     Stub for a scheduler to decide how we assign and consume elements of the queue.
     """
 
-    def __init__(self, distQueue, qmm, throw_outstanding_req_events=False):
+    def __init__(self, distQueue, qmm):
 
         # Distributed Queue to schedule from
         self.distQueue = distQueue
@@ -36,15 +36,6 @@ class RequestScheduler(pydynaa.Entity):
         self.outstanding_items = {}
         self.timed_out_requests = []
         self._suspend = False
-
-        self._throw_outstanding_req_events = throw_outstanding_req_events
-        if self._throw_outstanding_req_events:
-            self._EVT_ADD_OUTSTANDING_REQ = pydynaa.EventType("ADDED REQUEST", "New outstanding request")
-            self._EVT_REM_OUTSTANDING_REQ = pydynaa.EventType("REMOVED REQUEST", "One less outstanding request")
-
-            # Data stored for data collection
-            self._last_aid_added = None
-            self._last_aid_removed = None
 
     def suspend_generation(self, t):
         """
@@ -223,11 +214,6 @@ class RequestScheduler(pydynaa.Entity):
             key = (request.create_id, request.otherID)
             self.outstanding_items.pop(key, None)
 
-            if self._throw_outstanding_req_events:
-                self._last_aid_removed = aid
-                logger.debug("Scheduling remove outstanding request event now.")
-                self._schedule_now(self._EVT_REM_OUTSTANDING_REQ)
-
         qid, qseq = aid
         queue_item = self.distQueue.remove(qid, qseq)
         if queue_item is None:
@@ -304,12 +290,6 @@ class RequestScheduler(pydynaa.Entity):
         logger.debug("Scheduling request {}".format(aid))
         key = (request.create_id, request.otherID)
         self.outstanding_items[key] = aid
-
-        if self._throw_outstanding_req_events:
-            self._last_aid_added = aid
-            logger.debug("Scheduling add outstanding request event now.")
-            self._schedule_now(self._EVT_ADD_OUTSTANDING_REQ)
-
         self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
 
         self._process_outstanding_items()

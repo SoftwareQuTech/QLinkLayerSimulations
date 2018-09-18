@@ -398,7 +398,7 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
         return queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue
 
 
-def plot_single_queue_data(queue_lens, times, results_path, color=None, label=None, no_plot=False, save_figs=False, analysis_folder=None, clear_figure=True):
+def plot_single_queue_data(queue_lens, times, color=None, label=None, no_plot=False, save_figs=False, clear_figure=True):
     """
     Plots the queue length over time from data extracted using 'parse_raw_queue_data'
     :param queue_lens: list of int
@@ -413,9 +413,6 @@ def plot_single_queue_data(queue_lens, times, results_path, color=None, label=No
         Whether to clear the plot before plotting
     :return: None
     """
-    if no_plot and (not save_figs):
-        return
-
     if clear_figure:
         plt.clf()
     x_points = []
@@ -449,7 +446,7 @@ def plot_queue_data(queue_lens, times, results_path, no_plot=False, save_figs=Fa
     for i in range(len(queue_lens)):
         qls = queue_lens[i]
         ts = times[i]
-        plot_single_queue_data(qls, ts, color=colors[i], label=labels[i], results_path=results_path, no_plot=True, clear_figure=False)
+        plot_single_queue_data(qls, ts, color=colors[i], label=labels[i], no_plot=True, clear_figure=False)
     plt.ylabel("Queue lengths")
     plt.xlabel("Real time (s)")
     plt.legend(loc='upper right')
@@ -780,8 +777,9 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     avg_X_err, X_data_points = X_data
 
     # Get queue data
-    raw_queue_dataA = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A", max_real_time=max_real_time)
-    raw_queue_dataB = parse_table_data_from_sql(results_path, "EGP_Local_Queue_B", max_real_time=max_real_time)
+    # TODO Currently only local queue with id 0
+    raw_queue_dataA = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A_0", max_real_time=max_real_time)
+    raw_queue_dataB = parse_table_data_from_sql(results_path, "EGP_Local_Queue_B_0", max_real_time=max_real_time)
 
     output_data("-------------------", results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("|Simulation data: |", results_path, save_output=save_output, analysis_folder=analysis_folder)

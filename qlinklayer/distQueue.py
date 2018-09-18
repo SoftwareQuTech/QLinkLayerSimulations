@@ -47,7 +47,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
     DQ_ERR = 3  # Operation ERROR
 
     def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 32,
-                 throw_local_queue_events=False, throw_dist_queue_events=False):
+                 throw_local_queue_events=False):
 
         super(DistributedQueue, self).__init__(node, connection)
 
@@ -123,11 +123,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         self.myTrig = 0
         self.otherTrig = 0
-
-        self._throw_dist_queue_events = throw_dist_queue_events
-        if self._throw_dist_queue_events:
-            self._EVT_ITEM_ADDED = EventType("ITEM ADDED", "Item added to dist queue")
-            self._last_aid_added = None
 
     def _establish_master(self, master):
         """
@@ -434,11 +429,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # We are not in control, and must add as instructed
             self.queueList[qid].add_with_id(nodeID, qseq, request)
 
-            if self._throw_dist_queue_events:
-                self._last_aid_added = (qid, qseq)
-                logger.debug("Scheduling item added event now.")
-                self._schedule_now(self._EVT_ITEM_ADDED)
-
             # Send ack
             self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, 0])
 
@@ -493,11 +483,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # We can now add
             self.queueList[qid].add_with_id(nodeID, qseq, request)
             agreed_qseq = qseq
-
-            if self._throw_dist_queue_events:
-                self._last_aid_added = (qid, qseq)
-                logger.debug("Scheduling item added event now.")
-                self._schedule_now(self._EVT_ITEM_ADDED)
 
         # Schedule the item
         conn_delay = self.conn.channel_from_node(self.node).delay_mean
@@ -736,11 +721,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Add to the queue and get queue sequence number
         queue_seq = self.queueList[qid].add(self.myID, request)
 
-        if self._throw_dist_queue_events:
-            self._last_aid_added = (qid, queue_seq)
-            logger.debug("Scheduling item added event now.")
-            self._schedule_now(self._EVT_ITEM_ADDED)
-
         # Check if we are waiting for any acks from the slave
         if not self.waitAddAcks:
             self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, queue_seq])
@@ -772,11 +752,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Add to the queue and get queue sequence number
         queue_seq = self.queueList[qid].add(self.myID, request)
-
-        if self._throw_dist_queue_events:
-            self._last_aid_added = (qid, queue_seq)
-            logger.debug("Scheduling item added event now.")
-            self._schedule_now(self._EVT_ITEM_ADDED)
 
         # Send an add message to the other side
         self.send_msg(self.CMD_ADD, [self.myID, self.comms_seq, qid, queue_seq, copy(request)])

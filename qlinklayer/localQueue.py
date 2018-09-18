@@ -67,11 +67,6 @@ class LocalQueue(Entity):
 
         logger.debug("Adding item with seq={} to local queue".format(seq))
 
-        if self.throw_events:
-            logger.debug("Scheduling item added event now.")
-            self._schedule_now(self._EVT_ITEM_ADDED)
-            self._last_seq_added = seq
-
         self.add_with_id(originID, seq, request)
 
         # Increment the next sequence number to assign
@@ -98,6 +93,11 @@ class LocalQueue(Entity):
         # TODO Needs fixing
         lq = _LocalQueueItem(request, seq, sa)
         self.queue[seq] = lq
+
+        if self.throw_events:
+            logger.debug("Scheduling item added event now.")
+            self._schedule_now(self._EVT_ITEM_ADDED)
+            self._last_seq_added = seq
 
     def remove(self, seq):
         """
