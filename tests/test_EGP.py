@@ -176,7 +176,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         alice_pairs = 1
         num_requests = 4
         alice_requests = [EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
-                                     purpose_id=1, priority=10) for r in range(num_requests)]
+                                     purpose_id=1, priority=10) for _ in range(num_requests)]
 
         # Schedule a sequence of various create requests
         alice_create_info = []

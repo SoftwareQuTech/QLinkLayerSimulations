@@ -11,9 +11,12 @@ from functools import partial
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
 from netsquid.pydynaa import EventType, EventHandler
+from netsquid.simutil import sim_time
 from qlinklayer.localQueue import TimeoutLocalQueue
 from qlinklayer.general import LinkLayerException
 from easysquid.toolbox import logger
+
+import inspect
 
 
 class DistributedQueue(EasyProtocol, ClassicalProtocol):
@@ -46,7 +49,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
     DQ_ERR = 3  # Operation ERROR
 
     def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 32,
-                 throw_local_queue_events=False, throw_dist_queue_events=False):
+                 throw_local_queue_events=False):
 
         super(DistributedQueue, self).__init__(node, connection)
 
@@ -87,13 +90,16 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.timed_out_items = []
         self.queue_item_timeout_handler = EventHandler(self._queue_item_timeout_handler)
         self._EVT_QUEUE_TIMEOUT = EventType("DIST QUEUE TIMEOUT", "Triggers when queue item times out")
+        self.ready_items = []
+        self.last_schedule_time = 0
         self.schedule_item_handler = EventHandler(self._schedule_item_handler)
         self._EVT_SCHEDULE = EventType("DIST QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
 
         # Initialize queues
         self.queueList = []
+        self.numLocalQueues = numQueues
         for j in range(numQueues):
-            q = TimeoutLocalQueue(throw_events=throw_local_queue_events)
+            q = TimeoutLocalQueue(qid=j, throw_events=throw_local_queue_events)
             self.queueList.append(q)
             self._wait(self.queue_item_timeout_handler, entity=q, event_type=q._EVT_PROC_TIMEOUT)
             self._wait(self.schedule_item_handler, entity=q, event_type=q._EVT_SCHEDULE)
@@ -103,6 +109,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Current sequence number for making add requests (distinct from queue items)
         self.comms_seq = 0
+        self.comm_delay = 0
 
         # Waiting for acks
         self.waitAddAcks = {}
@@ -118,11 +125,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         self.myTrig = 0
         self.otherTrig = 0
-
-        self._throw_dist_queue_events = throw_dist_queue_events
-        if self._throw_dist_queue_events:
-            self._EVT_ITEM_ADDED = EventType("ITEM ADDED", "Item added to dist queue")
-            self._last_aid_added = None
 
     def _establish_master(self, master):
         """
@@ -171,6 +173,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.setConnection(connection)
         self.otherID = self.get_otherID()
         self.master = self._establish_master(self.master)
+        self.comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
 
         # Set the triggers for scheduling delays
         if scheduling_offsets:
@@ -184,9 +187,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :return:
         """
         self.comm_timeout_handler = EventHandler(partial(self._comm_timeout_handler, ack_id=ack_id))
-        comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
-        logger.debug("Scheduling communication timeout event after {}.".format(10 * comm_delay))
-        self.comm_timeout_event = self._schedule_after(10 * comm_delay, self._EVT_COMM_TIMEOUT)
+
+        if not self.comm_delay:
+            self.comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
+
+        logger.debug("Scheduling communication timeout event after {}.".format(10 * self.comm_delay))
+        self.comm_timeout_event = self._schedule_after(10 * self.comm_delay, self._EVT_COMM_TIMEOUT)
         self._wait_once(self.comm_timeout_handler, event=self.comm_timeout_event)
 
     def _comm_timeout_handler(self, evt, ack_id):
@@ -200,7 +206,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             # Remove the item from the local queue
             qid, queue_seq, request = self.waitAddAcks.pop(ack_id)
-            self.queueList[qid].remove(queue_seq)
+            self.queueList[qid].remove_item(queue_seq)
 
             # If our peer failed to add our item we should remove any Acks we should provide for
             # subsequent items they attempted to add
@@ -239,6 +245,10 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         logger.debug("{} Schedule handler triggered in dist queue".format(self.node.nodeID))
         logger.debug("Scheduling schedule event now.")
+        queue = evt.source
+        qid = queue.qid
+        queue_item = queue.ready_items.pop(0)
+        self.ready_items.append((qid, queue_item))
         self._schedule_now(self._EVT_SCHEDULE)
 
     def process_data(self):
@@ -421,11 +431,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # We are not in control, and must add as instructed
             self.queueList[qid].add_with_id(nodeID, qseq, request)
 
-            if self._throw_dist_queue_events:
-                self._last_aid_added = (qid, qseq)
-                logger.debug("Scheduling item added event now.")
-                self._schedule_now(self._EVT_ITEM_ADDED)
-
             # Send ack
             self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, 0])
 
@@ -480,11 +485,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # We can now add
             self.queueList[qid].add_with_id(nodeID, qseq, request)
             agreed_qseq = qseq
-
-            if self._throw_dist_queue_events:
-                self._last_aid_added = (qid, qseq)
-                logger.debug("Scheduling item added event now.")
-                self._schedule_now(self._EVT_ITEM_ADDED)
 
         # Schedule the item
         conn_delay = self.conn.channel_from_node(self.node).delay_mean
@@ -549,7 +549,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
 
         conn_delay = self.conn.channel_from_node(self.node).delay_mean
-        scheduleAfter = max(0, -(conn_delay + self.otherTrig - self.myTrig))
+        scheduleAfter = max(0, conn_delay + self.otherTrig - self.myTrig)
         self.ready_and_schedule(qid, qseq, scheduleAfter)
 
         # Check if the following item(s) belong to the same queue and release them as well
@@ -571,6 +571,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         logger.debug("Distributed queue readying item ({}, {})".format(qid, qseq))
         self.queueList[qid].ready(qseq, 0)
 
+        now = sim_time()
+
+        if now + schedule_after <= self.last_schedule_time:
+            schedule_after += self.comm_delay
+
+        self.last_schedule_time = now + schedule_after
+
         logger.debug("{} Scheduling after {}".format(self.node.nodeID, schedule_after))
         self.queueList[qid].schedule_item(qseq, schedule_after)
 
@@ -591,6 +598,32 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Add to backlog for later processing
             logger.debug("ADD to backlog")
             self.backlogAdd.append(request)
+
+    def remove_item(self, qid, qseq):
+        """
+        Removes the specified item from our local portion of the distributed queue
+        :param qid: int
+            The ID of the LocalQueue to remove the item from
+        :param qseq: int
+            The Sequence Number of the item in the specified queue to remove
+        :return: obj
+            The request that we removed if any otherwise None
+        """
+        # Check if the QID specified is valid
+        if qid < 0 or qid >= self.numLocalQueues:
+            logger.error("Invalid QID {} selected when specifying item removal".format(qid))
+
+        # Attempt to remove the item from the specified local queue
+        removed_item = self.queueList[qid].remove_item(qseq)
+
+        # Check if we actually removed anything
+        if removed_item is not None:
+            logger.debug("Successfully removed queue item ({}, {}) from distributed queue".format(qid, qseq))
+
+        else:
+            logger.debug("Failed to remove queue item ({}, {}) from distributed queue".format(qid, qseq))
+
+        return removed_item
 
     def local_pop(self, qid=0):
         """
@@ -690,11 +723,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Add to the queue and get queue sequence number
         queue_seq = self.queueList[qid].add(self.myID, request)
 
-        if self._throw_dist_queue_events:
-            self._last_aid_added = (qid, queue_seq)
-            logger.debug("Scheduling item added event now.")
-            self._schedule_now(self._EVT_ITEM_ADDED)
-
         # Check if we are waiting for any acks from the slave
         if not self.waitAddAcks:
             self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, queue_seq])
@@ -726,11 +754,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Add to the queue and get queue sequence number
         queue_seq = self.queueList[qid].add(self.myID, request)
-
-        if self._throw_dist_queue_events:
-            self._last_aid_added = (qid, queue_seq)
-            logger.debug("Scheduling item added event now.")
-            self._schedule_now(self._EVT_ITEM_ADDED)
 
         # Send an add message to the other side
         self.send_msg(self.CMD_ADD, [self.myID, self.comms_seq, qid, queue_seq, copy(request)])
