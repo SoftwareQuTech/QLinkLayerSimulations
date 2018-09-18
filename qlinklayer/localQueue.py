@@ -312,7 +312,7 @@ class TimeoutLocalQueue(LocalQueue):
         # Check if the item is still stored locally
         if self.contains(queue_item.seq):
             logger.debug("Removing item from queue")
-            self.queue.pop(queue_item.seq)
+            self.remove_item(queue_item.seq)
 
             # Store the item for retrieval by higher layers
             self.timed_out_items.append(queue_item)
