@@ -290,7 +290,10 @@ class RequestScheduler(pydynaa.Entity):
         logger.debug("Scheduling request {}".format(aid))
         key = (request.create_id, request.otherID)
         self.outstanding_items[key] = aid
-        self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
+        if queue_item.lifetime:
+            self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
+        else:
+            queue_item.remove()
 
         self._process_outstanding_items()
 
@@ -325,6 +328,8 @@ class RequestScheduler(pydynaa.Entity):
         """
         queue_item = evt.source
         request = queue_item.request
+        logger.debug("Removing local queue item from pydynaa")
+        queue_item.remove()
         key = (request.create_id, request.otherID)
         if key in self.outstanding_items:
             logger.error("Failed to service request in time, clearing")

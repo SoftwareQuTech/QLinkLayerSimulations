@@ -86,7 +86,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Queue item management
         self.timed_out_items = []
-        self.queue_item_timeout_handler = EventHandler(self._queue_item_timeout_handler)
+        # self.queue_item_timeout_handler = EventHandler(self._queue_item_timeout_handler)
         self._EVT_QUEUE_TIMEOUT = EventType("DIST QUEUE TIMEOUT", "Triggers when queue item times out")
         self.ready_items = []
         self.last_schedule_time = 0
@@ -99,7 +99,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         for j in range(numQueues):
             q = TimeoutLocalQueue(qid=j, throw_events=throw_local_queue_events)
             self.queueList.append(q)
-            self._wait(self.queue_item_timeout_handler, entity=q, event_type=q._EVT_PROC_TIMEOUT)
+            # self._wait(self.queue_item_timeout_handler, entity=q, event_type=q._EVT_PROC_TIMEOUT)
             self._wait(self.schedule_item_handler, entity=q, event_type=q._EVT_SCHEDULE)
 
         # Backlog of requests
@@ -215,25 +215,25 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             if self.add_callback:
                 self.add_callback(result=(self.DQ_TIMEOUT, qid, queue_seq, request))
 
-    def _queue_item_timeout_handler(self, evt):
-        """
-        DQP Queue Item timeout handler.  Triggered when an underlying TimedLocalQueue has expired a queue item
-        due to it not being serviced within it's max time period.
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The event that triggered this handler
-        """
-        # Get the local queue that triggered the event
-        queue = evt.source
-        logger.debug("Handling local queue item timeout")
-
-        # Pull the timed out item from the local queue's internal storage
-        queue_item = queue.timed_out_items.pop(0)
-        logger.debug("Got timed out queue item {}".format(queue_item))
-
-        # Set up a timeout event for passing to higher layers
-        self.timed_out_items.append(queue_item)
-        logger.debug("Scheduling queue timeout event now.")
-        self._schedule_now(self._EVT_QUEUE_TIMEOUT)
+    # def _queue_item_timeout_handler(self, evt):
+    #     """
+    #     DQP Queue Item timeout handler.  Triggered when an underlying TimedLocalQueue has expired a queue item
+    #     due to it not being serviced within it's max time period.
+    #     :param evt: obj `~netsquid.pydynaa.Event`
+    #         The event that triggered this handler
+    #     """
+    #     # Get the local queue that triggered the event
+    #     queue = evt.source
+    #     logger.debug("Handling local queue item timeout")
+    #
+    #     # Pull the timed out item from the local queue's internal storage
+    #     queue_item = queue.timed_out_items.pop(0)
+    #     logger.debug("Got timed out queue item {}".format(queue_item))
+    #
+    #     # Set up a timeout event for passing to higher layers
+    #     self.timed_out_items.append(queue_item)
+    #     logger.debug("Scheduling queue timeout event now.")
+    #     self._schedule_now(self._EVT_QUEUE_TIMEOUT)
 
     def _schedule_item_handler(self, evt):
         """
@@ -438,7 +438,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.ready_and_schedule(qid, qseq, scheduleAfter)
 
         # Add a timeout on the queue item
-        self.queueList[qid].add_timeout_event(qseq)
+        self.queueList[qid].add_scheduling_event(qseq)
 
         if self.add_callback:
             self.add_callback((self.DQ_OK, qid, qseq, copy(request)))
@@ -490,7 +490,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.ready_and_schedule(qid, agreed_qseq, scheduleAfter)
 
         # Add a timeout on the queue item
-        self.queueList[qid].add_timeout_event(agreed_qseq)
+        self.queueList[qid].add_scheduling_event(agreed_qseq)
 
         # Return the results if told to
         if self.add_callback:
