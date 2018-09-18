@@ -53,7 +53,7 @@ def parse_table_data_from_sql(results_path, base_table_name, max_real_time=None)
             conn = sqlite3.connect(results_path)
         except sqlite3.OperationalError as err:
             logger.error("sqlite3 could not open the file {}, check that the path is correct".format(results_path))
-            raise err
+            return None
         c = conn.cursor()
         c.execute("SELECT name FROM sqlite_master WHERE type='table'")
         all_tables = [t[0] for t in c.fetchall()]
@@ -398,38 +398,58 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
         return queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue
 
 
-def plot_queue_data(queue_lens, times, results_path, no_plot=False, save_figs=False, analysis_folder=None):
+def plot_single_queue_data(queue_lens, times, results_path, color=None, label=None, no_plot=False, save_figs=False, analysis_folder=None, clear_figure=True):
     """
     Plots the queue length over time from data extracted using 'parse_raw_queue_data'
-    :param queue_lens: [queue_lensA, queue_lensB]
-    :param times: [qtimesA, qtimesB]
+    :param queue_lens: list of int
+    :param times: list of float
     :param path_to_folder: str
         Path to the results folder, used to save the fig
     :param no_plot: bool
         Whether to show the plot or not
     :param save_figs: bool
         Whether to save the plot or not
+    :param clear_figure: bool
+        Whether to clear the plot before plotting
     :return: None
     """
     if no_plot and (not save_figs):
         return
 
+    if clear_figure:
+        plt.clf()
+    x_points = []
+    y_points = []
+    for j in range(len(queue_lens)):
+        # Make points to make straight lines when queue len is not changing
+        x_points.append(times[j])
+        y_points.append(queue_lens[j])
+
+        if (j + 1) < len(times):
+            x_points.append(times[j + 1])
+            y_points.append(queue_lens[j])
+
+    if color:
+        if label:
+            plt.plot(x_points, y_points, color=color, label=label)
+        else:
+            plt.plot(x_points, y_points, color=color)
+    else:
+        if label:
+            plt.plot(x_points, y_points, label=label)
+        else:
+            plt.plot(x_points, y_points)
+
+
+def plot_queue_data(queue_lens, times, results_path, no_plot=False, save_figs=False, analysis_folder=None, clear_figure=True):
     colors = ['red', 'green']
     labels = ['Node A', 'Node B']
-    for i in range(2):
-        x_points = []
-        y_points = []
-        for j in range(len(queue_lens[i])):
-            # Make points to make straight lines when queue len is not changing
-            x_points.append(times[i][j])
-            y_points.append(queue_lens[i][j])
-
-            if (j + 1) < len(times[i]):
-                x_points.append(times[i][j + 1])
-                y_points.append(queue_lens[i][j])
-
-        plt.plot(x_points, y_points, color=colors[i], label=labels[i])
-
+    if clear_figure:
+        plt.clf()
+    for i in range(len(queue_lens)):
+        qls = queue_lens[i]
+        ts = times[i]
+        plot_single_queue_data(qls, ts, color=colors[i], label=labels[i], results_path=results_path, no_plot=True, clear_figure=False)
     plt.ylabel("Queue lengths")
     plt.xlabel("Real time (s)")
     plt.legend(loc='upper right')
@@ -439,7 +459,7 @@ def plot_queue_data(queue_lens, times, results_path, no_plot=False, save_figs=Fa
         plt.show()
 
 
-def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False, analysis_folder=None):
+def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False, analysis_folder=None, plot_dist=False, clear_figure=True):
     """
     Plots a histogram and a distribution of the number of attempts for generations in the simulation
     :param gen_attempts: dict of key (createID, sourceID, otherID, mhpSeq)
@@ -451,10 +471,16 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
         Whether to show the plot or not
     :param save_figs: bool
         Whether to save the plot or not
+    :param plot_dist: bool
+        Whether to plot the distribution along the histogram
+    :param clear_figure: bool
+        Whether to clear the plot before plotting
     """
     if no_plot and (not save_figs):
         return
 
+    if clear_figure:
+        plt.clf()
     plt.hist(gen_attempts.values(), 50)
 
     plt.xlabel('Attempts')
@@ -466,20 +492,23 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
     if not no_plot:
         plt.show()
 
-    t = gen_attempts.values()
-    s = [0] * len(t)
-    fig, ax = plt.subplots()
-    ax.plot(t, s, '.')
+    if plot_dist:
+        if clear_figure:
+            plt.clf()
+        t = gen_attempts.values()
+        s = [0] * len(t)
+        plt.plot(t, s, '.')
 
-    ax.set(xlabel='time (s)', title='Generation Latency Distribution')
-    ax.grid()
-    if save_figs:
-        save_plot("gen_latency_dist.pdf", results_path, analysis_folder=analysis_folder)
-    if not no_plot:
-        plt.show()
+        plt.xlabel('time (s)')
+        plt.title('Generation Latency Distribution')
+        plt.grid(True)
+        if save_figs:
+            save_plot("gen_latency_dist.pdf", results_path, analysis_folder=analysis_folder)
+        if not no_plot:
+            plt.show()
 
 
-def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, analysis_folder=None):
+def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, analysis_folder=None, plot_dist=False, clear_figure=True):
     """
     Plots a histogram and a distribution of the amount of time for generations in the simulation
     :param gen_times: list of floats
@@ -490,10 +519,16 @@ def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, anal
         Whether to show the plot or not
     :param save_figs: bool
         Whether to save the plot or not
+    :param plot_dist: bool
+        Whether to plot the distribution along the histogram
+    :param clear_figure: bool
+        Whether to clear the plot before plotting
     """
     if no_plot and (not save_figs):
         return
 
+    if clear_figure:
+        plt.clf()
     gen_times = [t / SECOND for t in gen_times]
     plt.hist(gen_times, 50)
 
@@ -506,20 +541,23 @@ def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, anal
     if not no_plot:
         plt.show()
 
-    t = gen_times
-    s = [0] * len(t)
-    fig, ax = plt.subplots()
-    ax.plot(t, s, '.')
+    if plot_dist:
+        if clear_figure:
+            plt.clf()
+        t = gen_times
+        s = [0] * len(t)
+        plt.plot(t, s, '.')
 
-    ax.set(xlabel='attempts', title='Generation Attempt Count Distribution')
-    ax.grid()
-    if save_figs:
-        save_plot("gen_attempt_count_dist.pdf", results_path, analysis_folder=analysis_folder)
-    if not no_plot:
-        plt.show()
+        plt.xlabel('attempts')
+        plt.title('Generation Attempt Count Distribution')
+        plt.grid(True)
+        if save_figs:
+            save_plot("gen_attempt_count_dist.pdf", results_path, analysis_folder=analysis_folder)
+        if not no_plot:
+            plt.show()
 
 
-def plot_throughput(all_gens, results_path, no_plot=False, save_figs=False, analysis_folder=None):
+def plot_throughput(all_gens, results_path, no_plot=False, save_figs=False, analysis_folder=None, clear_figure=True):
     """
     Plots the instantaneous throughput of entanglement generation as a function of time over the
     duration of the simulation
@@ -531,10 +569,14 @@ def plot_throughput(all_gens, results_path, no_plot=False, save_figs=False, anal
         Whether to show the plot or not
     :param save_figs: bool
         Whether to save the plot or not
+    :param clear_figure: bool
+        Whether to clear the plot before plotting
     """
     if no_plot and (not save_figs):
         return
 
+    if clear_figure:
+        plt.clf()
     window_size = SECOND
     t_actions = []
     throughput = [(0, 0)]
@@ -554,12 +596,12 @@ def plot_throughput(all_gens, results_path, no_plot=False, save_figs=False, anal
     throughput = sorted(throughput, key=lambda p: p[0])
     s = [t[1] for t in throughput]
     t = [t[0] / SECOND for t in throughput]
-    fig, ax = plt.subplots()
-    ax.plot(t, s, '.-')
+    plt.plot(t, s, '.-')
 
-    ax.set(xlabel='time (s)', ylabel='Throughput (gen/s)',
-           title='Instantaneous throughput of generation')
-    ax.grid()
+    plt.xlabel('time (s)')
+    plt.ylabel('Throughput (gen/s)')
+    plt.title('Instantaneous throughput of generation')
+    plt.grid(True)
 
     if save_figs:
         save_plot("throughput.pdf", results_path, analysis_folder=analysis_folder)
@@ -608,6 +650,94 @@ def save_plot(fig_name, results_path, analysis_folder=None):
         plt.savefig(analysis_folder + "/" + fig_name)
     else:
         plt.savefig(results_path[-3] + "_" + fig_name)
+
+def get_data_from_single_file(path_to_file, max_real_time=None):
+    """
+    Returns a dictionary of all the data from the simulation(s)
+    :param results_path: str
+        Path to a sqlite-file
+    :param max_real_time:
+    :return: dct
+    """
+    data_dct = {}
+    # Check if there is an additional data file
+    try:
+        with open(path_to_file[:-3] + "_additional_data.json", 'r') as json_file:
+            additional_data = json.load(json_file)
+            data_dct["additional_data"] = additional_data
+    except FileNotFoundError:
+        additional_data = {}
+
+    # If max_real_time is not set, check if there is a total_real_time in the data
+    if max_real_time is None:
+        try:
+            max_real_time = additional_data["total_real_time"]
+        except KeyError:
+            pass
+
+    # Get create and ok data from sql file to compute latencies and throughput
+    (requests, rejected_requests), (gens, all_gens), total_requested_pairs = \
+        parse_request_data_from_sql(path_to_file, max_real_time=max_real_time)
+    # Compute latencies for generating a single pair
+    gen_starts, gen_times = get_gen_latencies(requests, gens)
+
+    # Get attempts data to compute number of attempts per generation and generation probability
+    node_attempts, gen_attempts = parse_attempt_data_from_sql(path_to_file, all_gens, gen_starts,
+                                                              max_real_time=max_real_time)
+
+    # Get fidelities
+    fidelities = parse_fidelities_from_sql(path_to_file, max_real_time=max_real_time)
+
+    # Get QubErr
+    Z_data, X_data = parse_quberr_from_sql(path_to_file, max_real_time=max_real_time)
+
+    # Get queue data
+    raw_queue_dataA = parse_table_data_from_sql(path_to_file, "EGP_Local_Queue_A", max_real_time=max_real_time)
+    raw_queue_dataB = parse_table_data_from_sql(path_to_file, "EGP_Local_Queue_B", max_real_time=max_real_time)
+
+    if all_gens:
+        data_dct["all_gens"] = all_gens
+    if gen_times:
+        data_dct["gen_times"] = gen_times
+    if gen_attempts:
+        data_dct["gen_attempts"] = gen_attempts
+    if fidelities:
+        data_dct["fidelities"] = fidelities
+    if Z_data:
+        data_dct["Z_data"] = Z_data
+    if X_data:
+        data_dct["X_data"] = X_data
+    if raw_queue_dataA:
+        data_dct["raw_queue_dataA"] = raw_queue_dataA
+    if raw_queue_dataB:
+        data_dct["raw_queue_dataB"] = raw_queue_dataB
+
+    return data_dct
+
+def get_data(results_path, max_real_time=None):
+    """
+    Returns a dictionary of all the data from the simulation(s)
+    :param results_path: str or list of str
+        Path to a sqlite-file, folder containing sqlite-files or a list of paths to sqlite-files.
+    :param max_real_time:
+    :return: dct
+    """
+    if isinstance(results_path, list): # list of paths
+        data_dct = {}
+        for path in results_path:
+            data_dct[path] = get_data(path, max_real_time)
+        return data_dct
+    elif results_path.endswith(".db"): # single data file
+        return get_data_from_single_file(results_path, max_real_time)
+    else: # path to folder
+        if results_path.endswith('/'):
+            results_path = results_path[:-1]
+        if not os.path.isdir(results_path):
+            raise ValueError("'results_path={} is not in correct format".format(results_path))
+        data_dct = {}
+        for entry in os.listdir(results_path):
+            data_dct[entry] = get_data(entry, max_real_time)
+        return data_dct
 
 
 def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_figs=False, save_output=False,
