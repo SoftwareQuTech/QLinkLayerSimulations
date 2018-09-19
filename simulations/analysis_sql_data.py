@@ -883,8 +883,8 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     if gen_attempts:
         # Get the node attempts for the two nodes
         gen_attempts_list = gen_attempts.values()
-        gen_attempts1 = gen_attempts[0]
-        gen_attempts2 = gen_attempts[1]
+        gen_attempts1 = gen_attempts_list[0]
+        gen_attempts2 = gen_attempts_list[1]
         are_equal = True
         for key in gen_attempts1.keys():
             if not gen_attempts1[key] == gen_attempts2[key]:
@@ -910,7 +910,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("Total node attempts during simulation: " + "".join(
         ["Node {}: {}, ".format(node, attempts) for node, attempts in node_attempts.items()]), results_path,
-                save_output=save_output, analysis_folder=analysis_folder)
+        save_output=save_output, analysis_folder=analysis_folder)
     output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("----------------------------------", results_path, save_output=save_output,
                 analysis_folder=analysis_folder)
