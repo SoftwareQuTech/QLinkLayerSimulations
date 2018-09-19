@@ -171,20 +171,14 @@ class EGPLocalQueueSequence(EGPDataSequence):
     def get_column_names(self):
         return ["Timestamp", "Add or Rem", "Seq", "Success"]
 
-    def getData(self, time, source=None):
+    def getData(self, time, source=None, trigger=None):
         local_queue = source[0]
-        if local_queue._last_seq_added is not None:
-            data = 1, local_queue._last_seq_added
-
-            # Check for consistency
-            if local_queue._last_seq_removed is not None:
-                raise RuntimeError("Got both addition and removal in queue collection.")
+        if trigger == local_queue._EVT_ITEM_ADDED:
+            data = 1, local_queue._seqs_added.pop(0)
+        elif trigger == local_queue._EVT_ITEM_REMOVED:
+            data = -1, local_queue._seqs_removed.pop(0)
         else:
-            if local_queue._last_seq_removed is not None:
-                data = -1, local_queue._last_seq_removed
-            else:
-                raise RuntimeError("Got no addition or removal in queue collection.")
-        local_queue._reset_data()
+            raise ValueError("Unknown event triggered collection of queue length")
 
         return data, True
 

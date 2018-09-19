@@ -8,6 +8,7 @@ import json
 import math
 import matplotlib.pyplot as plt
 import os
+import sys
 
 
 def _check_table_name(table_name, base_table_name):
@@ -144,25 +145,29 @@ def parse_attempt_data_from_sql(results_path, all_gens, gen_starts, max_real_tim
         node_attempts - dict of key nodeID
                                 value num_attempts
             Containing the number of attempts made by each node
-        gen_attempts - dict of key (createID, sourceID, otherID, mhpSeq)
-                               value int
-            Containing the number of attempts made for the generation
+        gen_attempts - dict of key nodeID
+                       value dict of key (createID, sourceID, otherID, mhpSeq)
+                                  value int
+            Containing the number of attempts made for the generation for each node
     """
     # Get the attempt data
     attempt_data = parse_table_data_from_sql(results_path, "Node_EGP_Attempts", max_real_time=max_real_time)
 
     # Parse the attempt data
-    gen_attempts = defaultdict(int)
+    gen_attempts = {}
     node_attempts = defaultdict(int)
     for entry in attempt_data:
         timestamp, nodeID, succ = entry
 
         node_attempts[nodeID] += 1
 
+        if nodeID not in gen_attempts:
+            gen_attempts[nodeID] = defaultdict(int)
+
         for gen in all_gens:
             genID = gen[1]
             if gen_starts[genID] < timestamp < gen[0]:
-                gen_attempts[genID] += 1
+                gen_attempts[nodeID][genID] += 1
                 break
 
     return node_attempts, gen_attempts
@@ -466,9 +471,10 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
                       clear_figure=True):
     """
     Plots a histogram and a distribution of the number of attempts for generations in the simulation
-    :param gen_attempts: dict of key (createID, sourceID, otherID, mhpSeq)
-                                 value int
-        Containing the number of attempts made for the generation
+    :param gen_attempts: dict of key nodeID
+                         value dict of key (createID, sourceID, otherID, mhpSeq)
+                                  value int
+            Containing the number of attempts made for the generation for each node
     :param path_to_folder: str
         Path to the results folder, used to save the fig
     :param no_plot: bool
@@ -485,6 +491,8 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
 
     if clear_figure:
         plt.clf()
+    # TODO assuming node attempts are equal for the two nodes
+    gen_attempts = list(gen_attempts.values())[0]
     plt.hist(gen_attempts.values(), 50)
 
     plt.xlabel('Attempts')
@@ -873,12 +881,24 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
     if gen_attempts:
-        avg_attempt_per_gen = sum(gen_attempts.values()) / 2 / len(all_gens)
+        # Get the node attempts for the two nodes
+        gen_attempts_list = gen_attempts.values()
+        gen_attempts1 = gen_attempts[0]
+        gen_attempts2 = gen_attempts[1]
+        are_equal = True
+        for key in gen_attempts1.keys():
+            if not gen_attempts1[key] == gen_attempts2[key]:
+                are_equal = False
+                break
+        output_data("Number of attempts equal for the two nodes, for each generation: {}".format(are_equal),
+                    results_path, save_output=save_output, analysis_folder=analysis_folder)
+        # TODO assuming that node attempts are equal for the two nodes
+        avg_attempt_per_gen = sum(gen_attempts1.values()) / len(all_gens)
         output_data("Average number of attempts per successful generation: {}".format(avg_attempt_per_gen),
                     results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Minimum number of attempts for a generation: {}".format(min(gen_attempts.values())), results_path,
+        output_data("Minimum number of attempts for a generation: {}".format(min(gen_attempts1.values())), results_path,
                     save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Maximum number of attempts for a generation: {}".format(max(gen_attempts.values())), results_path,
+        output_data("Maximum number of attempts for a generation: {}".format(max(gen_attempts1.values())), results_path,
                     save_output=save_output, analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
@@ -886,10 +906,10 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         "Total number of generated pairs: {} of total requested {}".format(len(all_gens), total_requested_pairs),
         results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data(
-        "Total number of entanglement attempts for successful generations: {}".format(sum(gen_attempts.values()) / 2),
+        "Total number of entanglement attempts for successful generations: {}".format(sum(gen_attempts1.values())),
         results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("Total node attempts during simulation: " + "".join(
-                ["Node {}: {}, ".format(node, attempts) for node, attempts in node_attempts.items()]), results_path,
+        ["Node {}: {}, ".format(node, attempts) for node, attempts in node_attempts.items()]), results_path,
                 save_output=save_output, analysis_folder=analysis_folder)
     output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("----------------------------------", results_path, save_output=save_output,
@@ -986,6 +1006,30 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 
 
 def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output=False, analysis_folder=None):
+    if results_path is None:
+        # Find the latest folder containing simulation data
+        sim_dir_env = "SIMULATION_DIR"
+
+        # Check that the simulation path is set
+        if sim_dir_env not in os.environ:
+            print("The environment variable {} must be set to the path to the simulation folder"
+                  "before running this script, if the argument --results-path is not used!".format(sim_dir_env))
+            sys.exit()
+        else:
+            sim_dir = os.getenv(sim_dir_env)
+            if not os.path.isdir(sim_dir):
+                print("The environment variable {} is not a path to a folder. This must"
+                      "be the case if the argument --results-path is not used!".format(sim_dir_env))
+                sys.exit()
+
+        # Check that sim_dir ends with '/'
+        if not sim_dir[-1] == '/':
+            sim_dir += "/"
+
+        is_data_folder = lambda folder: os.path.isdir(folder) and (folder[:4] in ["2018", "2019", "2020"])
+        data_folders = [entry for entry in os.listdir(sim_dir) if is_data_folder(entry)]
+        results_path = sorted(data_folders, reverse=True)[0]
+
     # Check if results_path is a single .db file or a folder containing such
     if results_path.endswith('.db'):
         analyse_single_file(results_path, no_plot, max_real_time=max_real_time, save_figs=save_figs,
@@ -1007,7 +1051,7 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--results-path', required=True, type=str,
+    parser.add_argument('--results-path', required=False, type=str, default=None,
                         help="Path to the directory containing the simulation results")
     parser.add_argument('--max_real_time', required=False, type=float,
                         help="If specified, don't include data after max_real_time (ns)")

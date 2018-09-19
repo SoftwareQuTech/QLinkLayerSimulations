@@ -50,8 +50,8 @@ class LocalQueue(Entity):
             self._EVT_ITEM_REMOVED = EventType("QUEUE ITEM REMOVED", "Item removed to the local queue")
 
             # Data stored for data collection
-            self._last_seq_added = None
-            self._last_seq_removed = None
+            self._seqs_added = []
+            self._seqs_removed = []
 
     def add(self, originID, request):
         """
@@ -97,7 +97,7 @@ class LocalQueue(Entity):
         if self.throw_events:
             logger.debug("Scheduling item added event now.")
             self._schedule_now(self._EVT_ITEM_ADDED)
-            self._last_seq_added = seq
+            self._seqs_added.append(seq)
 
     def remove_item(self, seq):
         """
@@ -114,7 +114,7 @@ class LocalQueue(Entity):
             if self.throw_events:
                 logger.debug("Scheduling item removed event now.")
                 self._schedule_now(self._EVT_ITEM_REMOVED)
-                self._last_seq_removed = q.seq
+                self._seqs_removed.append(q.seq)
 
             if seq == self.popSeq:
                 self.popSeq = self._get_next_pop_seq()
@@ -152,7 +152,7 @@ class LocalQueue(Entity):
             if self.throw_events:
                 logger.debug("Scheduling item added event now.")
                 self._schedule_now(self._EVT_ITEM_REMOVED)
-                self._last_seq_removed = q.seq
+                self._seqs_removed.append(q.seq)
 
             # Increment lower bound of sequence numbers to return next
             self.popSeq = self._get_next_pop_seq()
@@ -223,14 +223,6 @@ class LocalQueue(Entity):
         item.scheduleAt = scheduleAt + sim_time()
         item.schedule()
 
-    def _reset_data(self):
-        """
-        Resets the variables storing the data for data collection
-        :return:
-        """
-        self._last_seq_added = None
-        self._last_seq_removed = None
-
 
 class TimeoutLocalQueue(LocalQueue):
     def __init__(self, qid=None, wsize=None, maxSeq=None, scheduleAfter=0.0, throw_events=False):
@@ -279,7 +271,7 @@ class TimeoutLocalQueue(LocalQueue):
         if self.throw_events:
             logger.debug("Scheduling item added event now.")
             self._schedule_now(self._EVT_ITEM_ADDED)
-            self._last_seq_added = seq
+            self._seqs_added.append(seq)
 
     def add_scheduling_event(self, qseq):
         """
