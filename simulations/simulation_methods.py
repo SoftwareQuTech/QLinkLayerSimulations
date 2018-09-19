@@ -112,10 +112,14 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
         # TODO see issue #108
         for qid in range(len(lqAs)):
             lq = lqAs[qid]
-            pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqA_ds[qid])
+            pm.addEvent(lq, lq._EVT_ITEM_ADDED, ds=lqA_ds[qid])
+            pm.addEvent(lq, lq._EVT_ITEM_REMOVED, ds=lqA_ds[qid])
+            # pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqA_ds[qid])
         for qid in range(len(lqBs)):
             lq = lqBs[qid]
-            pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqB_ds[qid])
+            pm.addEvent(lq, lq._EVT_ITEM_ADDED, ds=lqB_ds[qid])
+            pm.addEvent(lq, lq._EVT_ITEM_REMOVED, ds=lqB_ds[qid])
+            # pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqB_ds[qid])
         # dqpA = scenarioA.egp.dqp
         # dqpB = scenarioB.egp.dqp
         # schedulerA = scenarioA.egp.scheduler

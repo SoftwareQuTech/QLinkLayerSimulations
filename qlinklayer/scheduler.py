@@ -218,6 +218,9 @@ class RequestScheduler(pydynaa.Entity):
         queue_item = self.distQueue.remove_item(qid, qseq)
         if queue_item is None:
             logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
+        else:
+            # Remove queue item from pydynaa
+            queue_item.remove()
 
         # Check if we have any requests to follow up with and begin processing them
         self._process_outstanding_items()
@@ -290,7 +293,9 @@ class RequestScheduler(pydynaa.Entity):
         logger.debug("Scheduling request {}".format(aid))
         key = (request.create_id, request.otherID)
         self.outstanding_items[key] = aid
-        self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
+
+        if queue_item.lifetime:
+            self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
 
         self._process_outstanding_items()
 
@@ -325,6 +330,7 @@ class RequestScheduler(pydynaa.Entity):
         """
         queue_item = evt.source
         request = queue_item.request
+        logger.debug("Removing local queue item from pydynaa")
         key = (request.create_id, request.otherID)
         if key in self.outstanding_items:
             logger.error("Failed to service request in time, clearing")
