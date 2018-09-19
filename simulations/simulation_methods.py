@@ -61,8 +61,10 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
     midpoint_attempt_ds = MHPMidpointEntanglementAttemptSequence(name="Midpoint EGP Attempts", dbFile=data_file,
                                                                  maxSteps=collection_duration)
 
-    node_attempt_ds = MHPNodeEntanglementAttemptSequence(name="Node EGP Attempts", dbFile=data_file,
+    node_attemptA_ds = MHPNodeEntanglementAttemptSequence(name="Node EGP Attempts A", dbFile=data_file,
                                                          maxSteps=collection_duration)
+    node_attemptB_ds = MHPNodeEntanglementAttemptSequence(name="Node EGP Attempts B", dbFile=data_file,
+                                                          maxSteps=collection_duration)
 
     if measure_directly:
         # DataSequence for QubErr collection
@@ -103,9 +105,12 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
     pm.addEvent(source=scenarioA.egp.mhp.conn, evtType=scenarioA.egp.mhp.conn._EVT_ENTANGLE_ATTEMPT,
                 ds=midpoint_attempt_ds)
 
-    pm.addEvent(source=scenarioA.egp.mhp, evtType=scenarioA.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
+    # pm.addEvent(source=scenarioA.egp.mhp, evtType=scenarioA.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
+    #
+    # pm.addEvent(source=scenarioB.egp.mhp, evtType=scenarioB.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
+    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=node_attemptA_ds)
 
-    pm.addEvent(source=scenarioB.egp.mhp, evtType=scenarioB.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
+    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=node_attemptB_ds)
 
     if collect_queue_data:
         # TODO this should be used when we changed how items are popped from the queue
@@ -128,9 +133,9 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
         # pm.addEventAny([dqpB, schedulerB], [dqpB._EVT_ITEM_ADDED, schedulerB._EVT_REM_OUTSTANDING_REQ], ds=lqB_ds)
 
     if measure_directly:
-        collectors = [create_ds, ok_ds, quberr_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
+        collectors = [create_ds, ok_ds, quberr_ds, err_ds, node_attemptA_ds, node_attemptB_ds, midpoint_attempt_ds]
     else:
-        collectors = [create_ds, ok_ds, state_ds, err_ds, node_attempt_ds, midpoint_attempt_ds]
+        collectors = [create_ds, ok_ds, state_ds, err_ds, node_attemptA_ds, node_attemptB_ds, midpoint_attempt_ds]
     if collect_queue_data:
         collectors += lqA_ds + lqB_ds
     return collectors

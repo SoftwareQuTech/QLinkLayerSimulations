@@ -259,6 +259,9 @@ class NodeCentricEGP(EGP):
         self.bit_choise = None
         self.midpoint_outcome = None
 
+        # Save number of attempts for data collection
+        self._nr_of_attempts_storage = []
+
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
                                  alphaA=0.1, alphaB=0.1):
         """
@@ -871,6 +874,11 @@ class NodeCentricEGP(EGP):
         t_create = now - self.mhp_service.get_midpoint_comm_delay(self.node)
         t_goodness = t_create
         result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
+
+        # Move the number of attempts of this entanglement generation that MHP keeps track of
+        # This is to know that this is the entry which we should collect in data collection
+        nr_of_attempts = self.mhp._gen_attempts.pop(aid)
+        self._nr_of_attempts_storage.append(nr_of_attempts)
 
         # Pass back the okay and clean up
         self.issue_ok(result)

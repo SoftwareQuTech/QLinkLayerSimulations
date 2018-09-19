@@ -129,7 +129,7 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
     return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
 
 
-def parse_attempt_data_from_sql(results_path, all_gens, gen_starts, max_real_time=None):
+def parse_attempt_data_from_sql(results_path, max_real_time=None):
     """
     Parses collected attempt data points from the sql database
     :param results_path: str
@@ -151,26 +151,34 @@ def parse_attempt_data_from_sql(results_path, all_gens, gen_starts, max_real_tim
             Containing the number of attempts made for the generation for each node
     """
     # Get the attempt data
-    attempt_data = parse_table_data_from_sql(results_path, "Node_EGP_Attempts", max_real_time=max_real_time)
+    attempt_dataA = parse_table_data_from_sql(results_path, "Node_EGP_Attempts_A", max_real_time=max_real_time)
+    attempt_dataB = parse_table_data_from_sql(results_path, "Node_EGP_Attempts_B", max_real_time=max_real_time)
 
-    # Parse the attempt data
-    gen_attempts = {}
-    node_attempts = defaultdict(int)
-    for entry in attempt_data:
-        timestamp, nodeID, succ = entry
+    gen_attemptsA = [entry[1] for entry in attempt_dataA]
+    gen_attemptsB = [entry[1] for entry in attempt_dataB]
 
-        node_attempts[nodeID] += 1
+    node_attemptsA = sum(gen_attemptsA)
+    node_attemptsB = sum(gen_attemptsA)
 
-        if nodeID not in gen_attempts:
-            gen_attempts[nodeID] = defaultdict(int)
-
-        for gen in all_gens:
-            genID = gen[1]
-            if gen_starts[genID] < timestamp < gen[0]:
-                gen_attempts[nodeID][genID] += 1
-                break
-
-    return node_attempts, gen_attempts
+    # # Parse the attempt data
+    # gen_attempts = {}
+    # node_attempts = defaultdict(int)
+    # for entry in attempt_data:
+    #     timestamp, nodeID, succ = entry
+    #
+    #     node_attempts[nodeID] += 1
+    #
+    #     if nodeID not in gen_attempts:
+    #         gen_attempts[nodeID] = defaultdict(int)
+    #
+    #     for gen in all_gens:
+    #         genID = gen[1]
+    #         if gen_starts[genID] < timestamp < gen[0]:
+    #             gen_attempts[nodeID][genID] += 1
+    #             break
+    #
+    # return node_attempts, gen_attempts
+    return [node_attemptsA, node_attemptsB], [gen_attemptsA, gen_attemptsB]
 
 
 def parse_fidelities_from_sql(results_path, max_real_time=None):
@@ -492,8 +500,9 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
     if clear_figure:
         plt.clf()
     # TODO assuming node attempts are equal for the two nodes
-    gen_attempts = list(gen_attempts.values())[0]
-    plt.hist(gen_attempts.values(), 50)
+    # gen_attempts = list(gen_attempts.values())[0]
+    gen_attempts = gen_attempts[0]
+    plt.hist(gen_attempts, 50)
 
     plt.xlabel('Attempts')
     plt.ylabel('Generation Count')
@@ -507,7 +516,7 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
     if plot_dist:
         if clear_figure:
             plt.clf()
-        t = gen_attempts.values()
+        t = gen_attempts
         s = [0] * len(t)
         plt.plot(t, s, '.')
 
@@ -782,8 +791,11 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     gen_starts, gen_times = get_gen_latencies(requests, gens)
 
     # Get attempts data to compute number of attempts per generation and generation probability
-    node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, all_gens, gen_starts,
-                                                              max_real_time=max_real_time)
+    # node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, all_gens, gen_starts,
+    #                                                           max_real_time=max_real_time)
+    node_attempts, gen_attempts = parse_attempt_data_from_sql(results_path, max_real_time=max_real_time)
+    node_attemptsA, node_attemptsB = node_attempts
+    gen_attemptsA, gen_attemptsB = gen_attempts
 
     # Get fidelities
     fidelities = parse_fidelities_from_sql(results_path, max_real_time=max_real_time)
@@ -882,23 +894,23 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 
     if gen_attempts:
         # Get the node attempts for the two nodes
-        gen_attempts_list = gen_attempts.values()
-        gen_attempts1 = gen_attempts_list[0]
-        gen_attempts2 = gen_attempts_list[1]
+        # gen_attempts_list = gen_attempts.values()
+        # gen_attempts1 = gen_attempts_list[0]
+        # gen_attempts2 = gen_attempts_list[1]
         are_equal = True
-        for key in gen_attempts1.keys():
-            if not gen_attempts1[key] == gen_attempts2[key]:
+        for i in range(len(gen_attemptsA)):
+            if not gen_attemptsA[i] == gen_attemptsB[i]:
                 are_equal = False
                 break
         output_data("Number of attempts equal for the two nodes, for each generation: {}".format(are_equal),
                     results_path, save_output=save_output, analysis_folder=analysis_folder)
         # TODO assuming that node attempts are equal for the two nodes
-        avg_attempt_per_gen = sum(gen_attempts1.values()) / len(all_gens)
+        avg_attempt_per_gen = node_attemptsA / len(all_gens)
         output_data("Average number of attempts per successful generation: {}".format(avg_attempt_per_gen),
                     results_path, save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Minimum number of attempts for a generation: {}".format(min(gen_attempts1.values())), results_path,
+        output_data("Minimum number of attempts for a generation: {}".format(min(gen_attemptsA)), results_path,
                     save_output=save_output, analysis_folder=analysis_folder)
-        output_data("Maximum number of attempts for a generation: {}".format(max(gen_attempts1.values())), results_path,
+        output_data("Maximum number of attempts for a generation: {}".format(max(gen_attemptsA)), results_path,
                     save_output=save_output, analysis_folder=analysis_folder)
         output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
 
@@ -906,10 +918,10 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         "Total number of generated pairs: {} of total requested {}".format(len(all_gens), total_requested_pairs),
         results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data(
-        "Total number of entanglement attempts for successful generations: {}".format(sum(gen_attempts1.values())),
+        "Total number of entanglement attempts for successful generations: {}".format(node_attemptsA),
         results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("Total node attempts during simulation: " + "".join(
-        ["Node {}: {}, ".format(node, attempts) for node, attempts in node_attempts.items()]), results_path,
+        ["Node {}: {}, ".format(node, attempts) for node, attempts in [["A", node_attemptsA], ["B", node_attemptsB]]]), results_path,
         save_output=save_output, analysis_folder=analysis_folder)
     output_data("", results_path, save_output=save_output, analysis_folder=analysis_folder)
     output_data("----------------------------------", results_path, save_output=save_output,

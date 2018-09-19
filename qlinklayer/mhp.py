@@ -678,6 +678,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             self.message_timeout = message_timeout
         self.set_bright_state_population(alpha=alpha)
 
+        # For keeping track of generation attempts, for data collection
+        self._gen_attempts = {}
+
     def reset_protocol(self):
         """
         Resets the protocol to an unitialized state so that we don't produce entanglement
@@ -913,13 +916,26 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
             # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
-            logger.debug("Scheduling entanglement event now.")
-            self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
+            # logger.debug("Scheduling entanglement event now.")
+            # self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
+
+            # Keep track of attempts
+            self._register_attempt()
 
         except Exception as err_data:
             logger.exception("Error occurred while handling photon emission")
             result = self._construct_error_result(err_data=err_data)
             self._handle_error(None, result)
+
+    def _register_attempt(self):
+        """
+        Register the generation attempt, for data collection
+        :return: None
+        """
+        try:
+            self._gen_attempts[self.aid] += 1
+        except KeyError:
+            self._gen_attempts[self.aid] = 1
 
 
 class SimulatedNodeCentricMHPService(Service):

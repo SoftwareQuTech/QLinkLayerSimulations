@@ -189,12 +189,16 @@ class MHPNodeEntanglementAttemptSequence(EGPDataSequence):
     """
 
     def get_column_names(self):
-        return ["Timestamp", "Node ID", "Success"]
+        return ["Timestamp", "Nr Attempts", "Success"]
 
     def getData(self, time, source=None):
-        [event_source] = source
-        nodeID = event_source.node.nodeID
-        return [nodeID, True]
+        # Get the scenario and MHP
+        scenario = source[0]
+        egp = scenario.egp
+
+        nr_of_attempts = egp._nr_of_attempts_storage.pop(0)
+
+        return [nr_of_attempts, True]
 
 
 class MHPMidpointEntanglementAttemptSequence(EGPDataSequence):
