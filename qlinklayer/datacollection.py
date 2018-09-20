@@ -60,8 +60,8 @@ class EGPOKSequence(EGPDataSequence):
         self._attempt_collectors = attempt_collectors
 
     def get_column_names(self):
-        return ["Timestamp", "Node ID", "Create ID", "Origin ID", "Other ID", "MHP Seq", "Logical ID", "Goodness", "Goodness Time",
-                "Create Time", "Attempts", "Success"]
+        return ["Timestamp", "Node ID", "Create ID", "Origin ID", "Other ID", "MHP Seq", "Logical ID", "Goodness",
+                "Goodness Time", "Create Time", "Attempts", "Success"]
 
     def getData(self, time, source=None):
         scenario = source[0]

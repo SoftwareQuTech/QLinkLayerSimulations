@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import os
 import sys
 
+
 class printer:
     def __init__(self, results_path, save_output=False, analysis_folder=None):
         """
@@ -152,13 +153,16 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
     all_gens = {}
     # recorded_mhp_seqs = []
     for entry in oks_data:
-        timestamp, nodeID, createID, originID, otherID, MHPSeq, logical_id, goodness, t_goodness, t_create, attempts, succ = entry
+        (timestamp, nodeID, createID, originID, otherID, MHPSeq, logical_id,
+         goodness, t_goodness, t_create, attempts, succ) = entry
 
         if nodeID in gens:
-            gens[nodeID][(createID, originID, otherID)].append([nodeID, createID, originID, otherID, MHPSeq, t_create, attempts])
+            gens[nodeID][(createID, originID, otherID)].append(
+                [nodeID, createID, originID, otherID, MHPSeq, t_create, attempts])
         else:
             gens[nodeID] = defaultdict(list)
-            gens[nodeID][(createID, originID, otherID)].append([nodeID, createID, originID, otherID, MHPSeq, t_create, attempts])
+            gens[nodeID][(createID, originID, otherID)].append(
+                [nodeID, createID, originID, otherID, MHPSeq, t_create, attempts])
         if nodeID in all_gens:
             all_gens[nodeID].append((nodeID, t_create, attempts, (createID, originID, otherID, MHPSeq)))
         else:
@@ -189,7 +193,6 @@ def get_attempt_data(all_gens):
                 gen_attempts[nodeID] = {ent_id: attempts}
 
     return gen_attempts
-
 
 
 def parse_fidelities_from_sql(results_path, max_real_time=None):
@@ -553,7 +556,6 @@ def plot_gen_attempts(gen_attempts, results_path, no_plot=False, save_figs=False
             plt.show()
 
 
-
 def plot_gen_times(gen_times, results_path, no_plot=False, save_figs=False, analysis_folder=None, plot_dist=False,
                    clear_figure=True):
     """
@@ -677,8 +679,6 @@ def get_key_and_run_from_path(results_path):
     run_str = run_str.split('.')[0]
 
     return key_str, run_str
-
-
 
 
 def save_plot(fig_name, results_path, analysis_folder=None):
@@ -847,7 +847,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         pass
     try:
         prnt.print("Bright state population used was: alphaA={}, alphaB={}".format(additional_data["alphaA"],
-                                                                                    additional_data["alphaB"]))
+                                                                                   additional_data["alphaB"]))
     except KeyError:
         pass
     prnt.print("")
@@ -917,7 +917,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         mhp_t_cycle = additional_data["mhp_t_cycle"]
         request_t_cycle = additional_data["request_t_cycle"]
         prnt.print("The time cycle for MHP was {} ns and for the scheduled requests {} ns".format(mhp_t_cycle,
-                                                                                                   request_t_cycle))
+                                                                                                  request_t_cycle))
 
         # Compute the total number of MHP cycles
         total_real_time = additional_data["total_real_time"]
@@ -948,7 +948,8 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         prnt.print("")
         prnt.print("Probability of scheduling a request per request cycle was {} at node A and {} at node B".format(
             additional_data["create_request_probA"], additional_data["create_request_probB"]))
-        prnt.print("Probability that a scheduled request was on A {}".format(additional_data["create_request_origin_bias"]))
+        prnt.print(
+            "Probability that a scheduled request was on A {}".format(additional_data["create_request_origin_bias"]))
     except KeyError:
         pass
 
