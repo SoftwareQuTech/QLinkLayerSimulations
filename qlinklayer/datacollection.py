@@ -1,6 +1,7 @@
 import abc
 from easysquid.puppetMaster import PM_SQLDataSequence
-from easysquid.toolbox import EasySquidException
+from easysquid.toolbox import EasySquidException, logger
+from netsquid.pydynaa import Entity, EventHandler
 
 
 class EGPDataSequence(PM_SQLDataSequence, metaclass=abc.ABCMeta):
@@ -48,41 +49,70 @@ class EGPCreateSequence(EGPDataSequence):
 
 
 class EGPOKSequence(EGPDataSequence):
-    """
-    Collects OK events from an EGP including the CREATE events
-    """
+    def __init__(self, name, dbFile, attempt_collectors=None, column_names=None, maxSteps=1000):
+        """
+        Collects OK events from an EGP including the CREATE events and number of attempts.
+        :param attempt_collector: dct of :obj:`qlinklayer.datacollection.AttemptCollector`
+            The attempt collectors for the nodes, keys are the node IDs
+        """
+        super(EGPOKSequence, self).__init__(name=name, dbFile=dbFile, column_names=column_names, maxSteps=maxSteps)
+
+        self._attempt_collectors = attempt_collectors
 
     def get_column_names(self):
-        return ["Timestamp", "Create ID", "Origin ID", "Other ID", "MHP Seq", "Logical ID", "Goodness", "Goodness Time",
-                "Create Time", "Success"]
+        return ["Timestamp", "Node ID", "Create ID", "Origin ID", "Other ID", "MHP Seq", "Logical ID", "Goodness", "Goodness Time",
+                "Create Time", "Attempts", "Success"]
 
     def getData(self, time, source=None):
-        ok = source[0].get_ok()
-        val = [ok[0]] + list(ok[1]) + list(ok[2:])
-        return [val, True]
+        scenario = source[0]
+        ok = scenario.get_ok()
+        create_id = ok[0]
+        other_id = ok[1][1]
+
+        nodeID = scenario.node.nodeID
+
+        # Get number of attempts
+        if self._attempt_collectors:
+            try:
+                attempt_collector = self._attempt_collectors[nodeID]
+            except KeyError:
+                nr_attempts = -1
+            else:
+                nr_attempts = attempt_collector.get_attempts(create_id, other_id)
+        else:
+            nr_attempts = -1
+
+        data = [nodeID, ok[0]] + list(ok[1]) + list(ok[2:]) + [nr_attempts]
+        return [data, True]
 
 
 class EGPStateSequence(EGPDataSequence):
     """
     Collects qubit states of generated entangled pairs
     """
+    def __init__(self, *args, **kwargs):
+        super(EGPStateSequence, self).__init__(*args, **kwargs)
+
+        # Keep track of what states have been collected
+        self._collected_states = []
 
     def get_column_names(self):
         matrix_columns = ["{}, {}, {}".format(i, j, k) for i in range(4) for j in range(4) for k in ['real', 'imag']]
         return ["Timestamp", "Node ID"] + matrix_columns + ["Success"]
 
-    def event_handler(self, event=None):
-        source = event.source
-        if source.get_qstate(remove=False) is not None:
-            self.gather(event)
-        else:
-            source.get_qstate()
-
     def getData(self, time, source=None):
-        state = source[0].get_qstate()
-        nodeID = source[0].egp.node.nodeID
-        val = [nodeID] + [n for sl in [[z.real, z.imag] for z in state.flat] for n in sl]
-        return [val, True]
+        scenario = source[0]
+        key, qstate = scenario.entangled_qstates.popitem()
+
+        # Check if we already collected the state
+        # If so return None to tell the pupperMaster to not record this data point
+        if key in self._collected_states:
+            return [None, True]
+        else:
+            self._collected_states.append(key)
+            nodeID = scenario.egp.node.nodeID
+            val = [nodeID] + [n for sl in [[z.real, z.imag] for z in qstate.flat] for n in sl]
+            return [val, True]
 
 
 class EGPQubErrSequence(EGPDataSequence):
@@ -189,31 +219,150 @@ class MHPNodeEntanglementAttemptSequence(EGPDataSequence):
     """
 
     def get_column_names(self):
-        return ["Timestamp", "Nr Attempts", "Success"]
+        return ["Timestamp", "Nr Attempts", "Queue ID", "Queue Seq", "Success"]
 
     def getData(self, time, source=None):
         # Get the scenario and MHP
         scenario = source[0]
-        egp = scenario.egp
+        mhp = scenario.egp.mhp
 
-        nr_of_attempts = egp._nr_of_attempts_storage.pop(0)
+        (aid, nr_of_attempts) = mhp._succesful_gen_attempts.popitem()
 
-        return [nr_of_attempts, True]
+        data = (nr_of_attempts,) + aid
+
+        return [data, True]
 
 
 class MHPMidpointEntanglementAttemptSequence(EGPDataSequence):
     """
-    Collects entanglement attempts that occur at the end nodes
+    Collects entanglement attempts that occur at the midpoint
     """
 
     def get_column_names(self):
-        return ["Timestamp", "Outcome", "Success"]
+        return ["Timestamp", "Nr Attempts", "Queue ID", "Queue Seq", "Success"]
 
     def getData(self, time, source=None):
-        [event_source] = source
-        outcome = event_source.last_outcome
-        success = False
-        if outcome in [1, 2]:
-            success = True
+        # Get the scenario and MHP
+        scenario = source[0]
+        mhp_conn = scenario.egp.mhp.conn
 
-        return [outcome, success]
+        (aid, nr_of_attempts) = mhp_conn._succesful_gen_attempts.popitem()
+
+        data = (nr_of_attempts,) + aid
+
+        return [data, True]
+
+
+class AttemptCollector(Entity):
+    def __init__(self, egp):
+        """
+        Counts the entanglement generation attempts done at a node
+        These can then be retrieved using the create ID.
+
+        :param egp: :obj:`qlinklayer.egp.NodeCentricEGP`
+            The EGP at the node
+        """
+        super(AttemptCollector, self).__init__()
+
+        self._egp = egp
+        self._mhp = self._egp.mhp
+
+        # Listen to the entanglement attempts at the nodes and midpoint
+        self.evt_handler = EventHandler(self._attempt_handler)
+        self._wait(self.evt_handler, entity=self._mhp, event_type=self._mhp._EVT_ENTANGLE_ATTEMPT)
+
+        # Data storage
+        self._attempts = {}
+
+    def _attempt_handler(self, event):
+        """
+        Handles the entanglement attempts at the nodes and midpoint and collects the data
+        :param event:
+        :return:
+        """
+        # The node transmitted a photon
+        # Get the absolute queue ID
+        aid = self._mhp.aid
+
+        # Get the current request, the create ID and the ID of other
+        request = self._egp.scheduler.get_request(aid=aid)
+        if request:
+            create_id = request.create_id
+            other_id = request.otherID
+
+            self._register_attempt(create_id, other_id)
+        else:
+            logger.warning("Entanglement attempt occurred without request")
+
+    def _register_attempt(self, create_id, other_id):
+        """
+        Register the attempt in the storage
+        """
+        key = (create_id, other_id)
+        if key in self._attempts:
+            self._attempts[key] += 1
+        else:
+            self._attempts[key] = 1
+
+    def get_attempts(self, create_id, other_id, remove=True):
+        """
+        Returns the number current number of attempts for this create_id and other_id
+        :param create_id: int
+        :param other_id: int
+        :param remove: bool
+        :return: int
+        """
+        key = (create_id, other_id)
+        if remove:
+            try:
+                return self._attempts.pop(key)
+            except KeyError:
+                logger.warning("No attempt info for create ID {} and other ID {}".format(create_id, other_id))
+                return None
+        else:
+            try:
+                return self._attempts[key]
+            except KeyError:
+                logger.warning("No attempt info for create ID {} and other ID {}".format(create_id, other_id))
+                return None
+
+    def get_all_remaining_attempts(self):
+        """
+        Returns the total number of attempts not already collected.
+        Useful for the end of the simulation to collect attempts for unsuccesful generations
+        :return: int
+        """
+        total_attempts = 0
+        for (key, attempts) in self._attempts.items():
+            total_attempts += attempts
+        return total_attempts
+
+
+# class StateCollector(Entity):
+#     def __init__(self, scenario):
+#         """
+#         Collects quantum state data for succesful entanglement generations.
+#         These can be retrieved using the entanglement ID.
+#
+#         :param scenario: :obj:`qlinklayer.scenario.EGPSimulationScenario`
+#         """
+#         super(StateCollector, self).__init__()
+#
+#         self._scenario = scenario
+#
+#         # Listen to OK events at the scenario
+#         self.evt_handler = EventHandler(self._ok_handler)
+#         self._wait(self.evt_handler, entity=self._scenario, event_type=self._scenario._EVT_OK)
+#
+#         # Data storage
+#         self._qstate = {}
+#
+#     def _ok_handler(self, event):
+#         """
+#         Handles the OK event and collects the quantum state.
+#         :param event:
+#         :return:
+#         """
+#         # Got OK message
+#         # Get the results
+#         result = self._scenarioVkkkkk

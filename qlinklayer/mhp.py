@@ -473,14 +473,22 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         """
         return None not in self.qubits.values()
 
+    def get_current_aids(self):
+        """
+        Returns the current absolute queue IDs from A and B stored at the midpoint
+        :return: tuple (aid_A, aid_B)
+        """
+        aid_A = self.node_requests[self.nodeA.nodeID].pass_data[1]
+        aid_B = self.node_requests[self.nodeB.nodeID].pass_data[1]
+        return aid_A, aid_B
+
     def _has_same_aid(self):
         """
         Checks if the last requests sent by each node contains the same absolute queue ID
         :return: bool
             Indicates whether (or not) the absolute queue IDs match
         """
-        aid_A = self.node_requests[self.nodeA.nodeID].pass_data[1]
-        aid_B = self.node_requests[self.nodeB.nodeID].pass_data[1]
+        aid_A, aid_B = self.get_current_aids()
         logger.debug("Comparing absolute queue IDs {} and {}".format(aid_A, aid_B))
         return aid_A == aid_B
 
@@ -677,9 +685,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         else:
             self.message_timeout = message_timeout
         self.set_bright_state_population(alpha=alpha)
-
-        # For keeping track of generation attempts, for data collection
-        self._gen_attempts = {}
 
     def reset_protocol(self):
         """
@@ -916,26 +921,13 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
             # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
-            # logger.debug("Scheduling entanglement event now.")
-            # self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
-
-            # Keep track of attempts
-            self._register_attempt()
+            logger.debug("Scheduling entanglement event now.")
+            self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         except Exception as err_data:
             logger.exception("Error occurred while handling photon emission")
             result = self._construct_error_result(err_data=err_data)
             self._handle_error(None, result)
-
-    def _register_attempt(self):
-        """
-        Register the generation attempt, for data collection
-        :return: None
-        """
-        try:
-            self._gen_attempts[self.aid] += 1
-        except KeyError:
-            self._gen_attempts[self.aid] = 1
 
 
 class SimulatedNodeCentricMHPService(Service):

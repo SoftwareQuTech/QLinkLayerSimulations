@@ -237,7 +237,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
 
         # Data storage from collected info
         self.ok_storage = []
-        self.entangled_qstates = []
+        self.entangled_qstates = {}
         self.measurement_results = []
         self.err_storage = []
 
@@ -256,7 +256,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         creator_id, peer_id, mhp_seq, logical_id = ent_id
 
         # Store the qubit state for collection
-        self.store_qstate(logical_id)
+        self.store_qstate(logical_id, create_id, peer_id, mhp_seq)
 
         # Measure the logical qubit in the result
         [outcome] = self.node.qmem.measure_subset([logical_id])
@@ -270,37 +270,32 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         # Free the qubit for the EGP
         self.qmm.free_qubit(logical_id)
 
-    def store_qstate(self, qubit_id):
+    def store_qstate(self, qubit_id, source_id, other_id, mhp_seq):
         """
         Extracts the qubit state based on the used formalism and stores it locally for collection
         :param qubit_id: int
             The qubit ID in memory that we want the state of
+        :param source_id: int
+        :param other_id: int
+        :param mhp_seq: int
         """
         qstate = self.node.qmem.peek(qubit_id).qstate
         formalism = get_qstate_formalism()
+        key = (source_id, other_id, mhp_seq)
 
-        if formalism == DM_FORMALISM and qstate.dm.shape == (4, 4):
-            self.entangled_qstates.append(qstate.dm)
+        # if formalism == DM_FORMALISM and qstate.dm.shape == (4, 4):
+        if formalism == DM_FORMALISM:
+            self.entangled_qstates[key] = qstate.dm
 
-        elif formalism == KET_FORMALISM and qstate.ket.shape == (4, 1):
-            self.entangled_qstates.append(qstate.ket)
+        # elif formalism == KET_FORMALISM and qstate.ket.shape == (4, 1):
+        elif formalism == KET_FORMALISM:
+            self.entangled_qstates[key] = qstate.ket
 
         elif formalism == STAB_FORMALISM:
-            self.entangled_qstates.append(qstate.stab)
+            self.entangled_qstates[key] = qstate.stab
 
         else:
-            self.entangled_qstates.append(None)
-
-    def get_qstate(self, remove=True):
-        """
-        Returns the entangled state of the oldest generated pair
-        :param remove: bool
-            Whether to remove the state info from the scenario's storage
-        :return: obj `~numpy.matrix`
-            The matrix representation of the qubit state
-        """
-        state = self.entangled_qstates.pop(0) if remove else self.entangled_qstates[0]
-        return state
+            raise RuntimeError("Unknown state formalism")
 
     def get_ok(self, remove=True):
         """

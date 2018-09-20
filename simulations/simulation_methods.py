@@ -9,7 +9,7 @@ from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import logger
 from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
-    MHPNodeEntanglementAttemptSequence, MHPMidpointEntanglementAttemptSequence, EGPQubErrSequence, EGPLocalQueueSequence
+    EGPQubErrSequence, EGPLocalQueueSequence, AttemptCollector
 from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
@@ -55,16 +55,14 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
     create_ds = EGPCreateSequence(name="EGP Creates", dbFile=data_file, maxSteps=collection_duration)
 
     # DataSequence for ok/create collection
-    ok_ds = EGPOKSequence(name="EGP OKs", dbFile=data_file, maxSteps=collection_duration)
-
-    # DataSequences for attempt tracking
-    midpoint_attempt_ds = MHPMidpointEntanglementAttemptSequence(name="Midpoint EGP Attempts", dbFile=data_file,
-                                                                 maxSteps=collection_duration)
-
-    node_attemptA_ds = MHPNodeEntanglementAttemptSequence(name="Node EGP Attempts A", dbFile=data_file,
-                                                         maxSteps=collection_duration)
-    node_attemptB_ds = MHPNodeEntanglementAttemptSequence(name="Node EGP Attempts B", dbFile=data_file,
-                                                          maxSteps=collection_duration)
+    # Create the attempt collectors for the two nodes
+    attempt_collectors = {}
+    for scenario in [scenarioA, scenarioB]:
+        node_id = scenario.node.nodeID
+        egp = scenario.egp
+        attempt_collectors[node_id] = AttemptCollector(egp)
+    ok_ds = EGPOKSequence(name="EGP OKs", attempt_collectors=attempt_collectors, dbFile=data_file,
+                          maxSteps=collection_duration)
 
     if measure_directly:
         # DataSequence for QubErr collection
@@ -74,17 +72,13 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
         state_ds = EGPStateSequence(name="EGP Qubit States", dbFile=data_file, maxSteps=collection_duration)
 
     if collect_queue_data:
-        # TODO this should be used when we changed how items are popped from the queue
-        # TODO see issue #108
         # DataSequence for local queues
         lqAs = scenarioA.egp.dqp.queueList
         lqBs = scenarioB.egp.dqp.queueList
         lqA_ds = [EGPLocalQueueSequence(name="EGP Local Queue A {}".format(qid),
-                  dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqAs))]
+                                        dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqAs))]
         lqB_ds = [EGPLocalQueueSequence(name="EGP Local Queue B {}".format(qid),
-                  dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqBs))]
-        # lqA_ds = EGPLocalQueueSequence(name="EGP Local Queue A", dbFile=data_file, maxSteps=collection_duration)
-        # lqB_ds = EGPLocalQueueSequence(name="EGP Local Queue B", dbFile=data_file, maxSteps=collection_duration)
+                                        dbFile=data_file, maxSteps=collection_duration) for qid in range(len(lqBs))]
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=create_ds)
@@ -102,40 +96,20 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
     if measure_directly:
         pm.addEventAny([scenarioA, scenarioB], [scenarioA._EVT_OK, scenarioB._EVT_OK], ds=quberr_ds)
 
-    pm.addEvent(source=scenarioA.egp.mhp.conn, evtType=scenarioA.egp.mhp.conn._EVT_ENTANGLE_ATTEMPT,
-                ds=midpoint_attempt_ds)
-
-    # pm.addEvent(source=scenarioA.egp.mhp, evtType=scenarioA.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
-    #
-    # pm.addEvent(source=scenarioB.egp.mhp, evtType=scenarioB.egp.mhp._EVT_ENTANGLE_ATTEMPT, ds=node_attempt_ds)
-    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=node_attemptA_ds)
-
-    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=node_attemptB_ds)
-
     if collect_queue_data:
-        # TODO this should be used when we changed how items are popped from the queue
-        # TODO see issue #108
         for qid in range(len(lqAs)):
             lq = lqAs[qid]
             pm.addEvent(lq, lq._EVT_ITEM_ADDED, ds=lqA_ds[qid])
             pm.addEvent(lq, lq._EVT_ITEM_REMOVED, ds=lqA_ds[qid])
-            # pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqA_ds[qid])
         for qid in range(len(lqBs)):
             lq = lqBs[qid]
             pm.addEvent(lq, lq._EVT_ITEM_ADDED, ds=lqB_ds[qid])
             pm.addEvent(lq, lq._EVT_ITEM_REMOVED, ds=lqB_ds[qid])
-            # pm.addEventAny([lq, lq], [lq._EVT_ITEM_ADDED, lq._EVT_ITEM_REMOVED], ds=lqB_ds[qid])
-        # dqpA = scenarioA.egp.dqp
-        # dqpB = scenarioB.egp.dqp
-        # schedulerA = scenarioA.egp.scheduler
-        # schedulerB = scenarioB.egp.scheduler
-        # pm.addEventAny([dqpA, schedulerA], [dqpA._EVT_ITEM_ADDED, schedulerA._EVT_REM_OUTSTANDING_REQ], ds=lqA_ds)
-        # pm.addEventAny([dqpB, schedulerB], [dqpB._EVT_ITEM_ADDED, schedulerB._EVT_REM_OUTSTANDING_REQ], ds=lqB_ds)
 
     if measure_directly:
-        collectors = [create_ds, ok_ds, quberr_ds, err_ds, node_attemptA_ds, node_attemptB_ds, midpoint_attempt_ds]
+        collectors = [create_ds, ok_ds, quberr_ds, err_ds]
     else:
-        collectors = [create_ds, ok_ds, state_ds, err_ds, node_attemptA_ds, node_attemptB_ds, midpoint_attempt_ds]
+        collectors = [create_ds, ok_ds, state_ds, err_ds]
     if collect_queue_data:
         collectors += lqA_ds + lqB_ds
     return collectors
@@ -144,13 +118,12 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
 def create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs, max_pairs, tmax_pair,
                      request_cycle, num_requests, measure_directly,
                      additional_data=None):
-
     if request_cycle == 0:
         # Use t_cycle of MHP for the request cycle
         request_cycle = egpA.mhp.conn.t_cycle
 
     if additional_data:
-        additional_data["request_t_cycle"] = (request_cycle * SECOND)
+        additional_data["request_t_cycle"] = request_cycle
         additional_data["create_request_probA"] = create_probA
         additional_data["create_request_probB"] = create_probB
 
@@ -228,7 +201,7 @@ def run_simulation(results_path, config=None, create_probA=1, create_probB=0, mi
     if save_additional_data:
         additional_data["mhp_t_cycle"] = mhp_conn.t_cycle
 
-    # Setup entanlement generation protocols
+    # Setup entanglement generation protocols
     egpA, egpB = setup_network_protocols(network, alphaA=alphaA, alphaB=alphaB, collect_queue_data=collect_queue_data)
     if save_additional_data:
         additional_data["alphaA"] = alphaA
