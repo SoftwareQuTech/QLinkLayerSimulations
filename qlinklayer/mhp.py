@@ -473,14 +473,22 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         """
         return None not in self.qubits.values()
 
+    def get_current_aids(self):
+        """
+        Returns the current absolute queue IDs from A and B stored at the midpoint
+        :return: tuple (aid_A, aid_B)
+        """
+        aid_A = self.node_requests[self.nodeA.nodeID].pass_data[1]
+        aid_B = self.node_requests[self.nodeB.nodeID].pass_data[1]
+        return aid_A, aid_B
+
     def _has_same_aid(self):
         """
         Checks if the last requests sent by each node contains the same absolute queue ID
         :return: bool
             Indicates whether (or not) the absolute queue IDs match
         """
-        aid_A = self.node_requests[self.nodeA.nodeID].pass_data[1]
-        aid_B = self.node_requests[self.nodeB.nodeID].pass_data[1]
+        aid_A, aid_B = self.get_current_aids()
         logger.debug("Comparing absolute queue IDs {} and {}".format(aid_A, aid_B))
         return aid_A == aid_B
 
