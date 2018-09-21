@@ -49,8 +49,8 @@ class EGPDataPoint(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def printable_data(self):
-        to_print = "EGP Data-point:"
-        to_print += " Argument: {}\n".format(self.argument)
+        to_print = "EGP Data-point:\n"
+        to_print += "   Argument: {}\n".format(self.argument)
         return to_print
 
     def __repr__(self):
@@ -103,11 +103,11 @@ class EGPErrorDataPoint(EGPDataPoint):
             raise ValueError("'data' is not an instance of this class")
 
     def printable_data(self):
-        to_print = "EGP Error Data-point:"
-        to_print += " Timestamp: {}\n".format(self.timestamp)
-        to_print += " Node ID: {}\n".format(self.node_id)
-        to_print += " Error Code: {}\n".format(self.error_code)
-        to_print += " Success: {}".format(self.success)
+        to_print = "EGP Error Data-point:\n"
+        to_print += "    Timestamp: {}\n".format(self.timestamp)
+        to_print += "    Node ID: {}\n".format(self.node_id)
+        to_print += "    Error Code: {}\n".format(self.error_code)
+        to_print += "    Success: {}\n".format(self.success)
 
 
 class EGPCreateSequence(EGPDataSequence):
@@ -184,19 +184,19 @@ class EGPCreateDataPoint(EGPDataPoint):
             raise ValueError("'data' is not an instance of this class")
 
     def printable_data(self):
-        to_print = "EGP Create Data-point:"
-        to_print += " Timestamp: {}\n".format(self.timestamp)
-        to_print += " Node ID: {}\n".format(self.node_id)
-        to_print += " Create ID: {}\n".format(self.create_id)
-        to_print += " Create Time: {}\n".format(self.create_time)
-        to_print += " Max Time: {}\n".format(self.max_time)
-        to_print += " Measure Directly: {}\n".format(self.measure_directly)
-        to_print += " Min Fidelity: {}\n".format(self.min_fidelity)
-        to_print += " Num Pairs: {}\n".format(self.num_pairs)
-        to_print += " Other ID: {}\n".format(self.other_id)
-        to_print += " Priority: {}\n".format(self.priority)
-        to_print += " Store: {}\n".format(self.store)
-        to_print += " Success: {}\n".format(self.success)
+        to_print = "EGP Create Data-point:\n"
+        to_print += "    Timestamp: {}\n".format(self.timestamp)
+        to_print += "    Node ID: {}\n".format(self.node_id)
+        to_print += "    Create ID: {}\n".format(self.create_id)
+        to_print += "    Create Time: {}\n".format(self.create_time)
+        to_print += "    Max Time: {}\n".format(self.max_time)
+        to_print += "    Measure Directly: {}\n".format(self.measure_directly)
+        to_print += "    Min Fidelity: {}\n".format(self.min_fidelity)
+        to_print += "    Num Pairs: {}\n".format(self.num_pairs)
+        to_print += "    Other ID: {}\n".format(self.other_id)
+        to_print += "    Priority: {}\n".format(self.priority)
+        to_print += "    Store: {}\n".format(self.store)
+        to_print += "    Success: {}\n".format(self.success)
         return to_print
 
 
@@ -294,19 +294,19 @@ class EGPOKDataPoint(EGPDataPoint):
             raise ValueError("'data' is not an instance of this class")
 
     def printable_data(self):
-        to_print = "EGP OK Data-point:"
-        to_print += " Timestamp: {}\n".format(self.timestamp)
-        to_print += " Node ID: {}\n".format(self.node_id)
-        to_print += " Create ID: {}\n".format(self.create_id)
-        to_print += " Origin ID: {}\n".format(self.origin_id)
-        to_print += " Other ID: {}\n".format(self.other_id)
-        to_print += " MHP Seq: {}\n".format(self.mhp_seq)
-        to_print += " Logical ID: {}\n".format(self.logical_id)
-        to_print += " Goodness: {}\n".format(self.goodness)
-        to_print += " Goodness Time: {}\n".format(self.goodness_time)
-        to_print += " Create Time: {}\n".format(self.create_time)
-        to_print += " Attempts: {}\n".format(self.attempts)
-        to_print += " Success: {}\n".format(self.success)
+        to_print = "EGP OK Data-point:\n"
+        to_print += "    Timestamp: {}\n".format(self.timestamp)
+        to_print += "    Node ID: {}\n".format(self.node_id)
+        to_print += "    Create ID: {}\n".format(self.create_id)
+        to_print += "    Origin ID: {}\n".format(self.origin_id)
+        to_print += "    Other ID: {}\n".format(self.other_id)
+        to_print += "    MHP Seq: {}\n".format(self.mhp_seq)
+        to_print += "    Logical ID: {}\n".format(self.logical_id)
+        to_print += "    Goodness: {}\n".format(self.goodness)
+        to_print += "    Goodness Time: {}\n".format(self.goodness_time)
+        to_print += "    Create Time: {}\n".format(self.create_time)
+        to_print += "    Attempts: {}\n".format(self.attempts)
+        to_print += "    Success: {}\n".format(self.success)
         return to_print
 
 
@@ -377,11 +377,11 @@ class EGPStateDataPoint(EGPDataPoint):
             raise ValueError("'data' is not an instance of this class")
 
     def printable_data(self):
-        to_print = "EGP State Data-point:"
-        to_print += " Timestamp: {}\n".format(self.timestamp)
-        to_print += " Node ID: {}\n".format(self.node_id)
-        to_print += " Density Matrix: {}\n".format(self.density_matrix)
-        to_print += " Success: {}\n".format(self.success)
+        to_print = "EGP State Data-point:\n"
+        to_print += "    Timestamp: {}\n".format(self.timestamp)
+        to_print += "    Node ID: {}\n".format(self.node_id)
+        to_print += "    Density Matrix: {}\n".format(self.density_matrix)
+        to_print += "    Success: {}\n".format(self.success)
         return to_print
 
 
@@ -495,11 +495,11 @@ class EGPQubErrDataPoint(EGPDataPoint):
             raise ValueError("'data' is not an instance of this class")
 
     def printable_data(self):
-        to_print = "EGP QubErr Data-point:"
-        to_print += " Timestamp: {}\n".format(self.timestamp)
-        to_print += " Z Error: {}\n".format(self.z_err)
-        to_print += " X Error: {}\n".format(self.x_err)
-        to_print += " Success: {}\n".format(self.success)
+        to_print = "EGP QubErr Data-point:\n"
+        to_print += "    Timestamp: {}\n".format(self.timestamp)
+        to_print += "    Z Error: {}\n".format(self.z_err)
+        to_print += "    X Error: {}\n".format(self.x_err)
+        to_print += "    Success: {}\n".format(self.success)
         return to_print
 
 
@@ -555,11 +555,11 @@ class EGPLocalQueueDataPoint(EGPDataPoint):
             raise ValueError("'data' is not an instance of this class")
 
     def printable_data(self):
-        to_print = "EGP Local Queue Data-point:"
-        to_print += " Timestamp: {}\n".format(self.argument)
-        to_print += " Change: {}\n".format(self.change)
-        to_print += " Queue Seq: {}\n".format(self.seq)
-        to_print += " Success: {}\n".format(self.success)
+        to_print = "EGP Local Queue Data-point:\n"
+        to_print += "    Timestamp: {}\n".format(self.argument)
+        to_print += "    Change: {}\n".format(self.change)
+        to_print += "    Queue Seq: {}\n".format(self.seq)
+        to_print += "    Success: {}\n".format(self.success)
         return to_print
 
 
