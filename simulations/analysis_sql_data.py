@@ -3,6 +3,8 @@ from argparse import ArgumentParser
 from collections import defaultdict
 import numpy as np
 from easysquid.toolbox import logger
+from qlinklayer.datacollection import EGPCreateDataPoint, EGPOKDataPoint, EGPStateDataPoint, \
+    EGPQubErrDataPoint, EGPLocalQueueDataPoint
 from netsquid.simutil import SECOND
 import json
 import math
@@ -138,36 +140,40 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
     rejected_requests = []
     total_requested_pairs = 0
     for entry in creates_data:
-        (timestamp, nodeID, create_id, create_time, max_time, measure_directly, min_fidelity, num_pairs, otherID,
-         priority, purpose_id, store, succ) = entry
+        data_point = EGPCreateDataPoint(entry)
 
-        total_requested_pairs += num_pairs
+        total_requested_pairs += data_point.num_pairs
 
-        if create_id is not None and create_time is not None:
-            requests[(create_id, nodeID, otherID)] = [nodeID, otherID, num_pairs, create_id, create_time, max_time]
+        if data_point.create_id is not None and data_point.create_time is not None:
+            req_id = data_point.create_id, data_point.node_id, data_point.other_id
+            req_data = [data_point.node_id, data_point.other_id, data_point.num_pairs, data_point.create_id,
+                        data_point.create_time, data_point.max_time]
+            requests[req_id] = req_data
         else:
-            rejected_requests.append([nodeID, otherID, num_pairs, timestamp])
+            req_data = [data_point.node_id, data_point.other_id, data_point.num_pairs, data_point.timestamp]
+            rejected_requests.append(req_data)
 
     # Parse the ok data
     gens = {}
     all_gens = {}
     # recorded_mhp_seqs = []
     for entry in oks_data:
-        (timestamp, nodeID, createID, originID, otherID, MHPSeq, logical_id,
-         goodness, t_goodness, t_create, attempts, succ) = entry
+        data_point = EGPOKDataPoint(entry)
+        node_id = data_point.node_id
+        req_id = data_point.create_id, data_point.origin_id, data_point.other_id
+        mhp_seq = data_point.mhp_seq
+        gen_info = data_point.create_time, data_point.attempts
 
-        if nodeID in gens:
-            gens[nodeID][(createID, originID, otherID)].append(
-                [nodeID, createID, originID, otherID, MHPSeq, t_create, attempts])
+        if node_id in gens:
+            gens[node_id][req_id].append((node_id,) + req_id + (mhp_seq,) + gen_info)
         else:
-            gens[nodeID] = defaultdict(list)
-            gens[nodeID][(createID, originID, otherID)].append(
-                [nodeID, createID, originID, otherID, MHPSeq, t_create, attempts])
-        if nodeID in all_gens:
-            all_gens[nodeID].append((nodeID, t_create, attempts, (createID, originID, otherID, MHPSeq)))
+            gens[node_id] = defaultdict(list)
+            gens[node_id][req_id].append((node_id,) + req_id + (mhp_seq,) + gen_info)
+        if node_id in all_gens:
+            all_gens[node_id].append((node_id,) + gen_info + req_id + (mhp_seq,))
         else:
-            all_gens[nodeID] = []
-            all_gens[nodeID].append((nodeID, t_create, attempts, (createID, originID, otherID, MHPSeq)))
+            all_gens[node_id] = []
+            all_gens[node_id].append((node_id,) + gen_info + req_id + (mhp_seq,))
 
     return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
 
@@ -212,14 +218,11 @@ def parse_fidelities_from_sql(results_path, max_real_time=None):
     fidelities = []
     ts = []  # time associated to the fidelity (used for plotting)
     for entry in states_data:
-        timestamp = entry[0]
-        if not (len(entry) == 35):
-            raise ValueError("Unknown quantum states format in data file")
+        data_point = EGPStateDataPoint(entry)
+        timestamp = data_point.timestamp
         ts.append(timestamp)
-        m_data = entry[2:34]
-        d_matrix = np.matrix(
-            [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
-        fidelities.append(calc_fidelity(d_matrix))
+        density_matrix = data_point.density_matrix
+        fidelities.append(calc_fidelity(density_matrix))
 
     return fidelities
 
@@ -249,17 +252,20 @@ def parse_quberr_from_sql(results_path, max_real_time=None):
     # Get the states_data
     quberr_data = parse_table_data_from_sql(results_path, "EGP_QubErr", max_real_time=max_real_time)
 
-    # Parse the states data to compute fideli    print("QubErrs:")
+    # Parse the qubit error data
     Z_err = []
     X_err = []
     Z_data_points = 0
     X_data_points = 0
     for entry in quberr_data:
-        if entry[1] in [0, 1]:
-            Z_err.append(entry[1])
+        data_point = EGPQubErrDataPoint(entry)
+        z_err = data_point.z_err
+        x_err = data_point.x_err
+        if z_err in [0, 1]:
+            Z_err.append(z_err)
             Z_data_points += 1
-        if entry[2] in [0, 1]:
-            X_err.append(entry[2])
+        if x_err in [0, 1]:
+            X_err.append(x_err)
             X_data_points += 1
     if Z_data_points > 0:
         avg_Z_err = sum(Z_err) / Z_data_points
@@ -414,8 +420,9 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
     queue_lens = [0]
     times = [0]
     for entry in raw_queue_data:
-        time = entry[0]
-        change = entry[1]
+        data_point = EGPLocalQueueDataPoint(entry)
+        time = data_point.timestamp
+        change = data_point.change
         time_diff = time - times[-1]
         tot_time_in_queue += time_diff * queue_lens[-1]
         queue_lens.append(queue_lens[-1] + change)
