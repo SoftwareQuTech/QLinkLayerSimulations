@@ -4,7 +4,7 @@ from netsquid.simutil import sim_time
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid.quantumProgram import QuantumProgram
-from qlinklayer.general import LinkLayerException
+from qlinklayer.toolbox import LinkLayerException
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.distQueue import DistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement

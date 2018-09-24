@@ -13,7 +13,7 @@ from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
 from qlinklayer.localQueue import TimeoutLocalQueue
-from qlinklayer.general import LinkLayerException
+from qlinklayer.toolbox import LinkLayerException
 from easysquid.toolbox import logger
 
 
