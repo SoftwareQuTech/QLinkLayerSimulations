@@ -14,7 +14,8 @@ class QuantumMemoryManagement:
 
     def __init__(self, node):
         self.node = node
-        self.reserved_qubits = [self.qubit_in_use(i) for i in range(self.node.qmem.num_positions)]
+        # self.reserved_qubits = [self.qubit_in_use(i) for i in range(self.node.qmem.num_positions)]
+        self.reserved_qubits = [False] * self.node.qmem.num_positions
 
     def is_busy(self):
         return self.node.qmem.busy
@@ -61,15 +62,16 @@ class QuantumMemoryManagement:
         """
         return self.node.qmem.get_operation_time(ZGate(), 0)
 
-    def qubit_in_use(self, id):
+    def qubit_reserved(self, id):
         """
-        Tells us if a qubit is in use within the quantum memory device
+        Tells us if a qubit is reserved
         :param id: int
             Qubit address within the quantum memory device
         :return: bool
             Whether the address is in use or not
         """
-        return self.node.qmem.in_use(id)
+        # return self.node.qmem.in_use(id)
+        return self.reserved_qubits[id]
 
     def reserve_communication_qubit(self):
         """
@@ -108,7 +110,7 @@ class QuantumMemoryManagement:
             Address of the qubit to free
         """
         self.vacate_qubit(qid=id)
-        self.node.qmem.release_qubit(id)
+        # self.node.qmem.release_qubit(id)
 
     def free_qubits(self, id_list):
         """
@@ -164,7 +166,8 @@ class QuantumMemoryManagement:
         comm_qs = self.node.qmem.get_communication_qubit_ids()
         free_comms = []
         for qid in comm_qs:
-            if not self.reserved_qubits[qid] and not self.qubit_in_use(id=qid):
+            # if not self.reserved_qubits[qid] and not self.qubit_in_use(id=qid):
+            if not self.qubit_reserved(qid):
                 free_comms.append(qid)
 
         return free_comms
@@ -178,7 +181,8 @@ class QuantumMemoryManagement:
         storage_qs = self.node.qmem.get_storage_qubit_ids()
         free_storage = []
         for qid in storage_qs:
-            if not self.reserved_qubits[qid] and not self.qubit_in_use(id=qid):
+            # if not self.reserved_qubits[qid] and not self.qubit_in_use(id=qid):
+            if not self.qubit_reserved(qid):
                 free_storage.append(qid)
 
         return free_storage

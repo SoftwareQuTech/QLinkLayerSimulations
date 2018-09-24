@@ -11,8 +11,8 @@ from qlinklayer.egp import EGPRequest
 
 class TestRequestScheduler(unittest.TestCase):
     def setUp(self):
-        memA = NVCommunicationDevice(name="AMem", max_num=2)
-        memB = NVCommunicationDevice(name="BMem", max_num=2)
+        memA = NVCommunicationDevice(name="AMem", num_positions=2)
+        memB = NVCommunicationDevice(name="BMem", num_positions=2)
         self.nodeA = QuantumNode(name="TestA", nodeID=1, memDevice=memA)
         self.nodeB = QuantumNode(name="TestB", nodeID=2, memDevice=memB)
 

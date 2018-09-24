@@ -65,11 +65,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_create(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -133,8 +133,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Check the entangled pairs, ignore communication qubit
         for i in range(alice_pairs + bob_pairs):
-            qA = aliceMemory.get_qubit(i + 1)
-            qB = bobMemory.get_qubit(i + 1)
+            qA = aliceMemory.peek(i + 1)[0][0]
+            qB = bobMemory.peek(i + 1)[0][0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
@@ -150,11 +150,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_multi_create(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -219,11 +219,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_successful_simulation(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -269,8 +269,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Check the entangled pairs, ignore communication qubit
         for i in range(alice_pairs + bob_pairs):
-            qA = aliceMemory.get_qubit(i + 1)
-            qB = bobMemory.get_qubit(i + 1)
+            qA = aliceMemory.peek(i + 1)[0][0]
+            qB = bobMemory.peek(i + 1)[0][0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
@@ -278,11 +278,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_manual_connect(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -341,19 +341,19 @@ class TestNodeCentricEGP(unittest.TestCase):
         for resA, resB in zip(self.alice_results, self.bob_results):
             self.assertEqual(len(resA), len(resB))
             if len(resA) > 2:
-                qA = aliceMemory.get_qubit(resA[1][3])
-                qB = bobMemory.get_qubit(resB[1][3])
+                qA = aliceMemory.peek(resA[1][3])[0][0]
+                qB = bobMemory.peek(resB[1][3])[0][0]
                 self.assertEqual(qA.qstate, qB.qstate)
                 self.assertIn(qB, qA.qstate._qubits)
                 self.assertIn(qA, qB.qstate._qubits)
 
     def test_unresponsive_dqp(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -404,11 +404,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_unresponsive_mhp(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -479,11 +479,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_unresponsive_egp(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=1, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=1, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -530,11 +530,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_one_node_expires(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=10, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=10, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=10, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=10, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -639,8 +639,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Check that the sequence numbers match
         for alice_gen, bob_gen in zip(alice_gens_post_error, bob_gens_post_error):
             self.assertEqual(alice_gen[1][2], bob_gen[1][2])
-            qA = alice.qmem.get_qubit(alice_gen[1][3])
-            qB = bob.qmem.get_qubit(bob_gen[1][3])
+            qA = alice.qmem.peek(alice_gen[1][3])[0][0]
+            qB = bob.qmem.peek(bob_gen[1][3])[0][0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
@@ -652,11 +652,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_both_nodes_expire(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Force the connection to "accidentally" increment MHP seq too much
@@ -707,8 +707,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Verify that first create was successful
         idA = self.alice_results[0][1][3]
         idB = self.bob_results[0][1][3]
-        qA = aliceMemory.get_qubit(idA)
-        qB = bobMemory.get_qubit(idB)
+        qA = aliceMemory.peek(idA)[0][0]
+        qB = bobMemory.peek(idB)[0][0]
         self.assertEqual(qA.qstate.dm.shape, (4, 4))
         self.assertTrue(qA.qstate.compare(qB.qstate))
         self.assertIn(qB, qA.qstate._qubits)
@@ -730,11 +730,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_creation_failure(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         # Set up EGP
@@ -799,11 +799,11 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_events(self):
         # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", max_num=5, pair_preparation=NV_PairPreparation())
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
         alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
 
         # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", max_num=5, pair_preparation=NV_PairPreparation())
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         pm = PM_Controller()
@@ -870,8 +870,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Check the entangled pairs, ignore communication qubit
         for i in range(alice_pairs + bob_pairs):
-            qA = aliceMemory.get_qubit(i + 1)
-            qB = bobMemory.get_qubit(i + 1)
+            qA = aliceMemory.peek(i + 1)[0][0]
+            qB = bobMemory.peek(i + 1)[0][0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
