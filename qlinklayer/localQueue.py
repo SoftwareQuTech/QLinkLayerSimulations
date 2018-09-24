@@ -5,7 +5,7 @@
 
 from netsquid.simutil import sim_time
 from netsquid.pydynaa import Entity, EventType, EventHandler
-from qlinklayer.general import LinkLayerException
+from qlinklayer.toolbox import LinkLayerException
 from easysquid.toolbox import logger
 
 
