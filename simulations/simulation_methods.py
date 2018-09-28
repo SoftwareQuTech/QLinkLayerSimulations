@@ -1,6 +1,7 @@
 import netsquid as ns
 import pdb
 import json
+import os, sys
 from time import time
 import math
 from os.path import exists
@@ -184,6 +185,24 @@ def run_simulation(results_path, name=None, config=None, create_probA=1, create_
                    t0=0, t_cycle=0,
                    alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True,
                    collect_queue_data=False):
+
+    sim_dir_env = "SIMULATION_DIR"
+
+    # Check that the simulation path is set
+    if sim_dir_env not in os.environ:
+        print("The environment variable {} must be set to the path to the simulation folder"
+              "before running this script!".format(sim_dir_env))
+        sys.exit()
+    else:
+        sim_dir = os.getenv(sim_dir_env)
+        if not os.path.isdir(sim_dir):
+            print("The environment variable {} is not a path to a folder.")
+            sys.exit()
+
+    # Check that sim_dir ends with '/'
+    if not sim_dir[-1] == '/':
+        sim_dir += "/"
+
     # Save additional data
     if save_additional_data:
         additional_data = {}
@@ -192,8 +211,11 @@ def run_simulation(results_path, name=None, config=None, create_probA=1, create_
     # Set up the simulation
     setup_simulation()
 
+    # Get absolute path to config
+    abs_config_path = sim_dir + config
+
     # Create the network
-    network = setup_physical_network(config)
+    network = setup_physical_network(abs_config_path)
     # Recompute the timings of the heralded connection, depending on measure_directly
     nodeA = network.get_node_by_id(0)
     nodeB = network.get_node_by_id(1)
