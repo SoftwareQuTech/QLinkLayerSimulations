@@ -20,6 +20,7 @@ sip = SimulationInputParser(params_received_from_start_simulation)
 # extract the desired data from the SimulationInputParser
 paramsdict = sip.inputdict
 filebasename = sip.filebasename
+simulation_key = sip._key_in_paramcombinations
 
 # Run the simulation
-run_simulation(results_path=filebasename, **paramsdict)
+run_simulation(results_path=filebasename, name=simulation_key, **paramsdict)

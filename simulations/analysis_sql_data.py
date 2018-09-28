@@ -222,6 +222,9 @@ def parse_fidelities_from_sql(results_path, max_real_time=None):
         timestamp = data_point.timestamp
         ts.append(timestamp)
         density_matrix = data_point.density_matrix
+        print("dm: {}".format(density_matrix))
+        print("fid: {}".format(calc_fidelity(density_matrix)))
+        print("")
         fidelities.append(calc_fidelity(density_matrix))
 
     return fidelities
@@ -675,12 +678,11 @@ def get_key_and_run_from_path(results_path):
     :param results_path:
     :return: (str, str)
     """
-    substrings = results_path.split('_')
-    for i in range(len(substrings)):
-        if substrings[i] == "key":
-            break
-    key_str = substrings[i + 1]
-    run_str = substrings[i + 3]
+    start_of_key = results_path.find("key")
+    start_of_run = results_path.find("run")
+
+    key_str = results_path[(start_of_key + 4):(start_of_run - 1)]
+    run_str = results_path[(start_of_run + 4):]
 
     # strip of possible filetype from run
     run_str = run_str.split('.')[0]
@@ -788,6 +790,7 @@ def get_data(results_path, max_real_time=None):
 
 def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_figs=False, save_output=False,
                         analysis_folder=None):
+    print("results_path: {}".format(results_path))
     # Initialize the printer
     prnt = printer(results_path=results_path, save_output=save_output, analysis_folder=analysis_folder)
 
@@ -838,6 +841,9 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     prnt.print("Analysing data in file {}".format(results_path))
     key_str, run_str = get_key_and_run_from_path(results_path)
     path_to_folder = "/".join(results_path.split('/')[:-1])
+    print("path_to_folder: {}".format(path_to_folder))
+    print("key_str: {}".format(key_str))
+    print("run_str: {}".format(run_str))
     with open(path_to_folder + "/paramcombinations.json") as json_file:
         arguments = json.load(json_file)[key_str]
     prnt.print("Arguments in paramcombinations.py for this simulation was:")
@@ -878,6 +884,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         prnt.print("")
 
     if fidelities:
+        print("fidelities: {}".format(fidelities))
         prnt.print("Average fidelity: {} s".format(sum(fidelities) / len(fidelities)))
         prnt.print("Minimum fidelity: {} s".format(min(fidelities)))
         prnt.print("Maximum fidelity: {} s".format(max(fidelities)))

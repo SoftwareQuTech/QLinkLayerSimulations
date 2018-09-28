@@ -3,6 +3,7 @@
 #
 from easysquid.toolbox import logger, EasySquidException
 from easysquid.easygate import ZGate
+from netsquid.qubits import qubitapi as qapi
 
 
 class QuantumMemoryManagement:
@@ -39,28 +40,24 @@ class QuantumMemoryManagement:
         """
         self.reserved_qubits[qid] = False
 
-    def get_move_delay(self):
+    def get_move_delays(self, comm_id):
         """
-        Gets the delay time for a move operation in the memory device.
-        #TODO: Refactor this to not perform the operation when it is easier to get the total time
-        :return: float
-            The amount of time it takes to move the electron state to the carbon
+        Gets the delay times for a move operation in the memory device from comm_id to other qubits.
+        If a move is not possible the move time is 'float('inf')'.
+        #TODO: For now we ask the QPD but this should be somewhere else since it depends on how the move is done.
+        :return: dict of float
+            The key are where we're moving to and the entries are move time from qubit ID 'comm_id' to qubit ID 'key'.
         """
-        # If we are storing the entangled pair into the electron then the move time is 0
-        if self.node.qmem.num_positions > 1:
-            return self.node.qmem.get_move_time(0, 1)
+        return self.node.qmem.get_move_times(comm_id=comm_id)
 
-        else:
-            return 0.0
-
-    def get_correction_delay(self):
+    def get_correction_delay(self, comm_id):
         """
         Gets the delay time for applying a Z gate onto the electron.
         #TODO: Refactor this to not perform the operation when it is easier to get the gate time
         :return: float
             The amount of time it takes to apply the z gate to the electron
         """
-        return self.node.qmem.get_operation_time(ZGate(), 0)
+        return self.node.qmem.get_operation_time(ZGate(), comm_id)
 
     def qubit_reserved(self, id):
         """
@@ -110,7 +107,11 @@ class QuantumMemoryManagement:
             Address of the qubit to free
         """
         self.vacate_qubit(qid=id)
-        # self.node.qmem.release_qubit(id)
+        q = self.node.qmem.pop(id)[0][0]
+        if q is not None:
+            qapi.discard(q)
+        else:
+            logger.warning("Trying to free a non-existing qubit")
 
     def free_qubits(self, id_list):
         """

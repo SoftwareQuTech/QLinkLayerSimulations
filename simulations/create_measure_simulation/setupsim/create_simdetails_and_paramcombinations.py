@@ -29,16 +29,40 @@ config_dir = "simulations/create_measure_simulation/setupsim/config"
 # success probability and also significantly lower.
 
 config_to_p_succ = {
-    "no_losses/network_with_cav_no_conv_no_losses.json": 0.18963995999999997,
+    "no_losses/network_with_cav_no_conv_no_losses.json": 0.18962460137276416,
     "no_losses/no_noise.json": 0.19,
-    "lab_configs/network_no_cav_no_conv.json": 0.00011635855458816435,
-    "lab_configs/network_no_cav_with_conv.json": 7.999995199289723e-07,
-    "lab_configs/network_with_cav_no_conv.json": 0.0010770772036583197,
-    "lab_configs/network_with_cav_with_conv.json": 0.00036002559264547125,
-    "qlink_configs/network_no_cav_no_conv.json": 7.999995199289723e-07,
-    "qlink_configs/network_no_cav_with_conv.json": 7.999995199289723e-07,
-    "qlink_configs/network_with_cav_no_conv.json": 7.999995199289723e-07,
-    "qlink_configs/network_with_cav_with_conv.json": 8.953898045092533e-05
+    "lab_configs/network_no_cav_no_conv.json": 7.015991568047906e-05,
+    "lab_configs/network_no_cav_with_conv.json": 2.1629224382238053e-05,
+    "lab_configs/network_with_cav_no_conv.json": 0.0011008895034067229,
+    "lab_configs/network_with_cav_with_conv.json": 0.00033126325807618113,
+    "qlink_configs/network_no_cav_no_conv.json": 7.999995199289722e-07,
+    "qlink_configs/network_no_cav_with_conv.json": 5.944852544500876e-06,
+    "qlink_configs/network_with_cav_no_conv.json": 7.999995199289722e-07,
+    "qlink_configs/network_with_cav_with_conv.json": 8.243310647958359e-05
+}
+
+# Create a dictionary that relates the name of the simulation to the config file and req freq factor
+name_to_scenario = {
+    "NoNoise_NC_NC_LRF": ("no_losses/no_noise.json", 0.2),
+    "NoNoise_NC_NC_HRF": ("no_losses/no_noise.json", 0.8),
+    "NoLoss_NC_NC_LRF": ("no_losses/network_with_cav_no_conv_no_losses.json", 0.2),
+    "NoLoss_NC_NC_HRF": ("no_losses/network_with_cav_no_conv_no_losses.json", 0.8),
+    "Lab_NC_NC_LRF": ("lab_configs/network_no_cav_no_conv.json", 0.2),
+    "Lab_NC_NC_HRF": ("lab_configs/network_no_cav_no_conv.json", 0.8),
+    "Lab_NC_WC_LRF": ("lab_configs/network_no_cav_with_conv.json", 0.2),
+    "Lab_NC_WC_HRF": ("lab_configs/network_no_cav_with_conv.json", 0.8),
+    "Lab_WC_NC_LRF": ("lab_configs/network_with_cav_no_conv.json", 0.2),
+    "Lab_WC_NC_HRF": ("lab_configs/network_with_cav_no_conv.json", 0.8),
+    "Lab_WC_WC_LRF": ("lab_configs/network_with_cav_with_conv.json", 0.2),
+    "Lab_WC_WC_HRF": ("lab_configs/network_with_cav_with_conv.json", 0.8),
+    "QLink_NC_NC_LRF": ("qlink_configs/network_no_cav_no_conv.json", 0.2),
+    "QLink_NC_NC_HRF": ("qlink_configs/network_no_cav_no_conv.json", 0.8),
+    "QLink_NC_WC_LRF": ("qlink_configs/network_no_cav_with_conv.json", 0.2),
+    "QLink_NC_WC_HRF": ("qlink_configs/network_no_cav_with_conv.json", 0.8),
+    "QLink_WC_NC_LRF": ("qlink_configs/network_with_cav_no_conv.json", 0.2),
+    "QLink_WC_NC_HRF": ("qlink_configs/network_with_cav_no_conv.json", 0.8),
+    "QLink_WC_WC_LRF": ("qlink_configs/network_with_cav_with_conv.json", 0.2),
+    "QLink_WC_WC_HRF": ("qlink_configs/network_with_cav_with_conv.json", 0.8)
 }
 
 # create paramcombinations
@@ -56,23 +80,23 @@ opt_params = {
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
-    "measure_directly": True,
+    "measure_directly": False,
     "t0": 0,
-    "wall_time_per_timestep": 10 * 60,
+    "wall_time_per_timestep": 1 * 1,
     "save_additional_data": True,
     "collect_queue_data": True}
 
 paramcombinations = {}
-counter = 0
 # create paramcombinations
-for config_file, p_succ in config_to_p_succ.items():
-    for factor in [0.2, 0.8]:  # Prob of request will be given by factor * p_succ
-        param_set = {}
-        param_set.update(opt_params)
-        param_set["config"] = qlinklayer_directory + config_dir + "/" + config_file
-        param_set["create_probA"] = factor * p_succ
-        paramcombinations[counter] = param_set
-        counter += 1
+for name, scenario in name_to_scenario.items():
+    config_file = scenario[0]
+    freq_req_factor = scenario[1]
+    param_set = {}
+    param_set.update(opt_params)
+    param_set["config"] = qlinklayer_directory + config_dir + "/" + config_file
+    p_succ = config_to_p_succ[config_file]
+    param_set["create_probA"] = freq_req_factor * p_succ
+    paramcombinations[name] = param_set
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #

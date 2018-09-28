@@ -259,7 +259,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         self.store_qstate(logical_id, create_id, peer_id, mhp_seq)
 
         # Measure the logical qubit in the result
-        [outcome] = self.node.qmem.measure_subset([logical_id])
+        [outcome] = self.node.qmem.measure([logical_id])
 
         now = sim_time()
         logger.info("{} measured {} for ent_id {} at time {}".format(self.node.nodeID, outcome, ent_id, now))
@@ -279,7 +279,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         :param other_id: int
         :param mhp_seq: int
         """
-        qstate = self.node.qmem.peek(qubit_id).qstate
+        qstate = self.node.qmem.peek(qubit_id)[0][0].qstate
         formalism = get_qstate_formalism()
         key = (source_id, other_id, mhp_seq)
 
