@@ -363,7 +363,7 @@ class EGPStateDataPoint(EGPDataPoint):
             density_matrix = np.matrix(
                 [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
             self.density_matrix = density_matrix
-            self.success = data[35]
+            self.success = data[34]
         except IndexError:
             raise ValueError("Cannot parse data")
 

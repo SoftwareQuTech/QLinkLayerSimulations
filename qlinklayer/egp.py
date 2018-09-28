@@ -4,6 +4,7 @@ from netsquid.simutil import sim_time
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid.quantumProgram import QuantumProgram
+from easysquid import qProgramLibrary as qprgms
 from qlinklayer.toolbox import LinkLayerException
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.distQueue import DistributedQueue
@@ -226,8 +227,8 @@ class NodeCentricEGP(EGP):
         self.qmm = QuantumMemoryManagement(node=self.node)
 
         # Peer move/correction delay to allow for resynchronization
-        self.peer_move_delay = 0
-        self.peer_corr_delay = 0
+        self.max_move_delay = 0
+        self.max_corr_delay = 0
 
         # Request tracking
         self.expected_seq = 0
@@ -340,10 +341,22 @@ class NodeCentricEGP(EGP):
         other_egp.setConnection(egp_conn)
 
         # Store the peer's delay information
-        self.peer_move_delay = other_egp.qmm.get_move_delay()
-        self.peer_corr_delay = other_egp.qmm.get_correction_delay()
-        other_egp.peer_move_delay = self.qmm.get_move_delay()
-        other_egp.peer_corr_delay = self.qmm.get_correction_delay()
+        # TODO: assuming that the ID of the communication qubit is 0
+        this_move_delays = self.qmm.get_move_delays(0)
+        max_this_move_delay = max([time for time in this_move_delays.values() if time != float('inf')])
+        peer_move_delays = other_egp.qmm.get_move_delays(0)
+        max_peer_move_delay = max([time for time in peer_move_delays.values() if time != float('inf')])
+        max_move_delay = max(max_this_move_delay, max_peer_move_delay)
+
+        self.max_move_delay = max_move_delay
+        other_egp.max_move_delay = max_move_delay
+
+        this_corr_delay = self.qmm.get_correction_delay(0)
+        peer_corr_delay = self.qmm.get_correction_delay(0)
+        max_corr_delay = max(this_corr_delay, peer_corr_delay)
+
+        self.max_corr_delay = max_corr_delay
+        other_egp.max_corr_delay = max_corr_delay
 
     def start(self):
         super(NodeCentricEGP, self).start()
@@ -674,24 +687,27 @@ class NodeCentricEGP(EGP):
             # Make the measurement
             self._measure_in_chosen_basis(mhp_seq, aid)
         else:
+            suspend_time = 0
+            # Check if we need to suspend for extra delay for our peer to move to a storage qubit
+            if creq.store:
+                logger.debug("Moving qubit, suspending generation")
+                suspend_time += self.max_move_delay
             # Check if we need to correct the qubit
             if r == 2:
+                logger.debug("Applying correction, suspending generation")
+                suspend_time += self.max_corr_delay
+                # Suspend for an estimated amount of time until our peer is ready to continue generation
+                self.scheduler.suspend_generation(t=suspend_time)
+
                 if self.node.nodeID != creq.otherID:
                     self._apply_correction_and_move(mhp_seq, aid)
 
                 else:
-                    logger.debug("Peer applying correction, suspending generation")
-                    suspend_time = self.peer_corr_delay
-
-                    # Check if we need to suspend for extra delay for our peer to move to a storage qubit
-                    if creq.store:
-                        suspend_time += self.peer_move_delay
-
-                    # Suspend for an estimated amount of time until our peer is ready to continue generation
-                    self.scheduler.suspend_generation(t=suspend_time)
                     self._move_comm_to_storage(mhp_seq, aid)
 
             else:
+                # Suspend for an estimated amount of time until our peer is ready to continue generation
+                self.scheduler.suspend_generation(t=suspend_time)
                 self._move_comm_to_storage(mhp_seq, aid)
 
     def _measure_in_chosen_basis(self, mhp_seq, aid):
@@ -791,7 +807,8 @@ class NodeCentricEGP(EGP):
 
         # Check if we need to move the qubit into storage
         if comm_q != storage_q:
-            qs[comm_q].move(new_id=storage_q)
+            qs[storage_q].init()
+            qprgms.move_using_CNOTs(prgm, comm_q, storage_q)
 
         # Set the callback of the program
         prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
@@ -816,7 +833,8 @@ class NodeCentricEGP(EGP):
             # Construct a quantum program to move the qubit
             prgm = QuantumProgram()
             qs = prgm.load_mem_qubits(qmem=self.node.qmem)
-            qs[comm_q].move(new_id=storage_q)
+            qs[storage_q].init()
+            qprgms.move_using_CNOTs(prgm, comm_q, storage_q)
 
             # Set the callback
             prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)

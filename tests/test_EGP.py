@@ -335,7 +335,10 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         sim_run(20000)
 
-        self.assertEqual(self.alice_results, self.bob_results)
+        # Don't include t_goodness and t_create, since these could differ
+        alice_results = list(map(lambda res: res[:-2], self.alice_results))
+        bob_results = list(map(lambda res: res[:-2], self.bob_results))
+        self.assertEqual(alice_results, bob_results)
 
         # Check the entangled pairs, ignore communication qubit
         for resA, resB in zip(self.alice_results, self.bob_results):

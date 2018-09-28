@@ -177,7 +177,8 @@ def _calc_prob_success_handler(midpoint, additional_data):
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation(results_path, config=None, create_probA=1, create_probB=0, min_pairs=1, max_pairs=1, tmax_pair=0,
+def run_simulation(results_path, name=None, config=None, create_probA=1, create_probB=0, min_pairs=1, max_pairs=1,
+                   tmax_pair=0,
                    request_cycle=0, num_requests=1, max_sim_time=float('inf'),
                    max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, measure_directly=False,
                    t0=0, t_cycle=0,
@@ -196,6 +197,9 @@ def run_simulation(results_path, config=None, create_probA=1, create_probB=0, mi
     # Recompute the timings of the heralded connection, depending on measure_directly
     nodeA = network.get_node_by_id(0)
     nodeB = network.get_node_by_id(1)
+    # print(nodeA.qmem._memory_positions[0]._connections[1])
+    # print(nodeA.qmem._memory_positions[0].get_gate(CNOTGate(), 1))
+    # raise RuntimeError()
     mhp_conn = network.get_connection(nodeA, nodeB, "mhp_conn")
     mhp_conn.set_timings(t_cycle=t_cycle, t0=t0, measure_directly=measure_directly)
     if save_additional_data:
@@ -285,13 +289,15 @@ def run_simulation(results_path, config=None, create_probA=1, create_probB=0, mi
                 "Wall clock advanced {} s during the last {} s real time. Will now advance {} s real time.".format(
                     wall_time_sim_step_duration, previous_timestep / SECOND, timestep / SECOND))
             mhp_cycles = math.floor(sim_time() / mhp_conn.t_cycle)
-            logger.info(
-                "Time advanced: {}/{} s real time.  {}/{} s wall time. {}/{} MHP cycles".format(sim_time() / SECOND,
-                                                                                                max_sim_time,
-                                                                                                now - start_time,
-                                                                                                max_wall_time,
-                                                                                                mhp_cycles,
-                                                                                                max_mhp_cycle))
+            if name:
+                logger.info("Simulation: \"{}\": ".format(name) +
+                            "Time advanced: {}/{} s real time.  ".format(sim_time() / SECOND, max_sim_time) +
+                            "{}/{} s wall time. ".format(now - start_time, max_wall_time) +
+                            "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle))
+            else:
+                logger.info("Time advanced: {}/{} s real time.  ".format(sim_time() / SECOND, max_sim_time) +
+                            "{}/{} s wall time. ".format(now - start_time, max_wall_time) +
+                            "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle))
 
             # Save additional data relevant for the simulation
             if save_additional_data:
