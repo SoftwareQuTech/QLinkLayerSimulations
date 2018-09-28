@@ -228,7 +228,8 @@ class NodeCentricEGP(EGP):
 
         # Peer move/correction delay to allow for resynchronization
         self.max_move_delay = 0
-        self.max_corr_delay = 0
+        self.this_corr_delay = 0
+        self.peer_corr_delay = 0
 
         # Request tracking
         self.expected_seq = 0
@@ -352,11 +353,12 @@ class NodeCentricEGP(EGP):
         other_egp.max_move_delay = max_move_delay
 
         this_corr_delay = self.qmm.get_correction_delay(0)
-        peer_corr_delay = self.qmm.get_correction_delay(0)
-        max_corr_delay = max(this_corr_delay, peer_corr_delay)
+        peer_corr_delay = other_egp.qmm.get_correction_delay(0)
 
-        self.max_corr_delay = max_corr_delay
-        other_egp.max_corr_delay = max_corr_delay
+        self.this_corr_delay = this_corr_delay
+        self.peer_corr_delay = peer_corr_delay
+        other_egp.this_corr_delay = peer_corr_delay
+        other_egp.peer_corr_delay = this_corr_delay
 
     def start(self):
         super(NodeCentricEGP, self).start()
@@ -695,14 +697,19 @@ class NodeCentricEGP(EGP):
             # Check if we need to correct the qubit
             if r == 2:
                 logger.debug("Applying correction, suspending generation")
-                suspend_time += self.max_corr_delay
-                # Suspend for an estimated amount of time until our peer is ready to continue generation
-                self.scheduler.suspend_generation(t=suspend_time)
 
                 if self.node.nodeID != creq.otherID:
+                    # Suspend for an estimated amount of time until our peer is ready to continue generation
+                    suspend_time += self.this_corr_delay
+                    self.scheduler.suspend_generation(t=suspend_time)
+
                     self._apply_correction_and_move(mhp_seq, aid)
 
                 else:
+                    # Suspend for an estimated amount of time until our peer is ready to continue generation
+                    suspend_time += self.peer_corr_delay
+                    self.scheduler.suspend_generation(t=suspend_time)
+
                     self._move_comm_to_storage(mhp_seq, aid)
 
             else:
