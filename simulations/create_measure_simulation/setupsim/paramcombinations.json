@@ -12,12 +12,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/no_losses/no_noise.json",
+        "config": "setupsim/config/no_losses/no_noise.json",
         "create_probA": 0.038000000000000006
     },
     "NoNoise_NC_NC_HRF": {
@@ -33,12 +33,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/no_losses/no_noise.json",
+        "config": "setupsim/config/no_losses/no_noise.json",
         "create_probA": 0.15200000000000002
     },
     "NoLoss_NC_NC_LRF": {
@@ -54,12 +54,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
+        "config": "setupsim/config/no_losses/no_losses.json",
         "create_probA": 0.03792492027455283
     },
     "NoLoss_NC_NC_HRF": {
@@ -75,12 +75,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
+        "config": "setupsim/config/no_losses/no_losses.json",
         "create_probA": 0.15169968109821133
     },
     "Lab_NC_NC_LRF": {
@@ -96,12 +96,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_no_cav_no_conv.json",
+        "config": "setupsim/config/lab_configs/networks_no_cavity_no_conversion.json",
         "create_probA": 1.4031983136095813e-05
     },
     "Lab_NC_NC_HRF": {
@@ -117,12 +117,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_no_cav_no_conv.json",
+        "config": "setupsim/config/lab_configs/networks_no_cavity_no_conversion.json",
         "create_probA": 5.612793254438325e-05
     },
     "Lab_NC_WC_LRF": {
@@ -138,12 +138,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_no_cav_with_conv.json",
+        "config": "setupsim/config/lab_configs/networks_no_cavity_with_conversion.json",
         "create_probA": 4.325844876447611e-06
     },
     "Lab_NC_WC_HRF": {
@@ -159,12 +159,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_no_cav_with_conv.json",
+        "config": "setupsim/config/lab_configs/networks_no_cavity_with_conversion.json",
         "create_probA": 1.7303379505790444e-05
     },
     "Lab_WC_NC_LRF": {
@@ -180,12 +180,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_with_cav_no_conv.json",
+        "config": "setupsim/config/lab_configs/networks_with_cavity_no_conversion.json",
         "create_probA": 0.0002201779006813446
     },
     "Lab_WC_NC_HRF": {
@@ -201,12 +201,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_with_cav_no_conv.json",
+        "config": "setupsim/config/lab_configs/networks_with_cavity_no_conversion.json",
         "create_probA": 0.0008807116027253783
     },
     "Lab_WC_WC_LRF": {
@@ -222,12 +222,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_with_cav_with_conv.json",
+        "config": "setupsim/config/lab_configs/networks_with_cavity_with_conversion.json",
         "create_probA": 6.625265161523623e-05
     },
     "Lab_WC_WC_HRF": {
@@ -243,12 +243,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_with_cav_with_conv.json",
+        "config": "setupsim/config/lab_configs/networks_with_cavity_with_conversion.json",
         "create_probA": 0.0002650106064609449
     },
     "QLink_NC_NC_LRF": {
@@ -264,12 +264,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
+        "config": "setupsim/config/qlink_configs/networks_no_cavity_no_conversion.json",
         "create_probA": 1.5999990398579444e-07
     },
     "QLink_NC_NC_HRF": {
@@ -285,12 +285,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
+        "config": "setupsim/config/qlink_configs/networks_no_cavity_no_conversion.json",
         "create_probA": 6.399996159431777e-07
     },
     "QLink_NC_WC_LRF": {
@@ -306,12 +306,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
+        "config": "setupsim/config/qlink_configs/networks_no_cavity_with_conversion.json",
         "create_probA": 1.1889705089001753e-06
     },
     "QLink_NC_WC_HRF": {
@@ -327,12 +327,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
+        "config": "setupsim/config/qlink_configs/networks_no_cavity_with_conversion.json",
         "create_probA": 4.755882035600701e-06
     },
     "QLink_WC_NC_LRF": {
@@ -348,12 +348,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
+        "config": "setupsim/config/qlink_configs/networks_with_cavity_no_conversion.json",
         "create_probA": 1.5999990398579444e-07
     },
     "QLink_WC_NC_HRF": {
@@ -369,12 +369,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
+        "config": "setupsim/config/qlink_configs/networks_with_cavity_no_conversion.json",
         "create_probA": 6.399996159431777e-07
     },
     "QLink_WC_WC_LRF": {
@@ -390,12 +390,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
+        "config": "setupsim/config/qlink_configs/networks_with_cavity_with_conversion.json",
         "create_probA": 1.648662129591672e-05
     },
     "QLink_WC_WC_HRF": {
@@ -411,12 +411,12 @@
         "enable_pdb": false,
         "alphaA": 0.1,
         "alphaB": 0.1,
-        "measure_directly": false,
+        "measure_directly": true,
         "t0": 0,
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "/Users/adahlberg/Documents/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
+        "config": "setupsim/config/qlink_configs/networks_with_cavity_with_conversion.json",
         "create_probA": 6.594648518366688e-05
     }
 }
