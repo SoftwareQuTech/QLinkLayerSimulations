@@ -30,12 +30,15 @@ class RequestScheduler(pydynaa.Entity):
 
         # Generation tracking
         self.requests = {}
+        self.curr_request = None
+        self.waiting = False
         self.curr_gen = None
         self.default_gen = self.get_default_gen()
         self.outstanding_gens = []
         self.outstanding_items = {}
         self.timed_out_requests = []
         self._suspend = False
+        self.resumeID = -1
 
     def suspend_generation(self, t):
         """
@@ -46,20 +49,26 @@ class RequestScheduler(pydynaa.Entity):
         self._suspend = True
 
         # Set up an event handler to resume entanglement generation
-        resume_handler = pydynaa.EventHandler(self._resume_generation)
+        from functools import partial
+        self.resumeID += 1
+        self.resume_handler = pydynaa.EventHandler(partial(self._resume_generation_handler, resumeID=self.resumeID))
         EVT_RESUME = pydynaa.EventType("RESUME", "Triggers when we believe peer finished correction")
-        self._wait_once(resume_handler, entity=self, event_type=EVT_RESUME)
+        self._wait_once(self.resume_handler, entity=self, event_type=EVT_RESUME)
         logger.debug("Scheduling resume event after {}.".format(t))
         self._schedule_after(t, EVT_RESUME)
 
-    def _resume_generation(self, evt):
+    def resume_generation(self):
+        self._suspend = False
+
+    def _resume_generation_handler(self, evt, resumeID):
         """
         Callback handler to flip the suspend flag and allow the scheduler to resume entanglement generation
         :param evt: obj `~netsquid.pydynaa.Event`
             The event that triggered this handler
         """
-        logger.debug("Resuming generation")
-        self._suspend = False
+        if resumeID == self.resumeID:
+            logger.debug("Resuming generation")
+            self._suspend = False
 
     def update_other_mem_size(self, mem):
         """
@@ -104,6 +113,10 @@ class RequestScheduler(pydynaa.Entity):
         next_gen = self.get_default_gen()
 
         if self.qmm.is_busy() or self._suspend:
+            next_gen = self.default_gen
+
+        elif self.curr_request and self.waiting:
+            logger.debug("Scheduler waiting for MHP Reply before allowing attempt")
             next_gen = self.default_gen
 
         elif self.curr_gen:
@@ -214,6 +227,10 @@ class RequestScheduler(pydynaa.Entity):
             key = (request.create_id, request.otherID)
             self.outstanding_items.pop(key, None)
 
+            if self.curr_request == request:
+                self.curr_request = None
+                self.waiting = False
+
         qid, qseq = aid
         queue_item = self.distQueue.remove_item(qid, qseq)
         if queue_item is None:
@@ -320,6 +337,8 @@ class RequestScheduler(pydynaa.Entity):
         for i in range(next_request.num_pairs):
             gen_template = [True, next_aid, None, None, None, None]
             self.outstanding_gens.append(gen_template)
+
+        self.curr_request = next_request
 
     def _handle_item_timeout(self, evt):
         """

@@ -220,7 +220,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
             Outcome result of performing the entanglement
         :return: Non
         """
-        logger.debug("{} sending notification to both".format(sim_time()))
+        logger.debug("Sending notification to both".format())
 
         # Send notification messages back.
         if outcome not in self.VALID_OUTCOMES:
@@ -239,6 +239,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
         logger.debug("Sending messages to A: {} and B: {}".format(dataA, dataB))
         self._send_to_node(self.nodeA, dataA)
         self._send_to_node(self.nodeB, dataB)
+        self._reset_incoming()
 
         if outcome in [1, 2]:
             self.mhp_seq = self._get_next_mhp_seq()
@@ -383,11 +384,12 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
             proto_err = err
 
         # Construct the reply
-        data = MHPReply(response_data=self.ERR_GENERAL, pass_data=proto_err).channel_data()
+        dataA = MHPReply(response_data=proto_err, pass_data=self.classical_data[self.idA]).channel_data()
+        dataB = MHPReply(response_data=proto_err, pass_data=self.classical_data[self.idB]).channel_data()
 
         # Return the data that should go on the channel
-        logger.debug("Sending error messages to A and B ({})".format(data))
-        return data, data
+        logger.debug("Sending error messages to A ({}) and B ({})".format(dataA, dataB))
+        return dataA, dataB
 
     def _discover_error(self):
         """
@@ -576,14 +578,11 @@ class MHPServiceProtocol(TimedServiceProtocol):
 
     def run_protocol(self):
         """
-        Generic protocol, either accepts incoming requests (if any) or continues processing current one
+        Generic protocol, either accepts incoming requests (if any)
         """
         try:
             logger.debug("{} Node {} running protocol".format(sim_time(), self.node.nodeID))
-            if self._in_progress():
-                self._continue_request_handling()
-
-            elif self._has_resources() and self.stateProvider():
+            if self._has_resources() and self.stateProvider():
                 request_data = self.service.get_as(self.node.nodeID)
                 self._handle_request(request_data)
 
@@ -591,21 +590,6 @@ class MHPServiceProtocol(TimedServiceProtocol):
             logger.exception("Exception occurred while running protocol")
             result = self._construct_error_result(err_data)
             self.callback(result=result)
-
-    @abc.abstractmethod
-    def _in_progress(self):
-        """
-        To be overloaded and used to check if MHP needs to continue processing existing requests
-        :return:
-        """
-        pass
-
-    @abc.abstractmethod
-    def _continue_request_handling(self):
-        """
-        To be overloaded and used to continue the processing of requests that take multiple rounds
-        """
-        pass
 
     @abc.abstractmethod
     def _has_resources(self):
@@ -639,7 +623,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
         """
         try:
             [msg, deltaT] = self.conn.get_as(self.node.nodeID)
-            logger.debug("{} Received message {}".format(sim_time(), msg))
+            logger.debug("Received message {}".format(msg))
             respM, passM = msg[0]
             reply_message = MHPReply(response_data=respM, pass_data=passM)
             self._process_reply(reply_message)
@@ -669,23 +653,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
     PROTO_OK = 0
     NO_GENERATION = 0
     ERR_LOCAL = 31
-    ERR_TIMEOUT = 32
 
-    def __init__(self, timeStep, t0, node, connection, alpha, message_timeout=None):
+    def __init__(self, timeStep, t0, node, connection, alpha):
         self.status = self.STAT_IDLE
-
-        self.timeout_handler = EventHandler(self.comm_timeout_handler)
-        self.time_of_message_sent = None
-        self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
-
         self._EVT_ENTANGLE_ATTEMPT = EventType("ENTANGLE ATTEMPT", "Triggered when the MHP attempts entanglement")
         super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
-
-        if message_timeout is None:
-            # TODO WHat should this be?
-            self.message_timeout = 2 * self.timeStep
-        else:
-            self.message_timeout = message_timeout
         self.set_bright_state_population(alpha=alpha)
 
     def reset_protocol(self):
@@ -699,32 +671,12 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.status = self.STAT_IDLE
         self.aid = None
 
-        # if self.timeout_handler:
-        #     logger.debug("Clearing timeout handler!")
-        #     self._dismiss(self.timeout_handler)
-        #     self.timeout_handler = None
-
     def _has_resources(self):
         """
         Check if the protocol is not handling any requests
         :return:
         """
         return self.status == self.STAT_IDLE
-
-    def _in_progress(self):
-        """
-        Check if the protocol is busy
-        :return:
-        """
-        return self.status == self.STAT_BUSY
-
-    def _continue_request_handling(self):
-        """
-        Continues handling in progress requests for entanglement.  This will run if we are waiting for communication
-        from the midpoint
-        """
-        logger.debug("Continuing process of current request, current pair: ({}, {})".format(self.electron_physical_ID,
-                                                                                            self.storage_physical_ID))
 
     def _handle_request(self, request_data):
         """
@@ -735,9 +687,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         logger.debug("MHP_NC Protocol at node {} got request data: {}".format(self.node.nodeID, request_data))
 
-        # Mark the protocol as busy
-        self.status = self.STAT_BUSY
-
         # Extract request information
         flag, aid, comm_q, storage_q, param, free_memory_size = request_data
         self.aid = aid
@@ -745,9 +694,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # If the flag is true then we attempt entanglement generation
         if flag:
+            # Mark the protocol as busy
+            self.status = self.STAT_BUSY
+
             # Set up for generating entanglement
             logger.debug("Flag set to true processing entanglement request")
-            self.schedule_comm_timeout()
             self.init_entanglement_request(comm_q, storage_q)
             self.run_entanglement_protocol()
 
@@ -756,36 +707,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             logger.debug("Flag set to false, passing information through heralding station")
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_INFO, self.free_memory_size], []])
             self.reset_protocol()
-
-    def schedule_comm_timeout(self):
-        """
-        Schedules a communication timeout event and attaches a handler that resets the protocol
-        :return:
-        """
-        self.time_of_message_sent = sim_time()
-        logger.debug("Scheduling communication timeout event after {}.".format(self.message_timeout))
-        self.timeout_event = self._schedule_after(self.message_timeout, self._EVT_COMM_TIMEOUT)
-        self._wait_once(self.timeout_handler, event=self.timeout_event)
-
-    def comm_timeout_handler(self, evt):
-        """
-        MHP Communication timeout handler.  Triggered after we have waited too long for a response from the midpoint.
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The event that triggered the timeout handler
-        """
-        logger.debug("Timeout handler triggered!")
-        if self.time_of_message_sent is not None:
-            if isclose(sim_time() - self.time_of_message_sent, self.message_timeout):
-                logger.debug("Timeout is still valid")
-                if self.status == self.STAT_BUSY:
-                    logger.warning("Timed out waiting for communication response!")
-                    self._handle_error(None, self.ERR_TIMEOUT)
-                    self.reset_protocol()
-                    return
-                else:
-                    logger.debug("MHP is idle, timeout not relevant anymore")
-                    return
-        logger.debug("Timeout is not valid anymore")
 
     def init_entanglement_request(self, comm_q, storage_q):
         """
@@ -821,11 +742,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         # Extract info from the message
         respM, passM = reply_message.response_data, reply_message.pass_data
 
-        # if self.timeout_handler:
-        #     logger.debug("Clearing timeout handler!")
-        #     self._dismiss(self.timeout_handler)
-        #     self.timeout_handler = None
-
         # Got some kind of command
         if isinstance(respM, int):
             # Handle INFO passing, otherwise report an error
@@ -839,11 +755,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         # Receiving result of production attempt
         else:
             # Only process production replies when we are expecting them
-            if self.status == self.STAT_BUSY:
-                self._handle_production_reply(respM, passM)
-            else:
-                logger.warning("Received unexpected production reply from midpoint!")
-                self.reset_protocol()
+            self._handle_production_reply(respM, passM)
 
     def _handle_passed_info(self, respM, passM):
         """
@@ -853,9 +765,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :param passM: any
             Information to pass back up to the EGP
         """
-        result = (self.NO_GENERATION, passM, -1, self.aid, self.PROTO_OK)
+        result = (self.NO_GENERATION, passM, -1, None, self.PROTO_OK)
         self.callback(result=result)
-        self.reset_protocol()
+        # self.reset_protocol()
 
     def _handle_error(self, respM, passM):
         """
@@ -865,11 +777,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :param passM: any
             Error information to pass back to EGP
         """
-        result = self._construct_error_result(err_data=passM)
+        result = self._construct_error_result(err_code=respM, err_data=passM)
         self.callback(result=result)
         self.reset_protocol()
 
-    def _construct_error_result(self, err_data, **kwargs):
+    def _construct_error_result(self, err_code, err_data, **kwargs):
         """
         Creates a result to pass up to the EGP that contains error information for errors that may have
         occurred
@@ -878,7 +790,10 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return: tuple
             Result information to be interpretted by higher layers
         """
-        result = (self.NO_GENERATION, None, -1, self.aid, err_data)
+        aid = None
+        if err_data:
+            aid = err_data[-1]
+        result = (self.NO_GENERATION, None, -1, aid, err_code)
         return result
 
     def _handle_production_reply(self, respM, passM):
@@ -897,10 +812,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         # Clear used qubit ID if we failed, otherwise increment our successful generatoin
         if outcome == 0:
             logger.debug("Generation attempt failed, releasing qubit {}".format(self.storage_physical_ID))
-
-        if aid != self.aid:
-            logger.warning("Received midpoint reply for aid {} while MHP has local aid {}".format(aid, self.aid))
-            self._handle_error(respM=None, passM=self.ERR_LOCAL)
 
         self.result = (outcome, other_free_memory, mhp_seq, other_aid, self.PROTO_OK)
         logger.debug("Finished running protocol, returning results: {}".format(self.result))
@@ -924,11 +835,12 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
             logger.debug("Scheduling entanglement event now.")
+            self.status = self.STAT_IDLE
             self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         except Exception as err_data:
             logger.exception("Error occurred while handling photon emission")
-            result = self._construct_error_result(err_data=err_data)
+            result = self._construct_error_result(err_code=self.ERR_LOCAL, err_data=[err_data])
             self._handle_error(None, result)
 
 
@@ -961,7 +873,7 @@ class SimulatedNodeCentricMHPService(Service):
         # Set up a default connection if not specified
         if not conn:
             conn = self.conn_class(nodeA=nodeA, nodeB=nodeB, lengthA=lengthA, lengthB=lengthB, use_time_window=True,
-                                   time_window=1)
+                                   time_window=0.01, measure_directly=True)
 
         # Create the MHP node protocols
         nodeAProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeA, connection=conn, t0=conn.trigA,

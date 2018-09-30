@@ -48,6 +48,9 @@ class EGPRequest:
         self.create_time = None
         self.store = store
         self.measure_directly = measure_directly
+        # if self.measure_directly:
+        #     assert basis_choice in ["Z", "X"]
+        #     self.basis_choice = basis_choice
 
     def __copy__(self):
         """
@@ -260,6 +263,7 @@ class NodeCentricEGP(EGP):
         self.basis_choice = None
         self.bit_choise = None
         self.midpoint_outcome = None
+        # self.measurement_results = []
 
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
                                  alphaA=0.1, alphaB=0.1):
@@ -312,6 +316,8 @@ class NodeCentricEGP(EGP):
         # Get our protocol from the service
         self.mhp = self.mhp_service.configure_node_proto(node=self.node, stateProvider=self.trigger_pair_mhp,
                                                          callback=self.handle_reply_mhp)
+        # self._emission_handler = EventHandler(self._handle_photon_emission)
+        # self._wait(self._emission_handler, entity=self.mhp, event_type=self.mhp._EVT_ENTANGLE_ATTEMPT)
 
         # Fidelity Estimation Unit used to estimate the fidelity of produced entangled pairs
         self.feu = SingleClickFidelityEstimationUnit(node=self.node, mhp_service=self.mhp_service)
@@ -573,6 +579,11 @@ class NodeCentricEGP(EGP):
             # Store the gen for pickup by mhp
             self.mhp_service.put_ready_data(self.node.nodeID, gen)
 
+            if self.scheduler.curr_request and not self.scheduler.curr_request.measure_directly and gen[0]:
+                suspend_time = 2*self.mhp.conn.full_cycle
+                logger.debug("Next generation attempt after {}".format(suspend_time))
+                self.scheduler.suspend_generation(suspend_time)
+
             return True
 
         except Exception as err_data:
@@ -590,6 +601,7 @@ class NodeCentricEGP(EGP):
         try:
             # Get the MHP results
             logger.debug("Handling MHP Reply: {}".format(result))
+
             r, other_free_memory, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
 
             # Check if there was memory information included in the reply
@@ -609,6 +621,7 @@ class NodeCentricEGP(EGP):
 
             # Otherwise this response is associated with a generation attempt
             else:
+                self.scheduler.resume_generation()
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
@@ -680,7 +693,7 @@ class NodeCentricEGP(EGP):
             # Save the measurement outcome
             if r == 1:
                 self.midpoint_outcome = (0, 1)
-            else:
+            else: #if r == 2 and self.node.nodeID != creq.otherID:
                 self.midpoint_outcome = (1, 1)
 
             # Make a random basis choice
@@ -716,6 +729,26 @@ class NodeCentricEGP(EGP):
                 # Suspend for an estimated amount of time until our peer is ready to continue generation
                 self.scheduler.suspend_generation(t=suspend_time)
                 self._move_comm_to_storage(mhp_seq, aid)
+
+    def _handle_photon_emission(self, evt):
+        # logger.error("Caught MHP photon emission!")
+        # Grab the current generation information
+        # aid, comm_q, _ = self.scheduler.curr_gen[1:4]
+        # request = self.scheduler.get_request(aid)
+        #
+        # # Constuct a quantum program
+        # prgm = QuantumProgram()
+        # q = prgm.load_mem_qubits(qmem=self.node.qmem)[comm_q]
+        #
+        # if request.basis_choice == "X":
+        #     logger.debug("Measuring comm_q {} in Hadamard basis".format(comm_q))
+        #     q.H()
+        # else:
+        #     logger.debug("Measuring comm_q {} in standard basis".format(comm_q))
+        #
+        # q.measure(callback=self._handle_measurement_outcome)
+        # self.node.qmem.execute_program(prgm)
+        pass
 
     def _measure_in_chosen_basis(self, mhp_seq, aid):
         """
@@ -758,6 +791,7 @@ class NodeCentricEGP(EGP):
 
         # Saves measurement outcome
         self.bit_choice = outcome
+        # self.measurement_results.append(outcome)
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """

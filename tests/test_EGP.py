@@ -114,7 +114,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(1000)
+        sim_run(10)
 
         self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
         self.assertEqual(self.alice_results, self.bob_results)
@@ -199,7 +199,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(1000)
+        sim_run(10)
 
         self.assertEqual(len(self.alice_results), num_requests)
         self.assertEqual(self.alice_results, self.bob_results)
@@ -262,7 +262,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(400)
+        sim_run(10)
 
         self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
         self.assertEqual(self.alice_results, self.bob_results)
@@ -292,7 +292,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.1)
         dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.2)
         mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=0.02, lengthB=0.03,
-                                                    use_time_window=True)
+                                                    use_time_window=True, measure_directly=True)
         egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
 
         self.assertEqual(egpA.conn, egp_conn)
@@ -427,7 +427,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
-        max_time = 200
+        max_time = 10
         alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=max_time,
                                    purpose_id=1, priority=10)
 
@@ -454,14 +454,16 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Make the MHP at the peer unresponsive
         egpB.mhp.stop()
 
-        sim_run(max_time + 2)
+        sim_run(max_time + 1)
 
         dqp_delay = egpA.dqp.conn.channel_from_A.compute_delay() + egpA.dqp.conn.channel_from_B.compute_delay()
         egp_delay = egpA.conn.channel_from_A.compute_delay() + egpA.conn.channel_from_B.compute_delay()
-        mhp_delay = max(dqp_delay, egp_delay)
-        mhp_start = egpA.mhp.timeStep * ceil(mhp_delay / egpA.mhp.timeStep)
+        mhp_start_delay = max(dqp_delay, egp_delay)
+        mhp_start = egpA.mhp.timeStep * ceil(mhp_start_delay / egpA.mhp.timeStep)
 
-        num_timeouts = int((max_time - mhp_start) // egpA.mhp.timeStep)
+        mhp_conn_delay = egpA.mhp.conn.channel_A_to_M.compute_delay() + egpA.mhp.conn.channel_M_to_A.compute_delay()
+        mhp_cycle = egpA.mhp.timeStep * ceil(egpA.mhp.timeStep + mhp_conn_delay / egpA.mhp.timeStep)
+        num_timeouts = int((max_time - mhp_start) // (mhp_cycle))
 
         # Assert that there were a few entanglement attempts before timing out the request
         expected_err_mhp = egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER
@@ -591,7 +593,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(200)
+        sim_run(20)
 
         # Check that we were able to get the first generation of alice's request completed
         self.assertEqual(self.alice_results[0], self.bob_results[0])
