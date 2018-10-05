@@ -31,7 +31,6 @@ class RequestScheduler(pydynaa.Entity):
         # Generation tracking
         self.requests = {}
         self.curr_request = None
-        self.waiting = False
         self.curr_gen = None
         self.default_gen = self.get_default_gen()
         self.outstanding_gens = []
@@ -113,10 +112,6 @@ class RequestScheduler(pydynaa.Entity):
         next_gen = self.get_default_gen()
 
         if self.qmm.is_busy() or self._suspend:
-            next_gen = self.default_gen
-
-        elif self.curr_request and self.waiting:
-            logger.debug("Scheduler waiting for MHP Reply before allowing attempt")
             next_gen = self.default_gen
 
         elif self.curr_gen:
@@ -229,7 +224,6 @@ class RequestScheduler(pydynaa.Entity):
 
             if self.curr_request == request:
                 self.curr_request = None
-                self.waiting = False
 
         qid, qseq = aid
         queue_item = self.distQueue.remove_item(qid, qseq)
@@ -263,7 +257,7 @@ class RequestScheduler(pydynaa.Entity):
             logger.debug("Local memory has no available communication qubits!")
             return False
 
-        if request.store:
+        if request.store and not request.measure_directly:
             if not other_free_storage:
                 logger.debug("Requested storage but peer memory has no available storage qubits!")
                 return False
@@ -282,7 +276,7 @@ class RequestScheduler(pydynaa.Entity):
         :return: int, int
             Qubit IDs to use for the communication process ad storage process
         """
-        if request.store:
+        if request.store and not request.measure_directly:
             comm_q, storage_q = self.qmm.reserve_entanglement_pair()
         else:
             comm_q = self.qmm.reserve_communication_qubit()
