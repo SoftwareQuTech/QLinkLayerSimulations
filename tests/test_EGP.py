@@ -276,6 +276,132 @@ class TestNodeCentricEGP(unittest.TestCase):
             self.assertIn(qB, qA.qstate._qubits)
             self.assertIn(qA, qB.qstate._qubits)
 
+    def test_successful_measure_directly(self):
+        # Set up Alice
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
+        alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
+
+        # Set up Bob
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
+        bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
+
+        # Set up EGP
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
+        egpA.connect_to_peer_protocol(egpB)
+
+        # Schedule egp CREATE commands mid simulation
+        sim_scheduler = SimulationScheduler()
+        alice_num_bits = 4
+        bob_num_bits = 10
+        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
+                                   purpose_id=1, priority=10, measure_directly=True)
+        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
+                                 purpose_id=2, priority=2, measure_directly=True)
+
+        alice_scheduled_create = partial(egpA.create, creq=alice_request)
+        bob_scheduled_create = partial(egpB.create, creq=bob_request)
+
+        # Schedule a sequence of various create requests
+        sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
+        sim_scheduler.schedule_function(func=bob_scheduled_create, t=5)
+
+        # Construct a network for the simulation
+        nodes = [
+            (alice, [egpA, egpA.dqp, egpA.mhp]),
+            (bob, [egpB, egpB.dqp, egpB.mhp])
+        ]
+
+        conns = [
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
+        ]
+
+        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        import pdb
+        pdb.set_trace()
+        sim_run(20)
+        pdb.set_trace()
+
+        self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits)
+        self.assertEqual(self.alice_results, self.bob_results)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.assertTrue(False, "IMPLEMENT CHECKS FOR MEASURE DIRECTLY SUCCESS")
+
+    def test_successful_mixed_requests(self):
+        # Set up Alice
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())
+        alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
+
+        # Set up Bob
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=5, pair_preparation=NV_PairPreparation())
+        bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
+
+        # Set up EGP
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
+        egpA.connect_to_peer_protocol(egpB)
+
+        # Schedule egp CREATE commands mid simulation
+        sim_scheduler = SimulationScheduler()
+        alice_num_pairs = 1
+        alice_num_bits = 4
+        bob_num_pairs = 2
+        bob_num_bits = 10
+        alice_request_epr = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_pairs, min_fidelity=0.5, max_time=10000,
+                                       purpose_id=1, priority=10)
+
+        alice_request_bits = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
+                                        purpose_id=1, priority=10, measure_directly=True)
+
+        bob_request_epr = EGPRequest(otherID=alice.nodeID, num_pairs=bob_num_pairs, min_fidelity=0.5, max_time=20000,
+                                     purpose_id=2, priority=2)
+
+        bob_request_bits = EGPRequest(otherID=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
+                                      purpose_id=2, priority=2, measure_directly=True)
+
+        alice_scheduled_epr = partial(egpA.create, creq=alice_request_epr)
+        alice_scheduled_bits = partial(egpA.create, creq=alice_request_bits)
+        bob_scheduled_epr = partial(egpB.create, creq=bob_request_epr)
+        bob_scheduled_bits = partial(egpB.create, creq=bob_request_bits)
+
+        # Schedule a sequence of various create requests
+        sim_scheduler.schedule_function(func=alice_scheduled_epr, t=0)
+        sim_scheduler.schedule_function(func=bob_scheduled_bits, t=2.5)
+        sim_scheduler.schedule_function(func=bob_scheduled_epr, t=5)
+        sim_scheduler.schedule_function(func=alice_scheduled_bits, t=7.5)
+
+        # Construct a network for the simulation
+        nodes = [
+            (alice, [egpA, egpA.dqp, egpA.mhp]),
+            (bob, [egpB, egpB.dqp, egpB.mhp])
+        ]
+
+        conns = [
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
+        ]
+
+        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        import pdb
+        pdb.set_trace()
+        sim_run(20)
+        pdb.set_trace()
+
+        self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits)
+        self.assertEqual(self.alice_results, self.bob_results)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.assertTrue(False, "IMPLEMENT CHECKS FOR MIXED REQUEST SUCCESS")
+
+
     def test_manual_connect(self):
         # Set up Alice
         aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=5, pair_preparation=NV_PairPreparation())

@@ -809,7 +809,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # Clear used qubit ID if we failed, otherwise increment our successful generatoin
         if outcome == 0:
-            logger.debug("Generation attempt failed, releasing qubit {}".format(self.storage_physical_ID))
+            logger.debug("Generation attempt failed")
 
         self.result = (outcome, other_free_memory, mhp_seq, other_aid, self.PROTO_OK)
         logger.debug("Finished running protocol, returning results: {}".format(self.result))
