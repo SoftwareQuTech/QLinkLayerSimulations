@@ -6,7 +6,7 @@
 # Author: Stephanie Wehner
 
 from copy import copy
-from collections import deque
+from collections import deque, defaultdict
 from functools import partial
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
@@ -34,6 +34,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
     CMD_ERR_NOSUCH_Q = 8  # No such queue number
     CMD_ERR_DUPLICATE_QSEQ = 9  # Duplicate queue sequence number
     CMD_ERR_NOREQ = 10  # Request data missing
+    CMD_ERR_REJ = 11  # Rejected add request
 
     # States of this protocol
     STAT_IDLE = 0  # Default idle state
@@ -77,6 +78,15 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.CMD_ERR_NOREQ: self.cmd_ERR
         }
 
+        # Set up add validators
+        self.add_validators = [
+            self._validate_otherID,
+            self._validate_comms_seq,
+            self._validate_qid,
+            self._validate_aid,
+            self._validate_request
+        ]
+
         # The initial state is idle
         self.status = self.STAT_IDLE
 
@@ -86,6 +96,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Queue item management
         self.timed_out_items = []
+
         # self.queue_item_timeout_handler = EventHandler(self._queue_item_timeout_handler)
         self._EVT_QUEUE_TIMEOUT = EventType("DIST QUEUE TIMEOUT", "Triggers when queue item times out")
         self.ready_items = []
@@ -118,9 +129,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # expected sequence number
         self.expectedSeq = 0
-
         self.add_callback = None
-
         self.myTrig = 0
         self.otherTrig = 0
 
@@ -215,26 +224,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             if self.add_callback:
                 self.add_callback(result=(self.DQ_TIMEOUT, qid, queue_seq, request))
 
-    # def _queue_item_timeout_handler(self, evt):
-    #     """
-    #     DQP Queue Item timeout handler.  Triggered when an underlying TimedLocalQueue has expired a queue item
-    #     due to it not being serviced within it's max time period.
-    #     :param evt: obj `~netsquid.pydynaa.Event`
-    #         The event that triggered this handler
-    #     """
-    #     # Get the local queue that triggered the event
-    #     queue = evt.source
-    #     logger.debug("Handling local queue item timeout")
-    #
-    #     # Pull the timed out item from the local queue's internal storage
-    #     queue_item = queue.timed_out_items.pop(0)
-    #     logger.debug("Got timed out queue item {}".format(queue_item))
-    #
-    #     # Set up a timeout event for passing to higher layers
-    #     self.timed_out_items.append(queue_item)
-    #     logger.debug("Scheduling queue timeout event now.")
-    #     self._schedule_now(self._EVT_QUEUE_TIMEOUT)
-
     def _schedule_item_handler(self, evt):
         """
         Handler for queue items that are ready to be scheduled.  Bubbles the event up to higher layers.
@@ -292,7 +281,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         self.conn.put_from(self.myID, [[cmd, data]])
 
-    def send_error(self, error):
+    def send_error(self, error, error_data=0):
         """
         Send error message to the other side.
 
@@ -301,7 +290,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         error : int
             Error code
         """
-        self.send_msg(error, 0)
+        self.send_msg(error, error_data)
 
     def send_hello(self):
         """
@@ -346,28 +335,30 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         logger.debug("Error Received, Data: {}".format(data))
         self.status = self.STAT_IDLE
 
-    def cmd_ADD(self, data):
-        """
-        Handle incoming add request.
-        """
-        # Parse data
+    def validate_ADD(self, data):
+        for validator in self.add_validators:
+            if not validator(data):
+                return False
+
+        return True
+
+    def _validate_otherID(self, data):
         [nodeID, cseq, qid, qseq, request] = data
-
-        # Sanity checking
-
-        # Check whether the request is from our partner node
         if nodeID != self.otherID:
+            logger.debug("ADD ERROR Got ADD request from node that isn't our peer!")
             self.send_error(self.CMD_ERR_UNKNOWN_ID)
+            return False
+        return True
 
-        # Is the sequence number what we expected?
+    def _validate_comms_seq(self, data):
+        [nodeID, cseq, qid, qseq, request] = data
         if cseq > self.expectedSeq:
-
             # We seem to have missed some packets, for now just declare an error
             # TODO is this what we want?
             logger.debug("ADD ERROR Skipped sequence number from {} comms seq {} queue ID {} queue seq {}"
                          .format(nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_MISSED_SEQ)
-            return
+            return False
 
         elif cseq < self.expectedSeq:
 
@@ -376,41 +367,59 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             logger.debug("ADD ERROR Duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
                          .format(nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_DUPLICATE_SEQ)
-            return
+            return False
 
-        # Is the queue ID acceptable?
+        # Increment next sequence number expected
+        self.expectedSeq = (self.expectedSeq + 1) % self.maxSeq
+
+        return True
+
+    def _validate_qid(self, data):
+        [nodeID, cseq, qid, qseq, request] = data
         if not (self._valid_qid(qid)):
             logger.debug("ADD ERROR No such queue from {} comms seq {} queue ID {} queue seq {}"
                          .format(nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_NOSUCH_Q)
-            return
+            return False
+        return True
 
-        # Is there such an item already in the queue?
+    def _validate_aid(self, data):
+        [nodeID, cseq, qid, qseq, request] = data
         if not self.master:
-
             # Duplicate sequence number
             # TODO is this what we want?
             if self.contains_item(qid, qseq):
                 logger.debug("ADD ERROR duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
                              .format(nodeID, cseq, qid, qseq))
                 self.send_error(self.CMD_ERR_DUPLICATE_QSEQ)
-                return
+                return False
+        return True
 
-        # Is there a request supplied?
+    def _validate_request(self, data):
+        [nodeID, cseq, qid, qseq, request] = data
         if request is None:
             # Request details missing
             # TODO is this what we want?
             logger.debug("ADD ERROR missing request from {} comms seq {} queue ID {} queue seq {}"
                          .format(nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_NOREQ)
+            return False
+        return True
+
+    def cmd_ADD(self, data):
+        """
+        Handle incoming add request.
+        """
+        # Parse data
+        [nodeID, cseq, qid, qseq, request] = data
+
+        # Sanity checking
+        if not self.validate_ADD(data):
             return
 
         # Received valid ADD: Process add request
 
         logger.debug("ADD from {} comms seq {} queue ID {} queue seq {}".format(nodeID, cseq, qid, qseq))
-
-        # Increment next sequence number expected
-        self.expectedSeq = (self.expectedSeq + 1) % self.maxSeq
 
         if self.master:
             # We are the node in control of the queue
@@ -425,7 +434,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
                 self.ready_and_schedule(qid, qseq, scheduleAfter)
 
         else:
-
             # We are not in control, and must add as instructed
             self.queueList[qid].add_with_id(nodeID, qseq, request)
 
@@ -812,3 +820,60 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :return:
         """
         self._last_aid_added = None
+
+
+class FilteredDistributedQueue(DistributedQueue):
+    def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 32,
+                 throw_local_queue_events=False):
+
+        super(FilteredDistributedQueue, self).__init__(node=node, connection=connection, master=master, myWsize=myWsize,
+                                                       otherWsize=otherWsize, numQueues=numQueues, maxSeq=maxSeq,
+                                                       throw_local_queue_events=throw_local_queue_events)
+
+        # Request accept/reject rules
+        self.accept_rules = defaultdict(set)
+
+        # Add error handler for rejected requests
+        self.commandHandlers.update({
+            self.CMD_ERR_REJ: self.cmd_ERR_REJ
+        })
+
+        # Add rule validator
+        self.add_validators.append(self._validate_acceptance)
+
+    def add_accept_rule(self, nodeID, purpose_id):
+        self.accept_rules[nodeID].add(purpose_id)
+
+    def remove_accept_rule(self, nodeID, purpose_id):
+        try:
+            self.accept_rules[nodeID].remove(purpose_id)
+        except KeyError:
+            logger.error("Attempted to remove nonexistent rule for node {} purpose id {}".format(nodeID, purpose_id))
+
+    def load_accept_rules(self, accept_rules):
+        self.accept_rules.update(accept_rules)
+
+    def cmd_ERR_REJ(self, data):
+        """
+        Handle rejected add requests.
+        :param data:
+        :return:
+        """
+
+        [ack_id, qid, qseq, request] = data
+        if self.queueList[qid].contains(qseq):
+            self.remove_item(qid, qseq)
+        self.waitAddAcks.pop(ack_id)
+        self.acksWaiting -= 1
+        self.add_callback(result=(self.DQ_REJECT, qid, qseq, request))
+
+    def _validate_acceptance(self, data):
+        [nodeID, cseq, qid, qseq, request] = data
+        # Are we accepting request adds from this peer?
+        if request.purpose_id not in self.accept_rules[nodeID]:
+            logger.debug("ADD ERROR not accepting requests with purpose id {} from node {}".format(request.purpose_id,
+                                                                                                   nodeID))
+            self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
+            return False
+
+        return True
