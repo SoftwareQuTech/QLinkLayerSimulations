@@ -697,8 +697,12 @@ class NodeCentricEGP(EGP):
             m, basis = self.measurement_results.pop(0)
 
             # Flip this outcome in the case we need to apply a correction
-            if r == 2 and self.node.nodeID != creq.otherID:
-                m ^= 1
+            if self.node.nodeID != creq.otherID:
+                if basis == 0:
+                    m ^= 1
+
+                elif basis == 1 and r == 2:
+                    m ^= 1
 
             self._return_measurement_outcome(mhp_seq, aid, m, basis)
 
