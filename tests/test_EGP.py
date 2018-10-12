@@ -292,8 +292,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
-        alice_num_bits = 4
-        bob_num_bits = 10
+        alice_num_bits = 1000
+        bob_num_bits = 1000
         alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
                                    purpose_id=1, priority=10, measure_directly=True)
         bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
@@ -321,13 +321,36 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        import pdb
-        pdb.set_trace()
-        sim_run(20)
-        pdb.set_trace()
+        sim_run(1000)
 
         self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits)
-        self.assertEqual(self.alice_results, self.bob_results)
+
+        from collections import defaultdict
+        correlated_measurements = defaultdict(int)
+        total_measurements = defaultdict(int)
+        for resA, resB in zip(self.alice_results, self.bob_results):
+            a_create, a_id, a_m, a_basis, a_t = resA
+            b_create, b_id, b_m, b_basis, b_t = resB
+            self.assertEqual(a_create, b_create)
+            self.assertEqual(a_id, b_id)
+            self.assertEqual(a_t, b_t)
+
+            if a_basis == b_basis:
+                total_measurements[a_basis] += 1
+                if a_m == b_m:
+                    correlated_measurements[a_basis] += 1
+
+        # Assume basis == 0 -> Z and basis == 1 -> X
+        alpha = egpA.mhp.alpha
+        expected_z = 1 - alpha / (4 - 3*alpha)
+        actual_z = correlated_measurements[0] / total_measurements[0]
+        expected_x = (8 - 7*alpha) / (8 - 6 * alpha)
+        actual_x = correlated_measurements[1] / total_measurements[1]
+
+        import pdb
+        pdb.set_trace()
+        self.assertGreaterEqual(actual_z, expected_z)
+        self.assertGreaterEqual(actual_x, expected_x)
 
         # Check the entangled pairs, ignore communication qubit
         self.assertTrue(False, "IMPLEMENT CHECKS FOR MEASURE DIRECTLY SUCCESS")
