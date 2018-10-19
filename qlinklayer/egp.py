@@ -578,7 +578,8 @@ class NodeCentricEGP(EGP):
             # Store the gen for pickup by mhp
             self.mhp_service.put_ready_data(self.node.nodeID, gen)
 
-            if self.scheduler.curr_request and not self.scheduler.curr_request.measure_directly and gen[0]:
+            # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
+            if self.scheduler.handling_measure_directly() and gen[0]:
                 suspend_time = 2*self.mhp.conn.full_cycle
                 logger.debug("Next generation attempt after {}".format(suspend_time))
                 self.scheduler.suspend_generation(suspend_time)
@@ -616,7 +617,11 @@ class NodeCentricEGP(EGP):
             # Check if this aid may have been expired while waiting for a reply from midpoint
             elif not self.scheduler.get_request(aid=aid):
                 logger.warning("Got MHP Reply containing aid {} for no local request!".format(aid))
-                self.qmm.free_qubit(self.mhp_service.get_comm_qubit_id(self.node))
+                self.qmm.vacate_qubit(self.mhp_service.get_comm_qubit_id(self.node))
+
+                # Update the MHP Sequence number as necessary
+                if r == 2:
+                    self._process_mhp_seq(mhp_seq, aid)
 
             # Otherwise this response is associated with a generation attempt
             else:
@@ -625,10 +630,10 @@ class NodeCentricEGP(EGP):
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
                     comm_q = self.scheduler.curr_gen[2]
-                    self.qmm.free_qubit(comm_q)
+                    self.qmm.vacate_qubit(comm_q)
                     self.issue_err(err=proto_err)
 
-                # No entanglement generation
+                # No entanglement generated
                 if r == 0:
                     logger.debug("Failed to produce entanglement with other node")
                     creq = self.scheduler.get_request(aid=aid)
@@ -776,8 +781,8 @@ class NodeCentricEGP(EGP):
         # Saves measurement outcome
         logger.debug("Measured {} on qubit".format(outcome))
         comm_q, storage_q = self.scheduler.curr_gen[2:4]
-        self.qmm.free_qubit(comm_q)
-        self.measurement_results.append((self.basis_choice, outcome))
+        self.qmm.vacate_qubit(comm_q)
+        self.measurement_results.append((outcome, self.basis_choice))
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """
@@ -951,7 +956,6 @@ class NodeCentricEGP(EGP):
             The basis used for measuring the qubit
         """
         logger.debug("Returning measure directly okay")
-
         # Get the current request
         creq = self.scheduler.get_request(aid=aid)
         now = self.get_current_time()
@@ -965,11 +969,6 @@ class NodeCentricEGP(EGP):
             logger.error("Request absolute queue IDs mismatch!")
             self.issue_err(err=self.ERR_OTHER)
 
-        # Get the used qubit info
-        comm_q, storage_q = self.scheduler.curr_gen[2:4]
-        if comm_q != storage_q:
-            self.qmm.free_qubit(comm_q)
-
         # Create entanglement identifier
         creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
         ent_id = (creatorID, creq.otherID, mhp_seq)
@@ -982,6 +981,9 @@ class NodeCentricEGP(EGP):
 
         # Pass back the okay and clean up
         self.issue_ok(result)
+
+        # Get the used qubit info
+        comm_q, storage_q = self.scheduler.curr_gen[2:4]
         self.scheduler.mark_gen_completed(gen_id=(aid, comm_q, storage_q))
         logger.debug("Scheduling entanglement completed event now.")
         self._schedule_now(self._EVT_BIT_COMPLETED)
@@ -999,7 +1001,7 @@ class NodeCentricEGP(EGP):
             creq.num_pairs -= 1
 
         else:
-            raise LinkLayerException("Request has invalid number of remaining pairs!")
+            raise LinkLayerException("Request has invalid number of remaining bits!")
 
     def _request_timeout_handler(self, evt):
         """
