@@ -1022,7 +1022,9 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
         if not sim_dir[-1] == '/':
             sim_dir += "/"
 
-        is_data_folder = lambda folder: os.path.isdir(folder) and (folder[:4] in ["2018", "2019", "2020"])
+        def is_data_folder(folder):
+            return os.path.isdir(folder) and (folder[:4] in ["2018", "2019", "2020"])
+
         data_folders = [entry for entry in os.listdir(sim_dir) if is_data_folder(entry)]
         results_path = sorted(data_folders, reverse=True)[0]
 

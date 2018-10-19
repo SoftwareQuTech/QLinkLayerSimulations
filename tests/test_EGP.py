@@ -15,7 +15,6 @@ from qlinklayer.egp import NodeCentricEGP, EGPRequest
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 
 
-
 def store_result(storage, result):
     storage.append(result)
 
@@ -87,7 +86,6 @@ class TestNodeCentricEGP(unittest.TestCase):
         bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
 
         return alice, bob
-
 
     def test_create(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
@@ -230,7 +228,6 @@ class TestNodeCentricEGP(unittest.TestCase):
     def test_successful_simulation(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
 
-
         # Set up EGP
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
@@ -338,9 +335,9 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Assume basis == 0 -> Z and basis == 1 -> X
         alpha = egpA.mhp.alpha
-        expected_z = 1 - alpha / (4 - 3*alpha)
+        expected_z = 1 - alpha / (4 - 3 * alpha)
         actual_z = correlated_measurements[0] / total_measurements[0]
-        expected_x = (8 - 7*alpha) / (8 - 6 * alpha)
+        expected_x = (8 - 7 * alpha) / (8 - 6 * alpha)
         actual_x = correlated_measurements[1] / total_measurements[1]
 
         # Allow a tolerance of 10%

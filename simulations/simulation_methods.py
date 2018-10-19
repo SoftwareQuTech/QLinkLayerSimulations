@@ -1,7 +1,8 @@
 import netsquid as ns
 import pdb
 import json
-import os, sys
+import os
+import sys
 from time import time
 import math
 from os.path import exists
