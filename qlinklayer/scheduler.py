@@ -212,8 +212,8 @@ class RequestScheduler(pydynaa.Entity):
         if self.curr_gen and self.curr_gen[1] == aid:
             logger.debug("Cleared current gen")
             removed_gens.append(self.curr_gen)
-            self.qmm.free_qubit(self.curr_gen[2])
-            self.qmm.free_qubit(self.curr_gen[3])
+            self.qmm.vacate_qubit(self.curr_gen[2])
+            self.qmm.vacate_qubit(self.curr_gen[3])
             self.curr_gen = None
 
         logger.debug("Removed remaining generations for {}: {}".format(aid, removed_gens))
@@ -267,6 +267,9 @@ class RequestScheduler(pydynaa.Entity):
                 return False
 
         return True
+
+    def handling_measure_directly(self):
+        return self.curr_request and not self.curr_request.measure_directly
 
     def reserve_resources_for_gen(self, request):
         """
