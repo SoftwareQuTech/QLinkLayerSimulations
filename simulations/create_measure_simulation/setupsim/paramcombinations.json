@@ -17,13 +17,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/no_losses/no_noise.json",
         "create_probA": 0.038000000000000006
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
-        "create_probA": 0.037927991999999994
->>>>>>> Stashed changes
     },
     "NoNoise_NC_NC_HRF": {
         "create_probB": 0,
@@ -43,13 +38,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/no_losses/no_noise.json",
         "create_probA": 0.15200000000000002
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/no_losses/network_with_cav_no_conv_no_losses.json",
-        "create_probA": 0.15171196799999997
->>>>>>> Stashed changes
     },
     "NoLoss_NC_NC_LRF": {
         "create_probB": 0,
@@ -69,13 +59,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/no_losses/no_losses.json",
         "create_probA": 0.03792492027455283
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/no_losses/no_noise.json",
-        "create_probA": 0.038000000000000006
->>>>>>> Stashed changes
     },
     "NoLoss_NC_NC_HRF": {
         "create_probB": 0,
@@ -95,13 +80,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/no_losses/no_losses.json",
         "create_probA": 0.15169968109821133
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/no_losses/no_noise.json",
-        "create_probA": 0.15200000000000002
->>>>>>> Stashed changes
     },
     "Lab_NC_NC_LRF": {
         "create_probB": 0,
@@ -121,13 +101,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/lab_configs/networks_no_cavity_no_conversion.json",
         "create_probA": 1.4031983136095813e-05
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_no_cav_no_conv.json",
-        "create_probA": 2.327171091763287e-05
->>>>>>> Stashed changes
     },
     "Lab_NC_NC_HRF": {
         "create_probB": 0,
@@ -147,13 +122,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/lab_configs/networks_no_cavity_no_conversion.json",
         "create_probA": 5.612793254438325e-05
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_no_cav_no_conv.json",
-        "create_probA": 9.308684367053148e-05
->>>>>>> Stashed changes
     },
     "Lab_NC_WC_LRF": {
         "create_probB": 0,
@@ -173,13 +143,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/lab_configs/networks_no_cavity_with_conversion.json",
         "create_probA": 4.325844876447611e-06
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_no_cav_with_conv.json",
-        "create_probA": 1.5999990398579446e-07
->>>>>>> Stashed changes
     },
     "Lab_NC_WC_HRF": {
         "create_probB": 0,
@@ -199,13 +164,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/lab_configs/networks_no_cavity_with_conversion.json",
         "create_probA": 1.7303379505790444e-05
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_no_cav_with_conv.json",
-        "create_probA": 6.399996159431779e-07
->>>>>>> Stashed changes
     },
     "Lab_WC_NC_LRF": {
         "create_probB": 0,
@@ -225,13 +185,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/lab_configs/networks_with_cavity_no_conversion.json",
         "create_probA": 0.0002201779006813446
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_with_cav_no_conv.json",
-        "create_probA": 0.00021541544073166394
->>>>>>> Stashed changes
     },
     "Lab_WC_NC_HRF": {
         "create_probB": 0,
@@ -251,13 +206,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/lab_configs/networks_with_cavity_no_conversion.json",
         "create_probA": 0.0008807116027253783
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_with_cav_no_conv.json",
-        "create_probA": 0.0008616617629266558
->>>>>>> Stashed changes
     },
     "Lab_WC_WC_LRF": {
         "create_probB": 0,
@@ -277,13 +227,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/lab_configs/networks_with_cavity_with_conversion.json",
         "create_probA": 6.625265161523623e-05
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_with_cav_with_conv.json",
-        "create_probA": 7.200511852909425e-05
->>>>>>> Stashed changes
     },
     "Lab_WC_WC_HRF": {
         "create_probB": 0,
@@ -303,13 +248,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/lab_configs/networks_with_cavity_with_conversion.json",
         "create_probA": 0.0002650106064609449
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/lab_configs/network_with_cav_with_conv.json",
-        "create_probA": 0.000288020474116377
->>>>>>> Stashed changes
     },
     "QLink_NC_NC_LRF": {
         "create_probB": 0,
@@ -329,13 +269,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/qlink_configs/networks_no_cavity_no_conversion.json",
         "create_probA": 1.5999990398579444e-07
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
-        "create_probA": 1.5999990398579446e-07
->>>>>>> Stashed changes
     },
     "QLink_NC_NC_HRF": {
         "create_probB": 0,
@@ -355,13 +290,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/qlink_configs/networks_no_cavity_no_conversion.json",
         "create_probA": 6.399996159431777e-07
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_no_cav_no_conv.json",
-        "create_probA": 6.399996159431779e-07
->>>>>>> Stashed changes
     },
     "QLink_NC_WC_LRF": {
         "create_probB": 0,
@@ -381,13 +311,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/qlink_configs/networks_no_cavity_with_conversion.json",
         "create_probA": 1.1889705089001753e-06
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
-        "create_probA": 1.5999990398579446e-07
->>>>>>> Stashed changes
     },
     "QLink_NC_WC_HRF": {
         "create_probB": 0,
@@ -407,13 +332,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/qlink_configs/networks_no_cavity_with_conversion.json",
         "create_probA": 4.755882035600701e-06
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_no_cav_with_conv.json",
-        "create_probA": 6.399996159431779e-07
->>>>>>> Stashed changes
     },
     "QLink_WC_NC_LRF": {
         "create_probB": 0,
@@ -433,13 +353,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/qlink_configs/networks_with_cavity_no_conversion.json",
         "create_probA": 1.5999990398579444e-07
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
-        "create_probA": 1.5999990398579446e-07
->>>>>>> Stashed changes
     },
     "QLink_WC_NC_HRF": {
         "create_probB": 0,
@@ -459,13 +374,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/qlink_configs/networks_with_cavity_no_conversion.json",
         "create_probA": 6.399996159431777e-07
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_with_cav_no_conv.json",
-        "create_probA": 6.399996159431779e-07
->>>>>>> Stashed changes
     },
     "QLink_WC_WC_LRF": {
         "create_probB": 0,
@@ -485,13 +395,8 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/qlink_configs/networks_with_cavity_with_conversion.json",
         "create_probA": 1.648662129591672e-05
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
-        "create_probA": 1.7907796090185066e-05
->>>>>>> Stashed changes
     },
     "QLink_WC_WC_HRF": {
         "create_probB": 0,
@@ -511,12 +416,7 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-<<<<<<< Updated upstream
         "config": "setupsim/config/qlink_configs/networks_with_cavity_with_conversion.json",
         "create_probA": 6.594648518366688e-05
-=======
-        "config": "/home/blacksheep/Documents/tu/QLinkLayer/simulations/create_measure_simulation/setupsim/config/qlink_configs/network_with_cav_with_conv.json",
-        "create_probA": 7.163118436074026e-05
->>>>>>> Stashed changes
     }
 }

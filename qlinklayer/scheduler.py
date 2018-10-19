@@ -39,6 +39,19 @@ class RequestScheduler(pydynaa.Entity):
         self._suspend = False
         self.resumeID = -1
 
+        # Timing information
+        self.mhp_full_cycle = 0.0
+
+    def configure_mhp_timings(self, full_cycle):
+        """
+        Provides scheduler relevant timing information for external MHP to help properly schedule entanglement
+        generation
+        :param full_cycle: float
+            The length of a full mhp cycle including the classical communication time
+        :return:
+        """
+        self.mhp_full_cycle = full_cycle
+
     def suspend_generation(self, t):
         """
         Instructs the scheduler to suspend generation for some specified time.
@@ -57,6 +70,9 @@ class RequestScheduler(pydynaa.Entity):
         self._schedule_after(t, EVT_RESUME)
 
     def resume_generation(self):
+        """
+        Manually re-enables entanglement generation
+        """
         self._suspend = False
 
     def _resume_generation_handler(self, evt, resumeID):
@@ -126,6 +142,12 @@ class RequestScheduler(pydynaa.Entity):
             self._process_outstanding_items()
             next_gen = self.get_next_gen_template()
 
+        # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
+        if not self.handling_measure_directly() and next_gen[0]:
+            suspend_time = 2 * self.mhp_full_cycle
+            logger.debug("Next generation attempt after {}".format(suspend_time))
+            self.suspend_generation(suspend_time)
+
         return next_gen
 
     def get_default_gen(self):
@@ -136,6 +158,21 @@ class RequestScheduler(pydynaa.Entity):
         """
         self.my_free_memory = self.qmm.get_free_mem_ad()
         return False, None, None, None, None, self.my_free_memory
+
+    def curr_aid(self):
+        """
+        Returns the aid for the current generation request if any else none
+        :return:
+        """
+        return self.curr_gen[1] if self.curr_gen else None
+
+    def curr_storage_id(self):
+        """
+        Returns the storage id for the current generation if any
+        :return: int
+            Storage id in qmem
+        """
+        return self.curr_gen[3] if self.curr_gen else None
 
     def get_next_gen_template(self):
         """
@@ -178,16 +215,37 @@ class RequestScheduler(pydynaa.Entity):
 
         return next_gen
 
-    def mark_gen_completed(self, gen_id):
+    def mark_gen_completed(self, aid):
         """
-        Marks a generation performed by the EGP as completed.
-        :param gen_id: tuple of (tuple, int, int)
-            Contains the aid, comm_q, and storage_q used for the generation
+        Marks a generation performed by the EGP as completed and cleans up any remaining state.
+        :param aid: tuple of  int, int
+            Contains the aid used for the generation
         :return:
         """
-        logger.debug("Marking gen id {} as completed".format(gen_id))
-        if self.curr_gen and self.curr_gen[1:4] == gen_id:
+        logger.debug("Marking aid {} as completed".format(aid))
+        if self.curr_gen and self.curr_gen[1] == aid:
+            # Get the used qubit info and free unused resources
+            comm_q, storage_q = self.curr_gen[2:4]
+            if comm_q != storage_q:
+                self.qmm.free_qubit(comm_q)
+
             self.curr_gen = None
+            # Update number of remaining pairs on request, remove if completed
+            if self.curr_request.num_pairs > 1:
+                logger.debug("Decrementing number of remaining pairs")
+                self.curr_request.num_pairs -= 1
+
+            elif self.curr_request.num_pairs == 1:
+                logger.debug("Generated final pair, removing request")
+                self.clear_request(aid=aid)
+
+            else:
+                raise Exception("Current request has invalid number of remaining pairs")
+
+        else:
+            logger.warning("Marking gen completed for inactive request")
+            req = self.get_request(aid)
+            req.num_pairs -= 1
 
     def get_request(self, aid):
         """
@@ -269,7 +327,11 @@ class RequestScheduler(pydynaa.Entity):
         return True
 
     def handling_measure_directly(self):
-        return self.curr_request and not self.curr_request.measure_directly
+        """
+        Checks if the scheduler is managing a measure_directly request
+        :return: bool
+        """
+        return self.curr_request and self.curr_request.measure_directly
 
     def reserve_resources_for_gen(self, request):
         """

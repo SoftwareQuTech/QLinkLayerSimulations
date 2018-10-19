@@ -261,8 +261,9 @@ class NodeCentricEGP(EGP):
         self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
 
         # Measure directly storage and handler
-        self.basis_choice = None
+        self.basis_choice = []
         self.measurement_results = []
+        self.corrected_measurements = []
 
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
                                  alphaA=0.1, alphaB=0.1):
@@ -308,6 +309,9 @@ class NodeCentricEGP(EGP):
         self._setup_local_mhp()
         other_egp._setup_local_mhp()
 
+        # Give scheduler information about timing
+        self.scheduler.configure_mhp_timings(full_cycle=self.mhp.conn.full_cycle)
+
     def _setup_local_mhp(self):
         """
         Sets up the local mhp protocol that checks for entanglement requests periodically
@@ -315,6 +319,8 @@ class NodeCentricEGP(EGP):
         # Get our protocol from the service
         self.mhp = self.mhp_service.configure_node_proto(node=self.node, stateProvider=self.trigger_pair_mhp,
                                                          callback=self.handle_reply_mhp)
+
+        # Set a handler for emissions in the measure directly case
         self._emission_handler = EventHandler(self._handle_photon_emission)
         self._wait(self._emission_handler, entity=self.mhp, event_type=self.mhp._EVT_ENTANGLE_ATTEMPT)
 
@@ -477,11 +483,11 @@ class NodeCentricEGP(EGP):
             self._add_to_queue(creq)
             logger.debug("Scheduling create event now.")
             self._schedule_now(self._EVT_CREATE)
-            return (creq.create_id, creq.create_time)
+            return creq.create_id, creq.create_time
 
-        except Exception as err:
+        except Exception:
             logger.exception("Failed to issue create")
-            self.issue_err(self.ERR_CREATE, err_data=err)
+            self.issue_err(err=self.ERR_CREATE)
 
     def _assign_creation_information(self, creq):
         """
@@ -561,9 +567,9 @@ class NodeCentricEGP(EGP):
                 logger.error("Error occurred adding request to distributed queue!")
                 self.issue_err(err=status, err_data=creq.create_id)
 
-        except Exception as err_data:
+        except Exception:
             logger.exception("Error occurred processing DQP add callback!")
-            self.issue_err(err=self.ERR_OTHER, err_data=err_data)
+            self.issue_err(err=self.ERR_OTHER)
 
     # Handler to be given to MHP as a stateProvider
     def trigger_pair_mhp(self):
@@ -571,6 +577,7 @@ class NodeCentricEGP(EGP):
         Handler to be given to the MHP service that allows it to ask the scheduler
         if there are any requests and to receive a request to process
         """
+        self.scheduler.configure_mhp_timings(full_cycle=self.mhp.conn.full_cycle)
         try:
             # Get scheduler's next gen task
             gen = self.scheduler.next()
@@ -578,17 +585,11 @@ class NodeCentricEGP(EGP):
             # Store the gen for pickup by mhp
             self.mhp_service.put_ready_data(self.node.nodeID, gen)
 
-            # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
-            if self.scheduler.handling_measure_directly() and gen[0]:
-                suspend_time = 2*self.mhp.conn.full_cycle
-                logger.debug("Next generation attempt after {}".format(suspend_time))
-                self.scheduler.suspend_generation(suspend_time)
-
             return True
 
-        except Exception as err_data:
+        except Exception:
             logger.exception("Error occurred when triggering MHP!")
-            self.issue_err(err=self.ERR_OTHER, err_data=err_data)
+            self.issue_err(err=self.ERR_OTHER)
             return False
 
     # Callback handler to be given to MHP so that EGP updates when request is satisfied
@@ -665,8 +666,8 @@ class NodeCentricEGP(EGP):
         try:
             r, other_free_memory, mhp_seq, aid, proto_err = result
             return r, other_free_memory, mhp_seq, aid, proto_err
-        except Exception as err:
-            self.issue_err(err=self.ERR_OTHER, err_data=self.ERR_OTHER)
+        except Exception:
+            self.issue_err(err=self.ERR_OTHER)
             raise LinkLayerException("Malformed MHP reply received: {}".format(result))
 
     def _handle_reply_without_aid(self, proto_err):
@@ -698,18 +699,20 @@ class NodeCentricEGP(EGP):
         """
         creq = self.scheduler.get_request(aid=aid)
         if creq.measure_directly:
-            # Retrive the measurement outcome and basis
             m, basis = self.measurement_results.pop(0)
-
             # Flip this outcome in the case we need to apply a correction
             if self.node.nodeID != creq.otherID:
+                # Measurements in computational basis are always anti-correlated for the entangled state
                 if basis == 0:
                     m ^= 1
 
+                # Measurements in hadamard basis are only anti-correlated when r == 2
                 elif basis == 1 and r == 2:
                     m ^= 1
 
-            self._return_measurement_outcome(mhp_seq, aid, m, basis)
+            # Pass up the meaurement info to higher layers
+            self.corrected_measurements.append((m, basis))
+            self._return_ok(mhp_seq, aid)
 
         else:
             suspend_time = 0
@@ -757,14 +760,15 @@ class NodeCentricEGP(EGP):
             q = prgm.load_mem_qubits(qmem=self.node.qmem)[comm_q]
 
             # Make a random basis choice
-            self.basis_choice = random.randint(0, 1)
+            basis = random.randint(0, 1)
 
-            if self.basis_choice:
+            if basis:
                 logger.debug("Measuring comm_q {} in Hadamard basis".format(comm_q))
                 q.H()
             else:
                 logger.debug("Measuring comm_q {} in Standard basis".format(comm_q))
 
+            self.basis_choice.append(basis)
             q.measure(callback=self._handle_measurement_outcome)
             self.node.qmem.execute_program(prgm)
 
@@ -777,12 +781,12 @@ class NodeCentricEGP(EGP):
             The measurement outcome
         :return: None
         """
-
         # Saves measurement outcome
         logger.debug("Measured {} on qubit".format(outcome))
-        comm_q, storage_q = self.scheduler.curr_gen[2:4]
+        comm_q = self.scheduler.curr_gen[2]
         self.qmm.vacate_qubit(comm_q)
-        self.measurement_results.append((outcome, self.basis_choice))
+        basis = self.basis_choice.pop(0)
+        self.measurement_results.append((outcome, basis))
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """
@@ -793,8 +797,8 @@ class NodeCentricEGP(EGP):
             The MHP Sequence number from the midpoint
         :return:
         """
-        logger.debug("Checking received MHP_SEQ")
         # Sanity check the MHP sequence number
+        logger.debug("Checking received MHP_SEQ")
         if mhp_seq > self.expected_seq:
             logger.error("MHP_SEQ {} greater than expected SEQ {}".format(mhp_seq, self.expected_seq))
 
@@ -805,7 +809,9 @@ class NodeCentricEGP(EGP):
             # Clear the request
             self.scheduler.clear_request(aid=aid)
 
+            # Update expected sequence number
             self.expected_seq = new_mhp_seq
+
             return False
 
         elif mhp_seq < self.expected_seq:
@@ -877,6 +883,53 @@ class NodeCentricEGP(EGP):
             logger.debug("Leaving entangled qubit in comm_q {}".format(comm_q))
             self._return_ok(mhp_seq, aid)
 
+    def get_measurement_outcome(self, creq):
+        """
+        Returns the oldest measurement outcome along with its basis.
+        :return: tuple of int, int
+            The measurement outcome and basis in which it was measured
+        """
+        # Retrieve the measurement outcome and basis
+        m, basis = self.corrected_measurements.pop(0)
+        return m, basis
+
+    def _create_ok(self, creq, mhp_seq):
+        """
+        Crafts an OK to issue to higher layers depending on the current generation.  If measure_directly we construct
+        and ent_id that excludes the logical_id.  The ok for a measure_directly request contains the measurement
+        outcome and basis.
+        :param creq: obj ~qlinklayer.EGPRequest
+            The request to construct the okay for
+        :param mhp_seq: int
+            MHP Sequence corresponding to the communication that signaled success for this generation
+        :return: tuple
+            Contains ok information for the request
+        """
+        # Get the fidelity estimate from FEU
+        logger.debug("Estimating fidelity")
+        fidelity_estimate = self.feu.estimated_fidelity
+
+        # Create entanglement identifier
+        logical_id = self.scheduler.curr_storage_id()
+        creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
+
+        # Construct result information
+        now = self.get_current_time()
+        t_create = now - self.mhp_service.get_midpoint_comm_delay(self.node)
+
+        # Craft okay based on the request type
+        if self.scheduler.handling_measure_directly():
+            ent_id = (creatorID, creq.otherID, mhp_seq)
+            m, basis = self.get_measurement_outcome(creq)
+            result = (creq.create_id, ent_id, m, basis, t_create)
+
+        else:
+            ent_id = (creatorID, creq.otherID, mhp_seq, logical_id)
+            t_goodness = t_create
+            result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
+
+        return result
+
     def _return_ok(self, mhp_seq, aid):
         """
         Constructs the OK message corresponding to the generation attempt and passes it to higher layer
@@ -890,118 +943,34 @@ class NodeCentricEGP(EGP):
 
         # Get the current request
         creq = self.scheduler.get_request(aid=aid)
-        now = self.get_current_time()
-
         if creq is None:
             logger.error("Request not found!")
             self.issue_err(err=self.ERR_OTHER)
 
         # Check that aid actually corresponds to the current request
-        if not self.scheduler.curr_gen[1] == aid:
+        if not self.scheduler.curr_aid() == aid:
             logger.error("Request absolute queue IDs mismatch!")
             self.issue_err(err=self.ERR_OTHER)
 
-        # Get the used qubit info
-        comm_q, storage_q = self.scheduler.curr_gen[2:4]
-        if comm_q != storage_q:
-            self.qmm.free_qubit(comm_q)
-
-        # Get the fidelity estimate from FEU
-        logger.debug("Estimating fidelity")
-        fidelity_estimate = self.feu.estimated_fidelity
-
-        # Create entanglement identifier
-        logical_id = self.qmm.physical_to_logical(storage_q)
-        creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
-        ent_id = (creatorID, creq.otherID, mhp_seq, logical_id)
-
-        logger.debug("Issuing okay to caller")
-
-        # Construct result information
-        t_create = now - self.mhp_service.get_midpoint_comm_delay(self.node)
-        t_goodness = t_create
-        result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
-
         # Pass back the okay and clean up
-        self.issue_ok(result)
-        self.scheduler.mark_gen_completed(gen_id=(aid, comm_q, storage_q))
-        logger.debug("Scheduling entanglement completed event now.")
-        self._schedule_now(self._EVT_ENT_COMPLETED)
+        logger.debug("Issuing okay to caller")
+        ok_data = self._create_ok(creq, mhp_seq)
+        self.issue_ok(ok_data)
 
-        # Update number of remaining pairs on request, remove if completed
-        if creq.num_pairs == 1:
-            logger.debug("Generated final pair, removing request")
-            self.scheduler.clear_request(aid=aid)
-            logger.debug("Scheduling request completed event now.")
-            self._schedule_now(self._EVT_REQ_COMPLETED)
-
-        elif creq.num_pairs >= 2:
-            logger.debug("Decrementing number of remaining pairs")
-            creq.num_pairs -= 1
+        # Schedule different events depending on the type of gen we completed
+        if self.scheduler.handling_measure_directly():
+            self._schedule_now(self._EVT_BIT_COMPLETED)
 
         else:
-            raise LinkLayerException("Request has invalid number of remaining pairs!")
+            # Schedule event for entanglement completion
+            self._schedule_now(self._EVT_ENT_COMPLETED)
 
-    def _return_measurement_outcome(self, mhp_seq, aid, m, basis):
-        """
-        Constructs the OK message corresponding to the measure directly attempt and passes the produced bit to higher
-        layers.
-        :param mhp_seq: int
-            The MHP Sequence number corresponding to this generation
-        :param aid: tuple of (int, int)
-            The absolute queue ID corresponding to this generation attempt
-        :param m: int
-            The measurement outcome
-        :param basis: int
-            The basis used for measuring the qubit
-        """
-        logger.debug("Returning measure directly okay")
-        # Get the current request
-        creq = self.scheduler.get_request(aid=aid)
-        now = self.get_current_time()
+        self.scheduler.mark_gen_completed(aid=aid)
 
-        if creq is None:
-            logger.error("Request not found!")
-            self.issue_err(err=self.ERR_OTHER)
-
-        # Check that aid actually corresponds to the current request
-        if not self.scheduler.curr_gen[1] == aid:
-            logger.error("Request absolute queue IDs mismatch!")
-            self.issue_err(err=self.ERR_OTHER)
-
-        # Create entanglement identifier
-        creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
-        ent_id = (creatorID, creq.otherID, mhp_seq)
-
-        logger.debug("Issuing okay to caller")
-
-        # Construct result information
-        t_create = now - self.mhp_service.get_midpoint_comm_delay(self.node)
-        result = (creq.create_id, ent_id, m, basis, t_create)
-
-        # Pass back the okay and clean up
-        self.issue_ok(result)
-
-        # Get the used qubit info
-        comm_q, storage_q = self.scheduler.curr_gen[2:4]
-        self.scheduler.mark_gen_completed(gen_id=(aid, comm_q, storage_q))
-        logger.debug("Scheduling entanglement completed event now.")
-        self._schedule_now(self._EVT_BIT_COMPLETED)
-
-        # Update number of remaining pairs on request, remove if completed
-        if creq.num_pairs == 1:
-            logger.debug("Generated final pair, removing request")
-            self.scheduler.clear_request(aid=aid)
-            logger.debug("Scheduling request completed event now.")
-            self._schedule_now(self._EVT_REQ_COMPLETED)
+        # Schedule event if request completed
+        if self.scheduler.get_request(aid) is None:
             self.measurement_results = []
-
-        elif creq.num_pairs >= 2:
-            logger.debug("Decrementing number of remaining pairs")
-            creq.num_pairs -= 1
-
-        else:
-            raise LinkLayerException("Request has invalid number of remaining bits!")
+            self._schedule_now(self._EVT_REQ_COMPLETED)
 
     def _request_timeout_handler(self, evt):
         """

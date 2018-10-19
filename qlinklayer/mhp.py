@@ -1,12 +1,12 @@
 import abc
 from collections import defaultdict
-from math import exp, isclose
+from math import exp
 from easysquid.services import Service, TimedServiceProtocol
 from easysquid.simpleLink import NodeCentricMHP
 from easysquid.easyfibre import HeraldedFibreConnection
 from easysquid.toolbox import EasySquidException, logger
 from netsquid.qubits.qubitapi import create_qubits
-from netsquid.pydynaa import EventType, EventHandler
+from netsquid.pydynaa import EventType
 from netsquid.simutil import sim_time
 
 
