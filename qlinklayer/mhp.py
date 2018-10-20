@@ -522,7 +522,7 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
     def _do_swap(self):
         # Performs entanglement swapping, if two qubits are available
-        node_reqs = [r.request_data for r in self.node_requests.values()]
+        node_reqs = [r.request_data for r in self.node_requests.values() if r is not None]
         num_production_requests = node_reqs.count(self.CMD_PRODUCE)
 
         logger.debug("Have {} production requests".format(num_production_requests))
