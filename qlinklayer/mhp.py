@@ -522,19 +522,21 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
     def _do_swap(self):
         # Performs entanglement swapping, if two qubits are available
-        num_missing_qubits = list(self.qubits.values()).count(None)
-        logger.debug("Missing {} qubits for swapping".format(num_missing_qubits))
+        node_reqs = [r.request_data for r in self.node_requests.values()]
+        num_production_requests = node_reqs.count(self.CMD_PRODUCE)
+
+        logger.debug("Have {} production requests".format(num_production_requests))
+
+        # Don't bother swapping because neither party requested entanglement
+        if num_production_requests == 0:
+            return
 
         # Error if we only received on qubit during this cycle
-        if num_missing_qubits == 1:
+        elif num_production_requests != 2:
             for _, qubit in self.qubits.items():
                 if qubit:
                     self._drop_qubit(qubit)
             raise EasySquidException("Missing qubit from one node!")
-
-        # If missing both qubits then nodes may have passed information between each other
-        elif num_missing_qubits == 2:
-            return
 
         for (id, q) in self.qubits.items():
             if q is None:
