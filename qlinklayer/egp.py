@@ -524,7 +524,15 @@ class NodeCentricEGP(EGP):
 
         # Check if we can satisfy the request within the given time frame
         attempt_latency = self.mhp_service.get_cycle_time(self.node)
-        min_time = attempt_latency * creq.num_pairs
+
+        # Minimum amount of time for measure directly corresponds to the cycle time, attempts can overlap
+        if creq.measure_directly:
+            min_time = attempt_latency * creq.num_pairs
+
+        # Minimum amount of time for stored entanglement requires obtaining info from midpoint, requests cannot overlap
+        else:
+            min_time = self.mhp.conn.full_cycle * creq.num_pairs
+
         if (min_time > creq.max_time) and (creq.max_time != 0):
             logger.error("Requested max time is too short")
             return self.ERR_UNSUPP
