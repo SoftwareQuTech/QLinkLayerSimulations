@@ -533,6 +533,7 @@ class NodeCentricEGP(EGP):
         else:
             min_time = self.mhp.conn.full_cycle * creq.num_pairs
 
+        # Check against request, max_time of 0 means will wait indefinitely
         if (min_time > creq.max_time) and (creq.max_time != 0):
             logger.error("Requested max time is too short")
             return self.ERR_UNSUPP
