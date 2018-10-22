@@ -585,6 +585,10 @@ class NodeCentricEGP(EGP):
             # Store the gen for pickup by mhp
             self.mhp_service.put_ready_data(self.node.nodeID, gen)
 
+            if gen[0]:
+                import pdb
+                pdb.set_trace()
+
             return True
 
         except Exception:
@@ -626,7 +630,6 @@ class NodeCentricEGP(EGP):
 
             # Otherwise this response is associated with a generation attempt
             else:
-                self.scheduler.resume_generation()
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
@@ -638,7 +641,7 @@ class NodeCentricEGP(EGP):
                 if r == 0:
                     logger.debug("Failed to produce entanglement with other node")
                     creq = self.scheduler.get_request(aid=aid)
-                    if creq.measure_directly:
+                    if creq.measure_directly and self.scheduler.curr_aid() == aid:
                         m, basis = self.measurement_results.pop(0)
                         logger.debug("Removing measurement outcome {} in basis {} from stored results".format(m, basis))
 
@@ -653,7 +656,7 @@ class NodeCentricEGP(EGP):
 
             logger.debug("Finished handling MHP Reply")
 
-        except Exception as err_data:
+        except Exception:
             logger.exception("An error occurred handling MHP Reply!")
             self.issue_err(err=self.ERR_OTHER, err_data=self.ERR_OTHER)
 
@@ -699,7 +702,16 @@ class NodeCentricEGP(EGP):
         """
         creq = self.scheduler.get_request(aid=aid)
         if creq.measure_directly:
-            m, basis = self.measurement_results.pop(0)
+            if aid != self.scheduler.curr_aid():
+                logger.error("RECEIVED VALID MESSAGE FOR INVALID AID")
+
+            try:
+                m, basis = self.measurement_results.pop(0)
+
+            except:
+                import pdb
+                pdb.set_trace()
+
             # Flip this outcome in the case we need to apply a correction
             if self.node.nodeID != creq.otherID:
                 # Measurements in computational basis are always anti-correlated for the entangled state
@@ -753,7 +765,8 @@ class NodeCentricEGP(EGP):
         if self.scheduler.curr_request.measure_directly:
             logger.debug("Beginning measurement of qubit for measure directly")
             # Grab the current generation information
-            aid, comm_q, _ = self.scheduler.curr_gen[1:4]
+            aid = self.scheduler.curr_aid()
+            comm_q = self.scheduler.curr_gen[2]
 
             # Constuct a quantum program
             prgm = QuantumProgram()
@@ -783,10 +796,11 @@ class NodeCentricEGP(EGP):
         """
         # Saves measurement outcome
         logger.debug("Measured {} on qubit".format(outcome))
-        comm_q = self.scheduler.curr_gen[2]
-        self.qmm.vacate_qubit(comm_q)
-        basis = self.basis_choice.pop(0)
-        self.measurement_results.append((outcome, basis))
+        if self.scheduler.curr_gen:
+            comm_q = self.scheduler.curr_gen[2]
+            self.qmm.vacate_qubit(comm_q)
+            basis = self.basis_choice.pop(0)
+            self.measurement_results.append((outcome, basis))
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """
@@ -965,10 +979,12 @@ class NodeCentricEGP(EGP):
             # Schedule event for entanglement completion
             self._schedule_now(self._EVT_ENT_COMPLETED)
 
+        logger.debug("Marking generation completed")
         self.scheduler.mark_gen_completed(aid=aid)
 
         # Schedule event if request completed
         if self.scheduler.get_request(aid) is None:
+            logger.debug("Finished measure directly request, clearing stored results")
             self.measurement_results = []
             self._schedule_now(self._EVT_REQ_COMPLETED)
 

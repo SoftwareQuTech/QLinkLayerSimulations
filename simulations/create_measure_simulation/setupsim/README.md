@@ -35,7 +35,7 @@ How to use this file and how it's used by the simulation, see the README in the 
  
 To run the simulation, do the following:
 
-1. Set the environment variable `SIMULATION_DIR` to the folder containing this file. This can easily be done by typing `export SIMULATION_DIR=$(pwd)` in this folder.
+1. Set the environment variable `SIMULATION_DIR` to the folder containing the setupsim folder. This can easily be done by typing `export SIMULATION_DIR=$(pwd)` in that folder.
 2. Possibly change the parameters in `setupsim/create_simdetails_and_paramcombination.py` and run this script.
 3.
      - If you are running the simulation locally, i.e. on your computer type:

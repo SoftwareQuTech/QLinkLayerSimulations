@@ -2,7 +2,9 @@
 # Scheduler
 #
 from netsquid import pydynaa
+from netsquid.simutil import sim_time
 from easysquid.toolbox import logger
+from functools import partial
 
 
 class RequestScheduler(pydynaa.Entity):
@@ -38,6 +40,7 @@ class RequestScheduler(pydynaa.Entity):
         self.timed_out_requests = []
         self._suspend = False
         self.resumeID = -1
+        self.resume_time = 0.0
 
         # Timing information
         self.mhp_full_cycle = 0.0
@@ -58,16 +61,18 @@ class RequestScheduler(pydynaa.Entity):
         :param t: float
             The amount of simulation time to suspend entanglement generation for
         """
-        self._suspend = True
 
-        # Set up an event handler to resume entanglement generation
-        from functools import partial
-        self.resumeID += 1
-        self.resume_handler = pydynaa.EventHandler(partial(self._resume_generation_handler, resumeID=self.resumeID))
-        EVT_RESUME = pydynaa.EventType("RESUME", "Triggers when we believe peer finished correction")
-        self._wait_once(self.resume_handler, entity=self, event_type=EVT_RESUME)
-        logger.debug("Scheduling resume event after {}.".format(t))
-        self._schedule_after(t, EVT_RESUME)
+        resume_time = sim_time() + t
+        if resume_time >= self.resume_time:
+            # Set up an event handler to resume entanglement generation
+            self._suspend = True
+            self.resume_time = resume_time
+            self.resumeID += 1
+            self.resume_handler = pydynaa.EventHandler(partial(self._resume_generation_handler, resumeID=self.resumeID))
+            EVT_RESUME = pydynaa.EventType("RESUME", "Triggers when we believe peer finished correction")
+            self._wait_once(self.resume_handler, entity=self, event_type=EVT_RESUME)
+            logger.debug("Scheduling resume event after {}.".format(t))
+            self._schedule_after(t, EVT_RESUME)
 
     def resume_generation(self):
         """
@@ -144,7 +149,7 @@ class RequestScheduler(pydynaa.Entity):
 
         # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
         if not self.handling_measure_directly() and next_gen[0]:
-            suspend_time = 2 * self.mhp_full_cycle
+            suspend_time = self.mhp_full_cycle
             logger.debug("Next generation attempt after {}".format(suspend_time))
             self.suspend_generation(suspend_time)
 

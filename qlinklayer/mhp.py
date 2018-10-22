@@ -528,6 +528,9 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         num_production_requests = node_reqs.count(self.CMD_PRODUCE)
 
         logger.debug("Have {} production requests".format(num_production_requests))
+        if num_production_requests > 0:
+            import pdb
+            pdb.set_trace()
 
         # Don't bother swapping because neither party requested entanglement
         if num_production_requests == 0:

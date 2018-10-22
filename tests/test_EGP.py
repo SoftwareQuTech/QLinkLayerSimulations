@@ -482,11 +482,17 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
+        import pdb
+        pdb.set_trace()
+
         sim_run(20000)
+
+        pdb.set_trace()
 
         # Don't include t_goodness and t_create, since these could differ
         alice_results = list(map(lambda res: res[:-2], self.alice_results))
         bob_results = list(map(lambda res: res[:-2], self.bob_results))
+        self.assertEqual(len(self.alice_results), alice_pairs + bob_pairs)
         self.assertEqual(alice_results, bob_results)
 
         # Check the entangled pairs, ignore communication qubit
