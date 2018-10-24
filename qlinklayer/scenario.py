@@ -279,7 +279,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         :param other_id: int
         :param mhp_seq: int
         """
-        qstate = self.node.qmem.peek(qubit_id)[0][0].qstate
+        qstate = self.node.qmem.peek(qubit_id)[0].qstate
         formalism = get_qstate_formalism()
         key = (source_id, other_id, mhp_seq)
 
@@ -402,15 +402,11 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         self.ok_storage.append(result)
 
         # Extract fields from result
-        create_id, ent_id, f_goodness, t_create, t_goodness = result
-        creator_id, peer_id, mhp_seq, logical_id = ent_id
+        create_id, ent_id, outcome, basis, t_create = result
 
         # Store the basis/bit choice and the midpoint outcomes for QubErr or key generation
-        meas_data = (self.egp.basis_choice, self.egp.bit_choice, self.egp.midpoint_outcome)
+        meas_data = (basis, outcome)
         self.measurement_storage[ent_id] = meas_data
-
-        # Free the qubit for the EGP
-        self.qmm.free_qubit(logical_id)
 
     def get_ok(self, remove=True):
         """

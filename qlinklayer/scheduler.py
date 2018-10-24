@@ -2,7 +2,9 @@
 # Scheduler
 #
 from netsquid import pydynaa
+from netsquid.simutil import sim_time
 from easysquid.toolbox import logger
+from functools import partial
 
 
 class RequestScheduler(pydynaa.Entity):
@@ -30,12 +32,29 @@ class RequestScheduler(pydynaa.Entity):
 
         # Generation tracking
         self.requests = {}
+        self.curr_request = None
         self.curr_gen = None
         self.default_gen = self.get_default_gen()
         self.outstanding_gens = []
         self.outstanding_items = {}
         self.timed_out_requests = []
+        self.prev_requests = []
         self._suspend = False
+        self.resumeID = -1
+        self.resume_time = 0.0
+
+        # Timing information
+        self.mhp_full_cycle = 0.0
+
+    def configure_mhp_timings(self, full_cycle):
+        """
+        Provides scheduler relevant timing information for external MHP to help properly schedule entanglement
+        generation
+        :param full_cycle: float
+            The length of a full mhp cycle including the classical communication time
+        :return:
+        """
+        self.mhp_full_cycle = full_cycle
 
     def suspend_generation(self, t):
         """
@@ -43,23 +62,34 @@ class RequestScheduler(pydynaa.Entity):
         :param t: float
             The amount of simulation time to suspend entanglement generation for
         """
-        self._suspend = True
 
-        # Set up an event handler to resume entanglement generation
-        resume_handler = pydynaa.EventHandler(self._resume_generation)
-        EVT_RESUME = pydynaa.EventType("RESUME", "Triggers when we believe peer finished correction")
-        self._wait_once(resume_handler, entity=self, event_type=EVT_RESUME)
-        logger.debug("Scheduling resume event after {}.".format(t))
-        self._schedule_after(t, EVT_RESUME)
+        resume_time = sim_time() + t
+        if resume_time >= self.resume_time:
+            # Set up an event handler to resume entanglement generation
+            self._suspend = True
+            self.resume_time = resume_time
+            self.resumeID += 1
+            self.resume_handler = pydynaa.EventHandler(partial(self._resume_generation_handler, resumeID=self.resumeID))
+            EVT_RESUME = pydynaa.EventType("RESUME", "Triggers when we believe peer finished correction")
+            self._wait_once(self.resume_handler, entity=self, event_type=EVT_RESUME)
+            logger.debug("Scheduling resume event after {}.".format(t))
+            self._schedule_after(t, EVT_RESUME)
 
-    def _resume_generation(self, evt):
+    def resume_generation(self):
+        """
+        Manually re-enables entanglement generation
+        """
+        self._suspend = False
+
+    def _resume_generation_handler(self, evt, resumeID):
         """
         Callback handler to flip the suspend flag and allow the scheduler to resume entanglement generation
         :param evt: obj `~netsquid.pydynaa.Event`
             The event that triggered this handler
         """
-        logger.debug("Resuming generation")
-        self._suspend = False
+        if resumeID == self.resumeID:
+            logger.debug("Resuming generation")
+            self._suspend = False
 
     def update_other_mem_size(self, mem):
         """
@@ -118,6 +148,12 @@ class RequestScheduler(pydynaa.Entity):
             self._process_outstanding_items()
             next_gen = self.get_next_gen_template()
 
+        # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
+        if not self.handling_measure_directly() and next_gen[0]:
+            suspend_time = self.mhp_full_cycle
+            logger.debug("Next generation attempt after {}".format(suspend_time))
+            self.suspend_generation(suspend_time)
+
         return next_gen
 
     def get_default_gen(self):
@@ -128,6 +164,21 @@ class RequestScheduler(pydynaa.Entity):
         """
         self.my_free_memory = self.qmm.get_free_mem_ad()
         return False, None, None, None, None, self.my_free_memory
+
+    def curr_aid(self):
+        """
+        Returns the aid for the current generation request if any else none
+        :return:
+        """
+        return self.curr_gen[1] if self.curr_gen else None
+
+    def curr_storage_id(self):
+        """
+        Returns the storage id for the current generation if any
+        :return: int
+            Storage id in qmem
+        """
+        return self.curr_gen[3] if self.curr_gen else None
 
     def get_next_gen_template(self):
         """
@@ -170,16 +221,37 @@ class RequestScheduler(pydynaa.Entity):
 
         return next_gen
 
-    def mark_gen_completed(self, gen_id):
+    def mark_gen_completed(self, aid):
         """
-        Marks a generation performed by the EGP as completed.
-        :param gen_id: tuple of (tuple, int, int)
-            Contains the aid, comm_q, and storage_q used for the generation
+        Marks a generation performed by the EGP as completed and cleans up any remaining state.
+        :param aid: tuple of  int, int
+            Contains the aid used for the generation
         :return:
         """
-        logger.debug("Marking gen id {} as completed".format(gen_id))
-        if self.curr_gen and self.curr_gen[1:4] == gen_id:
+        logger.debug("Marking aid {} as completed".format(aid))
+        if self.curr_gen and self.curr_gen[1] == aid:
+            # Get the used qubit info and free unused resources
+            comm_q, storage_q = self.curr_gen[2:4]
+            if comm_q != storage_q:
+                self.qmm.free_qubit(comm_q)
+
             self.curr_gen = None
+            # Update number of remaining pairs on request, remove if completed
+            if self.curr_request.num_pairs > 1:
+                logger.debug("Decrementing number of remaining pairs")
+                self.curr_request.num_pairs -= 1
+
+            elif self.curr_request.num_pairs == 1:
+                logger.debug("Generated final pair, removing request")
+                self.clear_request(aid=aid)
+
+            else:
+                raise Exception("Current request has invalid number of remaining pairs")
+
+        else:
+            logger.warning("Marking gen completed for inactive request")
+            req = self.get_request(aid)
+            req.num_pairs -= 1
 
     def get_request(self, aid):
         """
@@ -191,6 +263,9 @@ class RequestScheduler(pydynaa.Entity):
         """
         return self.requests.get(aid)
 
+    def previous_request(self, aid):
+        return aid in self.prev_requests
+
     def clear_request(self, aid):
         """
         Clears all stored request information: Outstanding generations, current generation, stored request
@@ -201,11 +276,15 @@ class RequestScheduler(pydynaa.Entity):
         """
         removed_gens = self._prune_request_generations(aid=aid)
 
+        self.prev_requests.append(aid)
+        if len(self.prev_requests) > 5:
+            self.prev_requests.pop(0)
+
         if self.curr_gen and self.curr_gen[1] == aid:
             logger.debug("Cleared current gen")
             removed_gens.append(self.curr_gen)
-            self.qmm.free_qubit(self.curr_gen[2])
-            self.qmm.free_qubit(self.curr_gen[3])
+            self.qmm.vacate_qubit(self.curr_gen[2])
+            self.qmm.vacate_qubit(self.curr_gen[3])
             self.curr_gen = None
 
         logger.debug("Removed remaining generations for {}: {}".format(aid, removed_gens))
@@ -214,13 +293,17 @@ class RequestScheduler(pydynaa.Entity):
             key = (request.create_id, request.otherID)
             self.outstanding_items.pop(key, None)
 
+            if self.curr_request == request:
+                self.curr_request = None
+
         qid, qseq = aid
-        queue_item = self.distQueue.remove_item(qid, qseq)
-        if queue_item is None:
-            logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
-        else:
-            # Remove queue item from pydynaa
-            queue_item.remove()
+        if self.distQueue.contains_item(qid, qseq):
+            queue_item = self.distQueue.remove_item(qid, qseq)
+            if queue_item is None:
+                logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
+            else:
+                # Remove queue item from pydynaa
+                queue_item.remove()
 
         # Check if we have any requests to follow up with and begin processing them
         self._process_outstanding_items()
@@ -246,7 +329,7 @@ class RequestScheduler(pydynaa.Entity):
             logger.debug("Local memory has no available communication qubits!")
             return False
 
-        if request.store:
+        if request.store and not request.measure_directly:
             if not other_free_storage:
                 logger.debug("Requested storage but peer memory has no available storage qubits!")
                 return False
@@ -257,6 +340,13 @@ class RequestScheduler(pydynaa.Entity):
 
         return True
 
+    def handling_measure_directly(self):
+        """
+        Checks if the scheduler is managing a measure_directly request
+        :return: bool
+        """
+        return self.curr_request and self.curr_request.measure_directly
+
     def reserve_resources_for_gen(self, request):
         """
         Allocates the appropriate communication qubit/storage qubit given the specifications of the request
@@ -265,7 +355,7 @@ class RequestScheduler(pydynaa.Entity):
         :return: int, int
             Qubit IDs to use for the communication process ad storage process
         """
-        if request.store:
+        if request.store and not request.measure_directly:
             comm_q, storage_q = self.qmm.reserve_entanglement_pair()
         else:
             comm_q = self.qmm.reserve_communication_qubit()
@@ -320,6 +410,8 @@ class RequestScheduler(pydynaa.Entity):
         for i in range(next_request.num_pairs):
             gen_template = [True, next_aid, None, None, None, None]
             self.outstanding_gens.append(gen_template)
+
+        self.curr_request = next_request
 
     def _handle_item_timeout(self, evt):
         """

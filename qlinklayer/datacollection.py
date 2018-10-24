@@ -1,7 +1,7 @@
 import abc
 import numpy as np
 from easysquid.puppetMaster import PM_SQLDataSequence
-from easysquid.toolbox import EasySquidException, logger
+from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
 
@@ -426,41 +426,15 @@ class EGPQubErrSequence(EGPDataSequence):
         bit_choiceA = meas_dataA[1]
         bit_choiceB = meas_dataB[1]
 
-        # Get meas outcomes from midpoint
-        (m1, m2) = meas_dataA[2]
-
-        # Check consistency
-        if not (m1, m2) == meas_dataB[2]:
-            raise EasySquidException("Inconsistent measurement outcomes as nodes. Classical error?")
-
         # Check if equal basis choices
         if basis_choiceA != basis_choiceB:
             return [-1, -1], False
 
-        # Possible Bell meas outcomes in ideal meas
-        ideal_outcomes_standard = {"equal_bits": [(0, 0), (1, 0)],
-                                   "unequal_bits": [(0, 1), (1, 1)]}
-        ideal_outcomes_hadamard = {"equal_bits": [(0, 0), (0, 1)],
-                                   "unequal_bits": [(1, 0), (1, 1)]}
-
+        error = 1 if bit_choiceA != bit_choiceB else 0
         if basis_choiceA == 0:  # Standard basis
-            if bit_choiceA == bit_choiceB:  # Equal bits
-                ideal_outcomes = ideal_outcomes_standard["equal_bits"]
-            else:
-                ideal_outcomes = ideal_outcomes_standard["unequal_bits"]
-            if (m1, m2) in ideal_outcomes:  # (no QubErr)
-                return [0, -1], True
-            else:  # (QubErr)
-                return [1, -1], True
+            return [error, -1], True
         else:  # Hadamard basis
-            if bit_choiceA == bit_choiceB:  # Equal bits
-                ideal_outcomes = ideal_outcomes_hadamard["equal_bits"]
-            else:
-                ideal_outcomes = ideal_outcomes_hadamard["unequal_bits"]
-            if (m1, m2) in ideal_outcomes:  # (no QubErr)
-                return [-1, 0], True
-            else:  # (QubErr)
-                return [-1, 1], True
+            return [-1, error], True
 
 
 class EGPQubErrDataPoint(EGPDataPoint):
