@@ -7,7 +7,7 @@ from easysquid.quantumProgram import QuantumProgram
 from easysquid import qProgramLibrary as qprgms
 from qlinklayer.toolbox import LinkLayerException
 from qlinklayer.scheduler import RequestScheduler
-from qlinklayer.distQueue import DistributedQueue
+from qlinklayer.distQueue import FilteredDistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
@@ -211,7 +211,8 @@ class NodeCentricEGP(EGP):
     ERR_EXPIRE = 46
     ERR_CREATE = 47
 
-    def __init__(self, node, conn=None, err_callback=None, ok_callback=None, throw_local_queue_events=False):
+    def __init__(self, node, conn=None, err_callback=None, ok_callback=None, throw_local_queue_events=False,
+                 accept_all_requests=False):
         """
         Node Centric Entanglement Generation Protocol.  Uses a Distributed Queue Protocol and Scheduler to coordinate
         the execution of requests of entanglement production between two peers.
@@ -247,7 +248,8 @@ class NodeCentricEGP(EGP):
         }
 
         # Create local share of distributed queue
-        self.dqp = DistributedQueue(node=self.node, throw_local_queue_events=throw_local_queue_events)
+        self.dqp = FilteredDistributedQueue(node=self.node, throw_local_queue_events=throw_local_queue_events,
+                                            accept_all=accept_all_requests)
         self.dqp.add_callback = self._add_to_queue_callback
 
         # Create the request scheduler
@@ -380,6 +382,34 @@ class NodeCentricEGP(EGP):
     def start(self):
         super(NodeCentricEGP, self).start()
         self.mhp_service.start()
+
+    def add_queue_rule(self, node, purpose_id):
+        """
+        Adds a rule to the queue
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            Node to add acception rule for
+        :param purpose_id: int
+            ID (port) that we are routing this entanglement for
+        """
+        self.dqp.add_accept_rule(node.nodeID, purpose_id)
+
+    def remove_queue_rule(self, node, purpose_id):
+        """
+        Removes a rule from the queue
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            Node to remove acception rule for
+        :param purpose_id: int
+            ID (port) we are closing from incoming entanglement requests
+        """
+        self.dqp.remove_accept_rule(node.nodeID, purpose_id)
+
+    def load_queue_config(self, queue_config):
+        """
+        Loads a rule config into the queue
+        :param queue_config: dict
+            A dictionary of k=nodeID, v=purpose_id values for requests to accept
+        """
+        self.dqp.load_accept_rules(queue_config)
 
     def request_other_free_memory(self):
         """

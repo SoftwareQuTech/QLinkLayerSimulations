@@ -3,6 +3,7 @@
 import unittest
 import numpy as np
 from random import randint
+from collections import defaultdict
 from qlinklayer.egp import EGPRequest
 from qlinklayer.distQueue import DistributedQueue, FilteredDistributedQueue
 from easysquid.qnode import QuantumNode
@@ -335,6 +336,7 @@ class TestDistributedQueue(unittest.TestCase):
             q_item = aliceDQ.local_pop(rqid)
             self.assertIsNotNone(q_item)
 
+
 class TestFilteredDistributedQueue(unittest.TestCase):
     def setUp(self):
         self.result = None
@@ -347,7 +349,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         conn = ClassicalFibreConnection(alice, bob, length=.0001)
         aliceDQ = FilteredDistributedQueue(alice, conn)
 
-        ruleset = [(randint(0,255), randint(0,255)) for _ in range(1000)]
+        ruleset = [(randint(0, 255), randint(0, 255)) for _ in range(1000)]
         for nodeID, purpose_id in ruleset:
             aliceDQ.add_accept_rule(nodeID, purpose_id)
             self.assertTrue(purpose_id in aliceDQ.accept_rules[nodeID])
@@ -365,7 +367,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
             aliceDQ.add_accept_rule(nodeID, purpose_id)
             self.assertTrue(purpose_id in aliceDQ.accept_rules[nodeID])
 
-        for nodeID, purpose_id in ruleset:
+        for nodeID, purpose_id in set(ruleset):
             aliceDQ.remove_accept_rule(nodeID, purpose_id)
             self.assertFalse(purpose_id in aliceDQ.accept_rules[nodeID])
 
@@ -380,7 +382,6 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         conn = ClassicalFibreConnection(alice, bob, length=.0001)
         aliceDQ = FilteredDistributedQueue(alice, conn)
 
-        from collections import defaultdict
         rule_config = defaultdict(list)
         ruleset = [(randint(0, 255), randint(0, 255)) for _ in range(1000)]
         for nodeID, purpose_id in ruleset:
@@ -395,6 +396,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         bob = QuantumNode("Bob", 2)
 
         self.result = None
+
         def add_callback(result):
             self.result = result
 
@@ -456,6 +458,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         reported_request = self.result[-1]
         self.assertEqual(vars(reported_request), vars(request))
         self.assertEqual(self.result[:3], (aliceDQ.DQ_REJECT, expected_qid, expected_qseq))
+
 
 if __name__ == "__main__":
     unittest.main()

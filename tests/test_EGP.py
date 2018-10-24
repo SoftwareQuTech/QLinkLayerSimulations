@@ -87,13 +87,36 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         return alice, bob
 
+    def create_egps(self, nodeA, nodeB, connected=True, accept_all=True):
+        # Set up EGP
+        egpA = NodeCentricEGP(node=nodeA, err_callback=self.alice_callback, ok_callback=self.alice_callback,
+                              accept_all_requests=accept_all)
+        egpB = NodeCentricEGP(node=nodeB, err_callback=self.bob_callback, ok_callback=self.bob_callback,
+                              accept_all_requests=accept_all)
+
+        if connected:
+            egpA.connect_to_peer_protocol(egpB)
+
+        return egpA, egpB
+
+    def create_network(self, egpA, egpB):
+        nodes = [
+            (egpA.node, [egpA, egpA.dqp, egpA.mhp]),
+            (egpB.node, [egpB, egpB.dqp, egpB.mhp])
+        ]
+
+        conns = [
+            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
+            (egpA.conn, "egp_conn", [egpA, egpB]),
+            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
+        ]
+
+        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        return network
+
     def test_create(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         pm = PM_Controller()
         alice_create_counter = PM_Test_Counter(name="AliceCreateCounter")
@@ -118,18 +141,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         bob_create_id, bob_create_time = egpB.create(bob_request)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
 
         sim_run(10)
@@ -166,11 +178,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_multi_create(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         pm = PM_Controller()
         alice_create_counter = PM_Test_Counter(name="AliceCreateCounter")
@@ -195,18 +203,7 @@ class TestNodeCentricEGP(unittest.TestCase):
             alice_create_info.append(alice_create_id)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
 
         sim_run(10)
@@ -230,11 +227,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_successful_simulation(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
@@ -253,18 +246,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler.schedule_function(func=bob_scheduled_create, t=5)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
 
         sim_run(10)
@@ -278,11 +260,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_successful_measure_directly(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
@@ -301,18 +279,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler.schedule_function(func=bob_scheduled_create, t=5)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
 
         sim_run(500)
@@ -350,11 +317,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_successful_mixed_requests(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
@@ -386,18 +349,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler.schedule_function(func=alice_scheduled_bits, t=7.5)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
 
         sim_run(500)
@@ -437,10 +389,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_manual_connect(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
+        egpA, egpB = self.create_egps(alice, bob, connected=False, accept_all=True)
 
         egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
         dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
@@ -472,18 +421,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler.schedule_function(func=bob_scheduled_create, t=5)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
 
         sim_run(10000)
@@ -506,11 +444,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_unresponsive_dqp(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         pm = PM_Controller()
         alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
@@ -555,11 +489,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_unresponsive_mhp(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         pm = PM_Controller()
         alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
@@ -626,11 +556,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_unresponsive_egp(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=1)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         pm = PM_Controller()
         alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
@@ -671,11 +597,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_one_node_expires(self):
         alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         pm = PM_Controller()
         alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
@@ -709,18 +631,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpB.create(bob_request)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
 
         sim_run(20)
@@ -795,9 +706,7 @@ class TestNodeCentricEGP(unittest.TestCase):
             return self.inc_sequence.pop(0)
 
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(alice, bob, connected=True, accept_all=True)
 
         pm = PM_Controller()
         alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
@@ -813,18 +722,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.create(creq=alice_request)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
         sim_run(40)
 
@@ -859,11 +757,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_creation_failure(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-
-        # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
-        egpA.connect_to_peer_protocol(egpB)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         pm = PM_Controller()
         alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
@@ -894,18 +788,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.create(creq=unsupptime_request)
 
         # Construct a network for the simulation
-        nodes = [
-            (alice, [egpA, egpA.dqp, egpA.mhp]),
-            (bob, [egpB, egpB.dqp, egpB.mhp])
-        ]
-
-        conns = [
-            (egpA.dqp.conn, "dqp_conn", [egpA.dqp, egpB.dqp]),
-            (egpA.conn, "egp_conn", [egpA, egpB]),
-            (egpA.mhp.conn, "mhp_conn", [egpA.mhp, egpB.mhp])
-        ]
-
-        network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
+        network = self.create_network(egpA, egpB)
         network.start()
         sim_run(0.01)
 
@@ -920,6 +803,86 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
         self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
 
+    def test_queue_rules(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=False)
+
+        alice_purpose_id = 1
+        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=10000,
+                                   purpose_id=alice_purpose_id, priority=10)
+
+        bob_purpose_id = 2
+        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=1, min_fidelity=0.5, max_time=20000,
+                                 purpose_id=bob_purpose_id, priority=2)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        # Verify neither alice nor bob can add requests
+        expected_id, _ = egpA.create(alice_request)
+        sim_run(1)
+        alice_expected = [(egpA.dqp.DQ_REJECT, expected_id)]
+        self.assertEqual(self.alice_results, alice_expected)
+
+        expected_id, _ = egpB.create(bob_request)
+        sim_run(2)
+        bob_expected = [(egpB.dqp.DQ_REJECT, expected_id)]
+        self.assertEqual(self.bob_results, bob_expected)
+
+        # Verify alice can submit when bob accepts
+        egpB.add_queue_rule(alice, alice_purpose_id)
+        expected_id, _ = egpA.create(alice_request)
+        sim_run(5)
+        self.assertEqual(len(self.alice_results), 2)
+        self.assertEqual(len(self.alice_results), len(self.bob_results))
+        create_id, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        _, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(create_id, expected_id)
+        self.assertEqual(alice_ent_id, bob_ent_id)
+
+        # Verify is still unable
+        expected_id, _ = egpB.create(bob_request)
+        sim_run(7)
+        self.assertEqual(len(self.bob_results), 3)
+        self.assertEqual(self.bob_results[-1], (egpB.dqp.DQ_REJECT, expected_id))
+
+        # Add a rule to alice for bob
+        egpA.add_queue_rule(bob, bob_purpose_id)
+        expected_id, _ = egpB.create(bob_request)
+        sim_run(12)
+        self.assertEqual(len(self.alice_results), 3)
+        self.assertEqual(len(self.bob_results), 4)
+        _, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        create_id, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(create_id, expected_id)
+        self.assertEqual(alice_ent_id, bob_ent_id)
+
+        # Remove a rule from alice
+        egpA.remove_queue_rule(bob, bob_purpose_id)
+        expected_id, _ = egpB.create(bob_request)
+        sim_run(13)
+        self.assertEqual(len(self.bob_results), 5)
+        self.assertEqual(self.bob_results[-1], (egpB.dqp.DQ_REJECT, expected_id))
+
+        # Verify alice can submit bob accepts
+        expected_id, _ = egpA.create(alice_request)
+        sim_run(18)
+        self.assertEqual(len(self.alice_results), 4)
+        self.assertEqual(len(self.bob_results), 6)
+        create_id, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        _, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(create_id, expected_id)
+        self.assertEqual(alice_ent_id, bob_ent_id)
+
+        # Remove alice's rule from bob
+        egpB.remove_queue_rule(alice, alice_purpose_id)
+        expected_id, _ = egpA.create(alice_request)
+        sim_run(23)
+        self.assertEqual(len(self.alice_results), 5)
+        self.assertEqual(self.alice_results[-1], (egpA.dqp.DQ_REJECT, expected_id))
+
+
     def test_events(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
 
@@ -930,8 +893,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         bob_req_tester = PM_Test_Counter(name="BobReqCounter")
 
         # Set up EGP
-        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=alice_ent_tester.store_data)
-        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=bob_ent_tester.store_data)
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=alice_ent_tester.store_data,
+                              accept_all_requests=True)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=bob_ent_tester.store_data,
+                              accept_all_requests=True)
         egpA.connect_to_peer_protocol(egpB)
 
         pm.addEvent(source=egpA, evtType=egpA._EVT_ENT_COMPLETED, ds=alice_ent_tester)

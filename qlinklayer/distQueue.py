@@ -336,6 +336,14 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.status = self.STAT_IDLE
 
     def validate_ADD(self, data):
+        """
+        Applies all validation filters on incoming ADD request for queue item
+        :param data: tuple of (int, int, int, int, obj `~qlinklayer.egp.EGPRequest)
+            Contains the nodeID, comms_seq, qid, qseq, and request for the queue item
+        :return: bool
+            Whether or not data passes validation
+        """
+        # Apply all validators and fail early
         for validator in self.add_validators:
             if not validator(data):
                 return False
@@ -343,6 +351,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         return True
 
     def _validate_otherID(self, data):
+        """
+        Checks that the data was submitted by the remote node on our connection
+        :param data: Validation data
+        :return: bool
+            If data passes validation
+        """
         [nodeID, cseq, qid, qseq, request] = data
         if nodeID != self.otherID:
             logger.debug("ADD ERROR Got ADD request from node that isn't our peer!")
@@ -351,6 +365,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         return True
 
     def _validate_comms_seq(self, data):
+        """
+        Validates the communication sequence number in data
+        :param data: Validation data
+        :return: bool
+            If data passes validation
+        """
         [nodeID, cseq, qid, qseq, request] = data
         if cseq > self.expectedSeq:
             # We seem to have missed some packets, for now just declare an error
@@ -375,6 +395,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         return True
 
     def _validate_qid(self, data):
+        """
+        Validates the qid in data
+        :param data: Validation data
+        :return: bool
+            If data passes validation
+        """
         [nodeID, cseq, qid, qseq, request] = data
         if not (self._valid_qid(qid)):
             logger.debug("ADD ERROR No such queue from {} comms seq {} queue ID {} queue seq {}"
@@ -384,6 +410,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         return True
 
     def _validate_aid(self, data):
+        """
+        Validates the absolute queue id in data
+        :param data: Validation data
+        :return: bool
+            If data passes validation
+        """
         [nodeID, cseq, qid, qseq, request] = data
         if not self.master:
             # Duplicate sequence number
@@ -396,6 +428,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         return True
 
     def _validate_request(self, data):
+        """
+        Validates that request exists in data
+        :param data: Validation data
+        :return: bool
+            If data passes validation
+        """
         [nodeID, cseq, qid, qseq, request] = data
         if request is None:
             # Request details missing
@@ -824,13 +862,35 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
 class FilteredDistributedQueue(DistributedQueue):
     def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 32,
-                 throw_local_queue_events=False):
-
+                 throw_local_queue_events=False, accept_all=False):
+        """
+        A queue that supports filtering out requests based on rules.  This base implementation simply filters
+        EGPRequests based on the attached purpose_id (treated like a port)
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node attached to this distributed queue
+        :param connection: obj `~easysquid.easyfibre.ClassicalFibreConnection`
+            The connection to perform communication over
+        :param master: bool
+            Whether we are the master or not
+        :param myWsize: int
+            Window size for queue item handling
+        :param otherWsize: int
+            Remote window size
+        :param numQueues: int
+            Number of local queues composing the distributed queue
+        :param maxSeq: int
+            Maximum sequence number
+        :param throw_local_queue_events: bool
+            Specifies whether to schedule local queue events
+        :param accept_all: bool
+            Specifies whether to accept all requests by default
+        """
         super(FilteredDistributedQueue, self).__init__(node=node, connection=connection, master=master, myWsize=myWsize,
                                                        otherWsize=otherWsize, numQueues=numQueues, maxSeq=maxSeq,
                                                        throw_local_queue_events=throw_local_queue_events)
 
         # Request accept/reject rules
+        self.accept_all = accept_all
         self.accept_rules = defaultdict(set)
 
         # Add error handler for rejected requests
@@ -842,15 +902,34 @@ class FilteredDistributedQueue(DistributedQueue):
         self.add_validators.append(self._validate_acceptance)
 
     def add_accept_rule(self, nodeID, purpose_id):
+        """
+        Adds a queue item ADD rule
+        :param nodeID: int
+            The nodeID of the remote node to accept adds from
+        :param purpose_id: int
+            The purpose id of the queue item
+        """
         self.accept_rules[nodeID].add(purpose_id)
 
     def remove_accept_rule(self, nodeID, purpose_id):
+        """
+        Removes a queue item ADD rule
+        :param nodeID: int
+            The nodeID of the remote node to accept adds from
+        :param purpose_id: int
+            The purpose id of the queue item
+        """
         try:
             self.accept_rules[nodeID].remove(purpose_id)
         except KeyError:
             logger.error("Attempted to remove nonexistent rule for node {} purpose id {}".format(nodeID, purpose_id))
 
     def load_accept_rules(self, accept_rules):
+        """
+        Loads a dictionary of add rules
+        :param accept_rules: dict of k=int, v=list
+            A dictionary of nodeID to list of accepted purpose ids for queue items originating from the nodeIDs
+        """
         self.accept_rules.update(accept_rules)
 
     def cmd_ERR_REJ(self, data):
@@ -868,9 +947,15 @@ class FilteredDistributedQueue(DistributedQueue):
         self.add_callback(result=(self.DQ_REJECT, qid, qseq, request))
 
     def _validate_acceptance(self, data):
+        """
+        Validates the acceptance of the queue item data
+        :param data: Validation data
+        :return: bool
+            If data passes validation
+        """
         [nodeID, cseq, qid, qseq, request] = data
         # Are we accepting request adds from this peer?
-        if request.purpose_id not in self.accept_rules[nodeID]:
+        if not self.accept_all and request.purpose_id not in self.accept_rules[nodeID]:
             logger.debug("ADD ERROR not accepting requests with purpose id {} from node {}".format(request.purpose_id,
                                                                                                    nodeID))
             self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
