@@ -88,9 +88,9 @@ class TestRequestScheduler(unittest.TestCase):
         self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
 
         # Return the reserved resources
-        qmmA.free_qubit(comm_q)
+        qmmA.vacate_qubit(comm_q)
         for q in storage_q:
-            qmmA.free_qubit(q)
+            qmmA.vacate_qubit(q)
 
         # Check that lack of peer resources causes a default request
         self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
