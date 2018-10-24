@@ -603,7 +603,6 @@ class NodeCentricEGP(EGP):
         """
         try:
             logger.debug("Handling MHP Reply: {}".format(result))
-
             # Check if the reply came in before our measurement completed, defer processing
             if self.measurement_in_progress and self.scheduler.handling_measure_directly():
                 self.measure_directly_reply = result
@@ -637,6 +636,7 @@ class NodeCentricEGP(EGP):
 
             # Otherwise this response is associated with a generation attempt
             else:
+                self.scheduler.resume_generation()
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))

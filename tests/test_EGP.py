@@ -398,7 +398,6 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
 
         sim_run(500)
-
         self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
 
         # Check the generated bits

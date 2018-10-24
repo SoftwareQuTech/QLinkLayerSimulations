@@ -694,6 +694,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # If the flag is true then we attempt entanglement generation
         if flag:
+            # Mark the protocol as busy
+            self.status = self.STAT_BUSY
+
             # Set up for generating entanglement
             logger.debug("Flag set to true processing entanglement request")
             self.init_entanglement_request(comm_q, storage_q)
@@ -834,6 +837,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
             logger.debug("Scheduling entanglement event now.")
+            self.status = self.STAT_IDLE
             self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         except Exception:
