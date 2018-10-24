@@ -636,7 +636,6 @@ class NodeCentricEGP(EGP):
 
             # Otherwise this response is associated with a generation attempt
             else:
-                self.scheduler.resume_generation()
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
