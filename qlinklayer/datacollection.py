@@ -1,7 +1,7 @@
 import abc
 import numpy as np
 from easysquid.puppetMaster import PM_SQLDataSequence
-from easysquid.toolbox import EasySquidException, logger
+from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
 

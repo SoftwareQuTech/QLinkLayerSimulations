@@ -262,6 +262,8 @@ class NodeCentricEGP(EGP):
 
         # Measure directly storage and handler
         self.basis_choice = []
+        self.measurement_in_progress = False
+        self.measure_directly_reply = None
         self.measurement_results = []
         self.corrected_measurements = []
 
@@ -585,10 +587,6 @@ class NodeCentricEGP(EGP):
             # Store the gen for pickup by mhp
             self.mhp_service.put_ready_data(self.node.nodeID, gen)
 
-            if gen[0]:
-                import pdb
-                pdb.set_trace()
-
             return True
 
         except Exception:
@@ -604,10 +602,15 @@ class NodeCentricEGP(EGP):
             Contains the processing result information from attempting entanglement generation
         """
         try:
-            # Get the MHP results
             logger.debug("Handling MHP Reply: {}".format(result))
 
-            r, other_free_memory, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
+            # Check if the reply came in before our measurement completed, defer processing
+            if self.measurement_in_progress and self.scheduler.handling_measure_directly():
+                self.measure_directly_reply = result
+                return
+
+            # Otherwise we are ready to process the reply now
+            midpoint_outcome, other_free_memory, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
 
             # Check if there was memory information included in the reply
             if other_free_memory is not None:
@@ -619,28 +622,34 @@ class NodeCentricEGP(EGP):
                 logger.debug("Handling reply that does not contain an absolute queue id")
                 self._handle_reply_without_aid(proto_err)
 
-            # Check if this aid may have been expired while waiting for a reply from midpoint
+            # Check if this aid may have been expired or timed out while awaiting reply
             elif not self.scheduler.get_request(aid=aid):
-                logger.warning("Got MHP Reply containing aid {} for no local request!".format(aid))
-                self.qmm.vacate_qubit(self.mhp_service.get_comm_qubit_id(self.node))
+                # If we have never seen this aid before we should throw a warning
+                if not self.scheduler.previous_request(aid=aid):
+                    logger.warning("Got MHP Reply containing aid {} for no current or old request!".format(aid))
 
-                # Update the MHP Sequence number as necessary
-                if r == 2:
-                    self._process_mhp_seq(mhp_seq, aid)
+                else:
+                    logger.debug("Got MHP reply containing aid {} for an old request".format(aid))
+                    # Update the MHP Sequence number as necessary
+                    if midpoint_outcome in [1, 2]:
+                        logger.debug("Updating MHP Seq")
+                        self._process_mhp_seq(mhp_seq, aid)
 
             # Otherwise this response is associated with a generation attempt
             else:
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
-                    comm_q = self.scheduler.curr_gen[2]
+                    comm_q = self.mhp_service.get_comm_qubit_id(self.node)
                     self.qmm.vacate_qubit(comm_q)
                     self.issue_err(err=proto_err)
 
                 # No entanglement generated
-                if r == 0:
+                if midpoint_outcome == 0:
                     logger.debug("Failed to produce entanglement with other node")
                     creq = self.scheduler.get_request(aid=aid)
+
+                    # If handling a measure directly request we need to throw away the measurement result
                     if creq.measure_directly and self.scheduler.curr_aid() == aid:
                         m, basis = self.measurement_results.pop(0)
                         logger.debug("Removing measurement outcome {} in basis {} from stored results".format(m, basis))
@@ -652,7 +661,7 @@ class NodeCentricEGP(EGP):
 
                     if valid_mhp:
                         logger.debug("Handling reply corresponding to absolute queue id {}".format(aid))
-                        self._handle_generation_reply(r, mhp_seq, aid)
+                        self._handle_generation_reply(midpoint_outcome, mhp_seq, aid)
 
             logger.debug("Finished handling MHP Reply")
 
@@ -702,15 +711,8 @@ class NodeCentricEGP(EGP):
         """
         creq = self.scheduler.get_request(aid=aid)
         if creq.measure_directly:
-            if aid != self.scheduler.curr_aid():
-                logger.error("RECEIVED VALID MESSAGE FOR INVALID AID")
-
-            try:
-                m, basis = self.measurement_results.pop(0)
-
-            except:
-                import pdb
-                pdb.set_trace()
+            # Grab the result and correct
+            m, basis = self.measurement_results.pop(0)
 
             # Flip this outcome in the case we need to apply a correction
             if self.node.nodeID != creq.otherID:
@@ -765,7 +767,6 @@ class NodeCentricEGP(EGP):
         if self.scheduler.curr_request.measure_directly:
             logger.debug("Beginning measurement of qubit for measure directly")
             # Grab the current generation information
-            aid = self.scheduler.curr_aid()
             comm_q = self.scheduler.curr_gen[2]
 
             # Constuct a quantum program
@@ -782,6 +783,9 @@ class NodeCentricEGP(EGP):
                 logger.debug("Measuring comm_q {} in Standard basis".format(comm_q))
 
             self.basis_choice.append(basis)
+
+            # Set a flag to make sure we catch replies that occur during the measurement
+            self.measurement_in_progress = True
             q.measure(callback=self._handle_measurement_outcome)
             self.node.qmem.execute_program(prgm)
 
@@ -795,12 +799,23 @@ class NodeCentricEGP(EGP):
         :return: None
         """
         # Saves measurement outcome
+        self.measurement_in_progress = False
         logger.debug("Measured {} on qubit".format(outcome))
+
+        # If the request did not time out during the measurement then store the result
         if self.scheduler.curr_gen:
+            # Free the communication qubit
             comm_q = self.scheduler.curr_gen[2]
             self.qmm.vacate_qubit(comm_q)
+
+            # Store the measurement result
             basis = self.basis_choice.pop(0)
             self.measurement_results.append((outcome, basis))
+
+            # If we received a reply for this attempt during measurement we can handle it immediately
+            if self.measure_directly_reply:
+                self.measure_directly_reply = None
+                self.handle_reply_mhp(self.measure_directly_reply)
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """

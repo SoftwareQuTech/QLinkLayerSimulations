@@ -390,7 +390,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             # Duplicate sequence number
             # TODO is this what we want?
-            if self.queueList[qid].contains(qseq):
+            if self.contains_item(qid, qseq):
                 logger.debug("ADD ERROR duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
                              .format(nodeID, cseq, qid, qseq))
                 self.send_error(self.CMD_ERR_DUPLICATE_QSEQ)
@@ -596,6 +596,20 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Add to backlog for later processing
             logger.debug("ADD to backlog")
             self.backlogAdd.append(request)
+
+    def contains_item(self, qid, qseq):
+        """
+        Checks if this distributed queue contains an item in the specified qid, qseq combo
+        :param qid: int
+            The local queue id to check
+        :param qseq: int
+            The sequence number within the local queue
+        :return: bool
+            Whether we have the item or not
+        """
+        if qid < len(self.queueList):
+            return self.queueList[qid].contains(qseq)
+        return False
 
     def remove_item(self, qid, qseq):
         """

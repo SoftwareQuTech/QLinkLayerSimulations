@@ -359,8 +359,9 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         pass_BM = self.node_requests[self.nodeB.nodeID].pass_data
         aid_B = pass_BM[1]
 
-        resp_MA = (outcome, self.mhp_seq, aid_A)
-        resp_MB = (outcome, self.mhp_seq, aid_B)
+        mhp_seq = self.mhp_seq
+        resp_MA = (outcome, mhp_seq, aid_A)
+        resp_MB = (outcome, mhp_seq, aid_B)
 
         respA = MHPReply(response_data=resp_MA, pass_data=pass_BM)
         respB = MHPReply(response_data=resp_MB, pass_data=pass_AM)
@@ -528,9 +529,6 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         num_production_requests = node_reqs.count(self.CMD_PRODUCE)
 
         logger.debug("Have {} production requests".format(num_production_requests))
-        if num_production_requests > 0:
-            import pdb
-            pdb.set_trace()
 
         # Don't bother swapping because neither party requested entanglement
         if num_production_requests == 0:
@@ -567,6 +565,8 @@ class MHPServiceProtocol(TimedServiceProtocol):
     """
     Generic MHP protocol to be overloaded
     """
+    ERR_LOCAL = 31
+
     def __init__(self, timeStep, t0=0.0, node=None, connection=None, callback=None):
         super(MHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection,
                                                  callback=callback)
@@ -591,7 +591,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
 
         except Exception as err_data:
             logger.exception("Exception occurred while running protocol")
-            result = self._construct_error_result(err_data)
+            result = self._construct_error_result(err_code=self.ERR_LOCAL, err_data=err_data)
             self.callback(result=result)
 
     @abc.abstractmethod
@@ -655,10 +655,8 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
     PROTO_OK = 0
     NO_GENERATION = 0
-    ERR_LOCAL = 31
 
     def __init__(self, timeStep, t0, node, connection, alpha):
-        self.status = self.STAT_IDLE
         self._EVT_ENTANGLE_ATTEMPT = EventType("ENTANGLE ATTEMPT", "Triggered when the MHP attempts entanglement")
         super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
         self.set_bright_state_population(alpha=alpha)
@@ -671,7 +669,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         logger.debug("{} Resetting MHP".format(self.node.nodeID))
         self.electron_physical_ID = 0
         self.storage_physical_ID = 0
-        self.status = self.STAT_IDLE
         self.aid = None
 
     def _has_resources(self):
@@ -679,7 +676,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         Check if the protocol is not handling any requests
         :return:
         """
-        return self.status == self.STAT_IDLE
+        return True
 
     def _handle_request(self, request_data):
         """
@@ -697,9 +694,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # If the flag is true then we attempt entanglement generation
         if flag:
-            # Mark the protocol as busy
-            self.status = self.STAT_BUSY
-
             # Set up for generating entanglement
             logger.debug("Flag set to true processing entanglement request")
             self.init_entanglement_request(comm_q, storage_q)
@@ -770,7 +764,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         result = (self.NO_GENERATION, passM, -1, None, self.PROTO_OK)
         self.callback(result=result)
-        # self.reset_protocol()
 
     def _handle_error(self, respM, passM):
         """
@@ -784,6 +777,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.callback(result=result)
         self.reset_protocol()
 
+    def _extract_aid_from_err_data(self, err_data):
+        if isinstance(err_data, tuple) and isinstance(err_data[-1], tuple):
+            return err_data[-1]
+        return None
+
     def _construct_error_result(self, err_code, err_data, **kwargs):
         """
         Creates a result to pass up to the EGP that contains error information for errors that may have
@@ -793,9 +791,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return: tuple
             Result information to be interpretted by higher layers
         """
-        aid = None
-        if err_data:
-            aid = err_data[-1]
+        aid = self._extract_aid_from_err_data(err_data)
         result = (self.NO_GENERATION, None, -1, aid, err_code)
         return result
 
@@ -838,12 +834,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
             logger.debug("Scheduling entanglement event now.")
-            self.status = self.STAT_IDLE
             self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
-        except Exception as err_data:
+        except Exception:
             logger.exception("Error occurred while handling photon emission")
-            result = self._construct_error_result(err_code=self.ERR_LOCAL, err_data=[err_data])
+            result = self._construct_error_result(err_code=self.ERR_LOCAL, err_data=self.aid)
             self._handle_error(None, result)
 
 

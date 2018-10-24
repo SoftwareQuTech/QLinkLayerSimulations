@@ -67,8 +67,8 @@ class TestNodeCentricEGP(unittest.TestCase):
     def check_memories(self, aliceMemory, bobMemory, addresses):
         # Check the entangled pairs, ignore communication qubit
         for i in addresses:
-            qA = aliceMemory.peek(i + 1)[0][0]
-            qB = bobMemory.peek(i + 1)[0][0]
+            qA = aliceMemory.peek(i + 1)[0]
+            qB = bobMemory.peek(i + 1)[0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
@@ -283,8 +283,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
-        alice_num_bits = 500
-        bob_num_bits = 500
+        alice_num_bits = 1000
+        bob_num_bits = 1000
         alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
                                    purpose_id=1, priority=10, measure_directly=True)
         bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
@@ -312,7 +312,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(1000)
+        sim_run(500)
 
         # Verify all the bits were generated
         self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits)
@@ -356,9 +356,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
         alice_num_pairs = 1
-        alice_num_bits = 500
+        alice_num_bits = 1000
         bob_num_pairs = 2
-        bob_num_bits = 500
+        bob_num_bits = 1000
         alice_request_epr = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_pairs, min_fidelity=0.5, max_time=10000,
                                        purpose_id=1, priority=10)
 
@@ -397,7 +397,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(2000)
+        sim_run(500)
 
         self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
 
@@ -438,8 +438,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=self.alice_callback)
         egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=self.bob_callback)
 
-        egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.1)
-        dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.2)
+        egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
+        dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
         mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=0.02, lengthB=0.03,
                                                     use_time_window=True, measure_directly=True)
         egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
@@ -482,12 +482,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = EasyNetwork(name="EGPNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        import pdb
-        pdb.set_trace()
-
-        sim_run(20000)
-
-        pdb.set_trace()
+        sim_run(10000)
 
         # Don't include t_goodness and t_create, since these could differ
         alice_results = list(map(lambda res: res[:-2], self.alice_results))
@@ -499,8 +494,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         for resA, resB in zip(self.alice_results, self.bob_results):
             self.assertEqual(len(resA), len(resB))
             if len(resA) > 2:
-                qA = alice.qmem.peek(resA[1][3])[0][0]
-                qB = bob.qmem.peek(resB[1][3])[0][0]
+                qA = alice.qmem.peek(resA[1][3])[0]
+                qB = bob.qmem.peek(resB[1][3])[0]
                 self.assertEqual(qA.qstate, qB.qstate)
                 self.assertIn(qB, qA.qstate._qubits)
                 self.assertIn(qA, qB.qstate._qubits)
@@ -775,8 +770,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Check that the sequence numbers match
         for alice_gen, bob_gen in zip(alice_gens_post_error, bob_gens_post_error):
             self.assertEqual(alice_gen[1][2], bob_gen[1][2])
-            qA = alice.qmem.peek(alice_gen[1][3])[0][0]
-            qB = bob.qmem.peek(bob_gen[1][3])[0][0]
+            qA = alice.qmem.peek(alice_gen[1][3])[0]
+            qB = bob.qmem.peek(bob_gen[1][3])[0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
@@ -837,8 +832,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Verify that first create was successful
         idA = self.alice_results[0][1][3]
         idB = self.bob_results[0][1][3]
-        qA = alice.qmem.peek(idA)[0][0]
-        qB = bob.qmem.peek(idB)[0][0]
+        qA = alice.qmem.peek(idA)[0]
+        qB = bob.qmem.peek(idB)[0]
         self.assertEqual(qA.qstate.dm.shape, (4, 4))
         self.assertTrue(qA.qstate.compare(qB.qstate))
         self.assertIn(qB, qA.qstate._qubits)

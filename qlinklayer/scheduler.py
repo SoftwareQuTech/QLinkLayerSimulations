@@ -38,6 +38,7 @@ class RequestScheduler(pydynaa.Entity):
         self.outstanding_gens = []
         self.outstanding_items = {}
         self.timed_out_requests = []
+        self.prev_requests = []
         self._suspend = False
         self.resumeID = -1
         self.resume_time = 0.0
@@ -262,6 +263,9 @@ class RequestScheduler(pydynaa.Entity):
         """
         return self.requests.get(aid)
 
+    def previous_request(self, aid):
+        return aid in self.prev_requests
+
     def clear_request(self, aid):
         """
         Clears all stored request information: Outstanding generations, current generation, stored request
@@ -271,6 +275,10 @@ class RequestScheduler(pydynaa.Entity):
             The removed outstanding generations
         """
         removed_gens = self._prune_request_generations(aid=aid)
+
+        self.prev_requests.append(aid)
+        if len(self.prev_requests) > 5:
+            self.prev_requests.pop(0)
 
         if self.curr_gen and self.curr_gen[1] == aid:
             logger.debug("Cleared current gen")
@@ -289,12 +297,13 @@ class RequestScheduler(pydynaa.Entity):
                 self.curr_request = None
 
         qid, qseq = aid
-        queue_item = self.distQueue.remove_item(qid, qseq)
-        if queue_item is None:
-            logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
-        else:
-            # Remove queue item from pydynaa
-            queue_item.remove()
+        if self.distQueue.contains_item(qid, qseq):
+            queue_item = self.distQueue.remove_item(qid, qseq)
+            if queue_item is None:
+                logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
+            else:
+                # Remove queue item from pydynaa
+                queue_item.remove()
 
         # Check if we have any requests to follow up with and begin processing them
         self._process_outstanding_items()

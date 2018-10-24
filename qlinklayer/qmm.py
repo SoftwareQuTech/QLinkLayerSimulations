@@ -107,7 +107,7 @@ class QuantumMemoryManagement:
             Address of the qubit to free
         """
         self.vacate_qubit(qid=id)
-        q = self.node.qmem.pop(id)[0][0]
+        q = self.node.qmem.pop(id)[0]
         if q is not None:
             qapi.discard(q)
         else:

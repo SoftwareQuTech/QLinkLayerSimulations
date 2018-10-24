@@ -268,8 +268,6 @@ def run_simulation(results_path, name=None, config=None, create_probA=1, create_
     if enable_pdb:
         pdb.set_trace()
 
-    pdb.set_trace()
-
     # Start with a step size of 1 millisecond
     timestep = min(1e3, max_sim_time * SECOND)
 

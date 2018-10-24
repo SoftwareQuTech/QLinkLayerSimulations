@@ -279,7 +279,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         :param other_id: int
         :param mhp_seq: int
         """
-        qstate = self.node.qmem.peek(qubit_id)[0][0].qstate
+        qstate = self.node.qmem.peek(qubit_id)[0].qstate
         formalism = get_qstate_formalism()
         key = (source_id, other_id, mhp_seq)
 
