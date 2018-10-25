@@ -79,15 +79,9 @@ node, and also which qubit belongs to which entangled pair. Entanglement identif
 $A$ and $B$. An entanglement identifier ($\entid$) consists of:\\
 \noindent
 \begin{tabular}{ll}
-create ID & The create ID that this entangled pair corresponds to. \\
-(Origin ID, Partner ID) & IDs of the two nodes between which this entanglement is shared.\\
+Origin ID, Partner ID & IDs of the two nodes between which this entanglement is shared.\\
 seqID & Sequence number. Unique (up to wrap around) between $A$ and $B$, and \\
 & globally unique when combined with the node IDs.\\
-Goodness & Heuristic estimate for the fidelity of the generated pair.\\
-$t_{Goodness}$ & Time when this goodness was established (in EGP, usually \\
-& the same as generation time).\\
-$t_{Create}$ & Time the pair was produced.\\
-$logical\_id$ & Logical ID of the qubit locally holding the entanglement.
 \end{tabular}\\
 
 \smallskip
@@ -96,7 +90,12 @@ In addition the OK message also includes the following local information. We rem
 in a computer) and not in general shared between network nodes.\\
 \noindent
 \begin{tabular}{ll}
-Qubit ID & Logical Qubit ID of the entangled pair can locally be found.
+create ID & The create ID that this entangled pair corresponds to. \\
+Goodness & Heuristic estimate for the fidelity of the generated pair.\\
+$t_{Goodness}$ & Time when this goodness was established (in EGP, usually \\
+& the same as generation time).\\
+$t_{Create}$ & Time the pair was produced.\\
+$logical\_id$ & Logical ID of the qubit locally holding the entanglement.
 \end{tabular}
 \end{description}
 Entanglement generation may fail for wide number of reasons, some of which form an immediate error. It may also be that the entanglement later expires, or is discarded
@@ -494,7 +493,7 @@ it applies to both analogously:
 	 \begin{enumerate}
 		\item If create\_time + $t_{\max} >$ current time or the request is not stored locally anymore, issue ERR\_TIMEOUT and remove item from queue. Stop handling reply.
 		\item Get fidelity estimate $F_{\rm est}$ from FEU.
-		\item Issue OK with Entanglement ID: ($A$, $B$, $MHP\_seq$, $logical_id$), Goodness $F_{\rm est}$, and $t_{\rm Goodness} = t_{\rm Create} = now$.
+		\item Issue OK with Entanglement ID: ($A$, $B$, $MHP\_seq$), $logical_id$, Goodness $F_{\rm est}$, and $t_{\rm Goodness} = t_{\rm Create} = now$.
 		\item If $k = 1$, i.e. this was the last pair to be produced for this request, remove item from queue.
 		\item If $k > 2$, decrement $k$ on queue item.
 	 \end{enumerate}

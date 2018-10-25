@@ -958,9 +958,9 @@ class NodeCentricEGP(EGP):
             result = (creq.create_id, ent_id, m, basis, t_create)
 
         else:
-            ent_id = (creatorID, creq.otherID, mhp_seq, logical_id)
+            ent_id = (creatorID, creq.otherID, mhp_seq)
             t_goodness = t_create
-            result = (creq.create_id, ent_id, fidelity_estimate, t_goodness, t_create)
+            result = (creq.create_id, ent_id, logical_id, fidelity_estimate, t_goodness, t_create)
 
         return result
 
