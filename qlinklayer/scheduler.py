@@ -162,8 +162,10 @@ class RequestScheduler(pydynaa.Entity):
         :return: tuple
             Represents a gen template for an info request
         """
-        self.my_free_memory = self.qmm.get_free_mem_ad()
-        return False, None, None, None, None, self.my_free_memory
+        return False, None, None, None, None
+
+    def generating(self):
+        return self.curr_gen[0] if self.curr_gen else None
 
     def curr_aid(self):
         """
@@ -198,12 +200,9 @@ class RequestScheduler(pydynaa.Entity):
 
         # Check if we have the resources to fulfill this generation
         if self._has_resources_for_gen(request):
-            # Compute our new free memory after reservation
-            free_memory = self.qmm.get_free_mem_ad()
-            gen_template[-1] = free_memory
-
             # Reserve resources in the quantum memory
             comm_q, storage_q = self.reserve_resources_for_gen(request)
+            self.my_free_memory = self.qmm.get_free_mem_ad()
 
             # Fill in the template
             gen_template[2] = comm_q
@@ -280,7 +279,7 @@ class RequestScheduler(pydynaa.Entity):
         if len(self.prev_requests) > 5:
             self.prev_requests.pop(0)
 
-        if self.curr_gen and self.curr_gen[1] == aid:
+        if self.curr_aid() == aid:
             logger.debug("Cleared current gen")
             removed_gens.append(self.curr_gen)
             self.qmm.vacate_qubit(self.curr_gen[2])
@@ -408,7 +407,7 @@ class RequestScheduler(pydynaa.Entity):
 
         # Create templates for all generations part of this request
         for i in range(next_request.num_pairs):
-            gen_template = [True, next_aid, None, None, None, None]
+            gen_template = [True, next_aid, None, None, None]
             self.outstanding_gens.append(gen_template)
 
         self.curr_request = next_request

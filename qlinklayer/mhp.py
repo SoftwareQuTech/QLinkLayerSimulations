@@ -237,6 +237,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
 
         # Send messages back to the nodes
         logger.debug("Sending messages to A: {} and B: {}".format(dataA, dataB))
+
         self._send_to_node(self.nodeA, dataA)
         self._send_to_node(self.nodeB, dataB)
         self._reset_incoming()
@@ -650,11 +651,8 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
     """
     Service Protocol version of the Node Centric MHP
     """
-    STAT_IDLE = 0
-    STAT_BUSY = 1
-
     PROTO_OK = 0
-    NO_GENERATION = 0
+    NO_GENERATION = 3
 
     def __init__(self, timeStep, t0, node, connection, alpha):
         self._EVT_ENTANGLE_ATTEMPT = EventType("ENTANGLE ATTEMPT", "Triggered when the MHP attempts entanglement")
@@ -688,25 +686,15 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         logger.debug("MHP_NC Protocol at node {} got request data: {}".format(self.node.nodeID, request_data))
 
         # Extract request information
-        flag, aid, comm_q, storage_q, param, free_memory_size = request_data
+        flag, aid, comm_q, storage_q, param = request_data
         self.aid = aid
-        self.free_memory_size = free_memory_size
 
         # If the flag is true then we attempt entanglement generation
         if flag:
-            # Mark the protocol as busy
-            self.status = self.STAT_BUSY
-
             # Set up for generating entanglement
             logger.debug("Flag set to true processing entanglement request")
             self.init_entanglement_request(comm_q, storage_q)
             self.run_entanglement_protocol()
-
-        # Otherwise we are passing information through to our peer
-        else:
-            logger.debug("Flag set to false, passing information through heralding station")
-            self.conn.put_from(self.node.nodeID, [[self.conn.CMD_INFO, self.free_memory_size], []])
-            self.reset_protocol()
 
     def init_entanglement_request(self, comm_q, storage_q):
         """
@@ -744,29 +732,13 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # Got some kind of command
         if isinstance(respM, int):
-            # Handle INFO passing, otherwise report an error
-            handlers = {
-                self.conn.CMD_INFO: self._handle_passed_info
-            }
-
             # Handle the message
-            handlers.get(respM, self._handle_error)(respM, passM)
+            self._handle_error(respM, passM)
 
         # Receiving result of production attempt
         else:
             # Only process production replies when we are expecting them
             self._handle_production_reply(respM, passM)
-
-    def _handle_passed_info(self, respM, passM):
-        """
-        Handles peer info passed via the midpoint station, passes back for update at EGP level
-        :param respM: int
-            Indicates what type of reply we are handling
-        :param passM: any
-            Information to pass back up to the EGP
-        """
-        result = (self.NO_GENERATION, passM, -1, None, self.PROTO_OK)
-        self.callback(result=result)
 
     def _handle_error(self, respM, passM):
         """
@@ -781,8 +753,8 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.reset_protocol()
 
     def _extract_aid_from_err_data(self, err_data):
-        if isinstance(err_data, tuple) and isinstance(err_data[-1], tuple):
-            return err_data[-1]
+        if isinstance(err_data, tuple):
+            return err_data
         return None
 
     def _construct_error_result(self, err_code, err_data, **kwargs):
@@ -795,7 +767,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             Result information to be interpretted by higher layers
         """
         aid = self._extract_aid_from_err_data(err_data)
-        result = (self.NO_GENERATION, None, -1, aid, err_code)
+        result = (self.NO_GENERATION, -1, aid, err_code)
         return result
 
     def _handle_production_reply(self, respM, passM):
@@ -809,13 +781,13 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         # Extract components of the response
         outcome, mhp_seq, aid = respM
-        other_free_memory, other_aid = passM
+        (other_aid) = passM
 
         # Clear used qubit ID if we failed, otherwise increment our successful generatoin
         if outcome == 0:
             logger.debug("Generation attempt failed")
 
-        self.result = (outcome, other_free_memory, mhp_seq, other_aid, self.PROTO_OK)
+        self.result = (outcome, mhp_seq, other_aid, self.PROTO_OK)
         logger.debug("Finished running protocol, returning results: {}".format(self.result))
 
         # Call back with the results
@@ -831,13 +803,12 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         try:
             # Construct the information to pass to our peer
-            pass_info = (self.free_memory_size, self.aid)
+            pass_info = self.aid
             logger.debug("Sending pass info: {}".format(pass_info))
 
             # Send info to the heralding station
             self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
             logger.debug("Scheduling entanglement event now.")
-            self.status = self.STAT_IDLE
             self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
         except Exception:

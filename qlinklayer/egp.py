@@ -593,10 +593,13 @@ class NodeCentricEGP(EGP):
             # Get scheduler's next gen task
             gen = self.scheduler.next()
 
-            # Store the gen for pickup by mhp
-            self.mhp_service.put_ready_data(self.node.nodeID, gen)
+            if gen[0]:
+                # Store the gen for pickup by mhp
+                self.mhp_service.put_ready_data(self.node.nodeID, gen)
+                return True
 
-            return True
+            else:
+                return False
 
         except Exception:
             logger.exception("Error occurred when triggering MHP!")
@@ -618,12 +621,7 @@ class NodeCentricEGP(EGP):
                 return
 
             # Otherwise we are ready to process the reply now
-            midpoint_outcome, other_free_memory, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
-
-            # Check if there was memory information included in the reply
-            if other_free_memory is not None:
-                logger.debug("Updating scheduler with other mem size {}".format(other_free_memory))
-                self.scheduler.update_other_mem_size(mem=other_free_memory)
+            midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
 
             # If no absolute queue id is included then info was passed or an error occurred
             if aid is None:
@@ -662,7 +660,7 @@ class NodeCentricEGP(EGP):
                         m, basis = self.measurement_results.pop(0)
                         logger.debug("Removing measurement outcome {} in basis {} from stored results".format(m, basis))
 
-                else:
+                elif midpoint_outcome in [1, 2]:
                     # Check if we need to time out this request
                     logger.debug("Processing MHP SEQ {}".format(mhp_seq))
                     valid_mhp = self._process_mhp_seq(mhp_seq, aid)
@@ -684,8 +682,8 @@ class NodeCentricEGP(EGP):
         :return:
         """
         try:
-            r, other_free_memory, mhp_seq, aid, proto_err = result
-            return r, other_free_memory, mhp_seq, aid, proto_err
+            r, mhp_seq, aid, proto_err = result
+            return r, mhp_seq, aid, proto_err
         except Exception:
             self.issue_err(err=self.ERR_OTHER)
             raise LinkLayerException("Malformed MHP reply received: {}".format(result))
@@ -838,7 +836,6 @@ class NodeCentricEGP(EGP):
         logger.debug("Checking received MHP_SEQ")
         if mhp_seq > self.expected_seq:
             logger.error("MHP_SEQ {} greater than expected SEQ {}".format(mhp_seq, self.expected_seq))
-
             # Collect expiration information to send to our peer
             new_mhp_seq = (mhp_seq + 1) % self.mhp_service.get_max_mhp_seq(self.node)
             self.send_expire_notification(aid=aid, old_seq=self.expected_seq, new_seq=new_mhp_seq)

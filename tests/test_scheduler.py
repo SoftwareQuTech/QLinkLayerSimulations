@@ -100,7 +100,7 @@ class TestRequestScheduler(unittest.TestCase):
 
         # Verify that the next request is the one we submitted
         gen = test_scheduler.next()
-        self.assertEqual(gen, (True, (0, 0), 0, 1, None, (1, 1)))
+        self.assertEqual(gen, (True, (0, 0), 0, 1, None))
 
 
 if __name__ == "__main__":
