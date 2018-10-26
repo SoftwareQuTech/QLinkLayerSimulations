@@ -132,9 +132,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
                                    purpose_id=1, priority=10)
-        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=2000,
+        bob_request = EGPRequest(other_ip=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=2000,
                                  purpose_id=2, priority=2)
 
         # Schedule a sequence of various create requests
@@ -197,7 +197,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         alice_pairs = 1
         num_requests = 4
-        alice_requests = [EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+        alice_requests = [EGPRequest(other_ip=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
                                      purpose_id=1, priority=10) for _ in range(num_requests)]
 
         # Schedule a sequence of various create requests
@@ -238,9 +238,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=10000,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=10000,
                                    purpose_id=1, priority=10)
-        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=20000,
+        bob_request = EGPRequest(other_ip=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=20000,
                                  purpose_id=2, priority=2)
 
         alice_scheduled_create = partial(egpA.create, creq=alice_request)
@@ -271,9 +271,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_num_bits = 1000
         bob_num_bits = 1000
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
                                    purpose_id=1, priority=10, measure_directly=True)
-        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
+        bob_request = EGPRequest(other_ip=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
                                  purpose_id=2, priority=2, measure_directly=True)
 
         alice_scheduled_create = partial(egpA.create, creq=alice_request)
@@ -332,16 +332,16 @@ class TestNodeCentricEGP(unittest.TestCase):
         alice_num_bits = 1000
         bob_num_pairs = 2
         bob_num_bits = 1000
-        alice_request_epr = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_pairs, min_fidelity=0.5, max_time=10000,
+        alice_request_epr = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_num_pairs, min_fidelity=0.5, max_time=10000,
                                        purpose_id=1, priority=10)
 
-        alice_request_bits = EGPRequest(otherID=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
+        alice_request_bits = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
                                         purpose_id=1, priority=10, measure_directly=True)
 
-        bob_request_epr = EGPRequest(otherID=alice.nodeID, num_pairs=bob_num_pairs, min_fidelity=0.5, max_time=20000,
+        bob_request_epr = EGPRequest(other_ip=alice.nodeID, num_pairs=bob_num_pairs, min_fidelity=0.5, max_time=20000,
                                      purpose_id=2, priority=2)
 
-        bob_request_bits = EGPRequest(otherID=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
+        bob_request_bits = EGPRequest(other_ip=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
                                       purpose_id=2, priority=2, measure_directly=True)
 
         alice_scheduled_epr = partial(egpA.create, creq=alice_request_epr)
@@ -416,9 +416,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=10000,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=10000,
                                    purpose_id=1, priority=10)
-        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=20000,
+        bob_request = EGPRequest(other_ip=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=20000,
                                  purpose_id=2, priority=2)
 
         alice_scheduled_create = partial(egpA.create, creq=alice_request)
@@ -461,7 +461,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         num_requests = 3
-        alice_requests = [EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1000,
+        alice_requests = [EGPRequest(other_ip=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1000,
                                      purpose_id=1, priority=10) for _ in range(num_requests)]
 
         # Schedule egp CREATE commands mid simulation to ensure timeout order when checking results
@@ -508,7 +508,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
         max_time = 10
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=max_time,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=max_time,
                                    purpose_id=1, priority=10)
 
         alice_scheduled_create = partial(egpA.create, creq=alice_request)
@@ -572,7 +572,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=100,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=100,
                                    purpose_id=1, priority=10)
 
         egpA.create(alice_request)
@@ -628,11 +628,11 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
 
         alice_pairs = 4
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
                                    purpose_id=1, priority=10)
 
         bob_pairs = 4
-        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=1000,
+        bob_request = EGPRequest(other_ip=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=1000,
                                  purpose_id=1, priority=10)
 
         alice_create_id, create_time = egpA.create(alice_request)
@@ -725,7 +725,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         egpA.mhp.conn._get_next_mhp_seq = bad_inc
         alice_pairs = 3
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
                                    purpose_id=1, priority=10)
 
         egpA.create(creq=alice_request)
@@ -775,20 +775,20 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # EGP Request that requests entanglement with self
-        node_self_request = EGPRequest(otherID=alice.nodeID, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
+        node_self_request = EGPRequest(other_ip=alice.nodeID, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
                                        priority=10)
 
         # EGP Request that requests entanglement with unknown node
         unknown_id = 100
-        node_unknown_request = EGPRequest(otherID=unknown_id, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
+        node_unknown_request = EGPRequest(other_ip=unknown_id, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
                                           priority=10)
 
         # EGP Request that requets more fidelity than we
-        unsuppfid_requet = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=1, max_time=10, purpose_id=1,
+        unsuppfid_requet = EGPRequest(other_ip=bob.nodeID, num_pairs=1, min_fidelity=1, max_time=10, purpose_id=1,
                                       priority=10)
 
         # max_time that is too short for us to fulfill
-        unsupptime_request = EGPRequest(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1e-9, purpose_id=1,
+        unsupptime_request = EGPRequest(other_ip=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1e-9, purpose_id=1,
                                         priority=10)
 
         egpA.create(creq=node_self_request)
@@ -919,9 +919,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPRequest(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
+        alice_request = EGPRequest(other_ip=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
                                    purpose_id=1, priority=10)
-        bob_request = EGPRequest(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=2000,
+        bob_request = EGPRequest(other_ip=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=2000,
                                  purpose_id=2, priority=2)
 
         alice_scheduled_create = partial(egpA.create, creq=alice_request)

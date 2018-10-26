@@ -57,7 +57,10 @@ class EGPRequest:
         """
         self.other_ip = other_ip
         self.other_port = other_port
-        self.otherID = (self.other_ip, self.other_port)
+
+        # For now let the ID be just the IP to be consistent with EasySquid notion of nodeIDs
+        self.otherID = self.other_ip
+
         self.num_pairs = num_pairs
         self.min_fidelity = min_fidelity
         self.max_time = max_time

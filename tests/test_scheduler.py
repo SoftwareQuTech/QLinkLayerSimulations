@@ -44,7 +44,7 @@ class TestRequestScheduler(unittest.TestCase):
 
     def test_get_queue(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
-        request = EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=1, purpose_id=0,
+        request = EGPRequest(other_ip=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=1, purpose_id=0,
                              priority=0)
         test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
         self.assertEqual(test_scheduler.get_queue(request), 0)
@@ -64,7 +64,7 @@ class TestRequestScheduler(unittest.TestCase):
         qmmA = QuantumMemoryManagement(node=self.nodeA)
         test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
 
-        request = EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=12, purpose_id=0,
+        request = EGPRequest(other_ip=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=12, purpose_id=0,
                              priority=0)
 
         conn = dqpA.conn

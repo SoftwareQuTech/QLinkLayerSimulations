@@ -103,7 +103,7 @@ class EGPSimulationScenario(TimedProtocol):
             max_time = num_pairs * self.tmax_pair
 
             # Create a request
-            request = EGPRequest(otherID=self.otherID, num_pairs=num_pairs, min_fidelity=self.min_fidelity,
+            request = EGPRequest(other_ip=self.otherID, num_pairs=num_pairs, min_fidelity=self.min_fidelity,
                                  max_time=max_time, purpose_id=self.purpose_id, priority=self.priority,
                                  store=self.store, measure_directly=self.measure_directly)
 
