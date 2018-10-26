@@ -13,15 +13,32 @@ from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
 import random
+import bitstring
 
 
 class EGPRequest:
-    def __init__(self, otherID, num_pairs, min_fidelity, max_time, purpose_id=0, priority=None, store=True,
-                 measure_directly=False):
+
+    package_format = 'uint:32=other_ip, ' \
+                     'uint:16=other_port, ' \
+                     'uint:16=purpose_id, ' \
+                     'float:32=create_time, ' \
+                     'float:32=min_fidelity, ' \
+                     'float:32=max_time, ' \
+                     'uint:16=create_id, ' \
+                     'uint:8=num_pairs, ' \
+                     'uint:4=priority', \
+                     'uint:1=store, ' \
+                     'uint:1=measure_directly'
+    HDR_LENGTH = 24
+
+    def __init__(self, other_ip=0, other_port=0, num_pairs=0, min_fidelity=0, max_time=0,
+                 purpose_id=0, priority=0, store=True, measure_directly=False):
         """
         Stores required parameters of Entanglement Generation Protocol Request
-        :param otherID: int
-            ID of the other node we are attempting to generate entanglement with
+        :param other_ip: int
+            IP of the other node we are attempting to generate entanglement with
+        :param other_port: int
+            Port number of other node.
         :param num_pairs: int
             The number of entangled pairs we are trying to generate
         :param min_fidelity: float
@@ -38,7 +55,9 @@ class EGPRequest:
         :param measure_directly: bool
             Specifies whether to measure the communication qubit directly after the photon is emitted
         """
-        self.otherID = otherID
+        self.other_ip = other_ip
+        self.other_port = other_port
+        self.otherID = (self.other_ip, self.other_port)
         self.num_pairs = num_pairs
         self.min_fidelity = min_fidelity
         self.max_time = max_time
@@ -57,9 +76,9 @@ class EGPRequest:
         :return: obj `~qlinklayer.egp.EGPRequest`
             A copy of the EGPRequest object
         """
-        c = type(self)(otherID=self.otherID, num_pairs=self.num_pairs, min_fidelity=self.min_fidelity,
-                       max_time=self.max_time, purpose_id=self.purpose_id, priority=self.priority, store=self.store,
-                       measure_directly=self.measure_directly)
+        c = type(self)(other_ip=self.other_ip, other_port=self.other_port, num_pairs=self.num_pairs,
+                       min_fidelity=self.min_fidelity, max_time=self.max_time, purpose_id=self.purpose_id,
+                       priority=self.priority, store=self.store, measure_directly=self.measure_directly)
         c.assign_create_id(self.create_id, self.create_time)
         return c
 
@@ -74,6 +93,52 @@ class EGPRequest:
 
     def get_create_info(self):
         return self.create_id, self.create_time
+
+    def pack(self):
+        """
+        Pack the data in packet form.
+        :return: str
+        """
+        if self.create_time is None:
+            raise ValueError("Cannot pack if create_time is None")
+        if self.create_id is None:
+            raise ValueError("Cannot pack if create_id is None")
+        to_pack = {"other_ip": self.other_ip,
+                   "other_port": self.other_port,
+                   "purpose_id": self.purpose_id,
+                   "create_time": self.create_time,
+                   "min_fidelity": self.min_fidelity,
+                   "max_time": self.max_time,
+                   "create_id": self.create_id,
+                   "num_pairs": self.num_pairs,
+                   "priority": self.priority,
+                   "store": self.store,
+                   "measure_directly": self.measure_directly}
+        request_Bitstring = bitstring.pack(self.package_format, **to_pack)
+        requestH = request_Bitstring.tobytes()
+
+        return requestH
+
+    def unpack(self, headerBytes):
+        """
+        Unpack data.
+        :param headerBytes: str
+        :return:
+        """
+        request_Bitstring = bitstring.BitString(headerBytes)
+        request_fields = request_Bitstring.unpack(self.package_format)
+        self.other_ip = request_fields[0]
+        self.other_port = request_fields[1]
+        self.otherID = (self.other_ip, self.other_port)
+        self.purpose_id = request_fields[2]
+        self.create_time = request_fields[3]
+        self.min_fidelity = request_fields[4]
+        self.max_time = request_fields[5]
+        self.create_id = request_fields[6]
+        self.num_pairs = request_fields[7]
+        self.priority = request_fields[8]
+        self.store = bool(request_fields[9])
+        self.measure_directly = bool(request_fields[10])
 
 
 class EGP(EasyProtocol):
