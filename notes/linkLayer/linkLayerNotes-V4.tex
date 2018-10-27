@@ -63,8 +63,7 @@ $F_{\min}$ & Minimum acceptable fidelity (with high confidence). \\
 $t_{\max}$ & Maximum acceptable waiting time before request is completed. \\
 Purpose ID & Identifying the purpose or application at this node (optional, default 0). \\
 Priority & Manual setting of a priority for entanglement production (optional).\\
-Store & Instructs the EGP whether to store the entangled qubit into a memory location or \\
-to keep it in the communication location (defaults to storage). \\
+Store & Instructs the EGP whether to store the entangled qubit into memory. \\
 create ID & Sequence number identifying this CREATE command.
 \end{tabular}
 \end{description}
@@ -437,8 +436,7 @@ it applies to both analogously:
 \sbline
 \textit{Goal.} Produce entanglement, or otherwise declare failure.
 \sbline
-\textit{Initialization.} Initialize sequence numbers. Obtain $e_A$ from local QMM, and $e_B$ from node $B$. Initialize
-outstanding generation list $G$.
+\textit{Initialization.} Initialize outstanding generation list $G$.
 \textit{The protocol:}
 \begin{enumerate}
   \item \textbf{Adding to Queue:}
@@ -451,30 +449,21 @@ outstanding generation list $G$.
    \end{enumerate}
   \item \textbf{Trigger pair (polled by MHP\_NC):}
   \begin{enumerate}
-    \item Get current free memory size $e_A$ from QMM
 	\item Ask the scheduler whether entanglement should be made and for which request: $(flag, (j,id_j) \equiv req, param, comm\_q, storage\_q) = NEXT$. For this end, the scheduler will employ its priority policy, as well as perform flow control depending on whether $B$ is likely to produce entanglement.
     \item If there is a generation waiting to be satisfied:
     \begin{enumerate}
 	  \item Add $(j,id_j)$ to outstanding generation list $G$.
-      \item Construct response for MHP\_NC $(flag, (j,id_j), comm\_q, storage\_q, param, e_A)$.
+      \item Construct response for MHP\_NC $(flag, (j,id_j), comm\_q, storage\_q, param)$.
+      \item Provide the response to the MHP\_NC.
     \end{enumerate}
-    \item Otherwise if there are no generations to perform
-	\begin{enumerate}
-	  \item Construct an $Info$ response for the MHP\_NC $(False, None, None, None, None, e_A)$.
-    \end{enumerate}
-    \item Provide the response to the MHP\_NC.
+    \item Otherwise if there are no generations to perform provide $(False, None, None, None, None)$.
    \end{enumerate}
    \item \textbf{Handle reply (message from MHP\_NC):}
    \begin{enumerate}
-   \item Retrieve message from MHP including: result of generation $r \in \{0,1,2\}$, free memory at remote node $e_B$, $MHP\_seq$, absolute queue id $(j,id_j)$, and protocol error flag $proto_{err}$.
-   \item Update scheduler with $B$'s new memory size advertisement $e_B$.
-   \item If an absolute queue ID is not provided then this is an $Info$ message:
+   \item Retrieve message from MHP including: result of generation $r \in \{0,1,2\}$, $MHP\_seq$, absolute queue id $(j,id_j)$, and protocol error flag $proto_{err}$.
+   \item If the specified absolute queue ID is not found locally then the request may have timed out or expired:
    \begin{enumerate}
-     \item Check if an error occurred during the protocol and handle appropriately, otherwise stop handling.
-   \end{enumerate}
-   \item If the specified absolute queue ID is not found locally then the request may have timed out and expired:
-   \begin{enumerate}
-     \item Free the communication qubit used and stop handling.
+     \item Free the reserved communication qubit in the QMM and stop handling.
    \end{enumerate}
    \item Otherwise there is an absolute queue ID included in the response that is associated with an active request:
    \begin{enumerate}
@@ -515,7 +504,7 @@ outstanding generation list $G$.
 
 \end{Lprotocol}
 
-Let us now describe how we will use the MHP, recall that it will be automatically executed at specific time steps and poll the EGP for the entanglement generation flag (or more accurately list of outstanding ``flags''). Here, we will assume that in addition to the flag y/n whether to produce entanglement, we will also supply the MHP with (1) the physical ID of the communication qubit (2) the physical ID of the storage qubit (3) any parameters such as the bright state population for entanglement generation (4) the current free memory size $e_A$  (5) the absolute queue ID.
+Let us now describe how we will use the MHP, recall that it will be automatically executed at specific time steps and poll the EGP for the entanglement generation flag (or more accurately list of outstanding ``flags''). Here, we will assume that in addition to the flag y/n whether to produce entanglement, we will also supply the MHP with (1) the physical ID of the communication qubit (2) the physical ID of the storage qubit (3) any parameters such as the bright state population for entanglement generation (4) the absolute queue ID.
 
 We specify the MHP by filling in the default messages given above. Again we will for simplicity do this only for $A$ but the same holds for $B$.
 \begin{Lprotocol}{MHP\_NC - MHP for use with the Node Centric EGP above}
@@ -533,13 +522,9 @@ We specify the MHP by filling in the default messages given above. Again we will
       \begin{enumerate}
 	    \item Reserve $comm\_q$ and $storage\_q$.
 	    \item Initialize $comm_q$, and produce spin-photon entanglement. Store spin state in $storage\_q$. If any failures occur, send $mhp_{err} = GEN\_FAIL$ back to the EGP and skip to next time step.
-	    \item Use $req_{AM} = (Produce)$ and $pass_{AM} = (e_A, aid)$.
+	    \item Use $req_{AM} = (Produce)$ and $pass_{AM} = (aid)$.
       \end{enumerate}
-      \item If $flag$ is False, i.e., we don't want to make entanglement:
-      \begin{enumerate}
-        \item If no entanglement is desired to produce, set $req_{AM} = (Info)$ and use the same pass to update the remote node with the new memory size if any.
-      \end{enumerate}
-      \item If $resp_{MA}$ returns from midpoint: Choose $f$ to pass the following information up to the EGP: Current free memory of the remote node, $r$, MHP seq and $aid$.
+      \item If $resp_{MA}$ returns from midpoint: Choose $f$ to pass the following information up to the EGP: $r$, MHP seq and $aid$.
 	\end{enumerate}
 	\item \textbf{Heralding station:}
 	\begin{enumerate}
