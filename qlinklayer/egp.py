@@ -233,6 +233,7 @@ class NodeCentricEGP(EGP):
         self.max_move_delay = 0
         self.this_corr_delay = 0
         self.peer_corr_delay = 0
+        self.max_measurement_delay = 0
 
         # Request tracking
         self.expected_seq = 0
@@ -362,6 +363,9 @@ class NodeCentricEGP(EGP):
         max_peer_move_delay = max([time for time in peer_move_delays.values() if time != float('inf')])
         max_move_delay = max(max_this_move_delay, max_peer_move_delay)
 
+        local_measurement_delay = self.qmm.get_measurement_delay(0)
+        remote_measurement_delay = other_egp.qmm.get_measurement_delay(0)
+        self.max_measurement_delay = max(local_measurement_delay, remote_measurement_delay)
         self.max_move_delay = max_move_delay
         other_egp.max_move_delay = max_move_delay
 
@@ -792,6 +796,7 @@ class NodeCentricEGP(EGP):
 
             # Set a flag to make sure we catch replies that occur during the measurement
             self.measurement_in_progress = True
+            self.scheduler.suspend_generation(self.max_measurement_delay)
             q.measure(callback=self._handle_measurement_outcome)
             self.node.qmem.execute_program(prgm)
 
