@@ -202,6 +202,7 @@ class NodeCentricEGP(EGP):
     CMD_EXPIRE = 2
     CMD_EXPIRE_ACK = 3
 
+    # Error codes
     ERR_UNSUPP = 40
     ERR_NOTIME = 41
     ERR_NORES = 42
@@ -210,6 +211,10 @@ class NodeCentricEGP(EGP):
     ERR_OTHER = 45
     ERR_EXPIRE = 46
     ERR_CREATE = 47
+
+    # OK Types
+    CK_OK = 0
+    MD_OK = 1
 
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None, throw_local_queue_events=False,
                  accept_all_requests=False):
@@ -855,8 +860,8 @@ class NodeCentricEGP(EGP):
 
             # If we received a reply for this attempt during measurement we can handle it immediately
             if self.measure_directly_reply:
-                self.measure_directly_reply = None
                 self.handle_reply_mhp(self.measure_directly_reply)
+                self.measure_directly_reply = None
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """
@@ -990,12 +995,12 @@ class NodeCentricEGP(EGP):
         if self.scheduler.handling_measure_directly():
             ent_id = (creatorID, creq.otherID, mhp_seq)
             m, basis = self.get_measurement_outcome(creq)
-            result = (creq.create_id, ent_id, m, basis, t_create)
+            result = (self.MD_OK, creq.create_id, ent_id, m, basis, t_create)
 
         else:
             ent_id = (creatorID, creq.otherID, mhp_seq)
             t_goodness = t_create
-            result = (creq.create_id, ent_id, logical_id, fidelity_estimate, t_goodness, t_create)
+            result = (self.CK_OK, creq.create_id, ent_id, logical_id, fidelity_estimate, t_goodness, t_create)
 
         return result
 

@@ -36,7 +36,8 @@ class PM_Test_Ent(PM_Test):
         assert len(self.stored_data) == len(set(self.stored_data))
 
         self.num_tested_items += 1
-        create_id, ent_id, logical_id, goodness, t_goodness, t_create = self.stored_data[-1]
+        ok_type, create_id, ent_id, logical_id, goodness, t_goodness, t_create = self.stored_data[-1]
+        assert ok_type == egp.CK_OK
         assert len(ent_id) == 3
 
         creator, peer, mhp_seq = ent_id
@@ -151,17 +152,20 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(self.alice_results, self.bob_results)
 
         # Verify the individual results
-        create_id, ent_id, logical_id, _, _, _ = self.alice_results[0]
+        ok_type, create_id, ent_id, logical_id, _, _, _ = self.alice_results[0]
+        self.assertEqual(ok_type, egpA.CK_OK)
         self.assertEqual(create_id, alice_create_id)
         self.assertEqual(ent_id, (alice.nodeID, bob.nodeID, 0))
         self.assertEqual(logical_id, 1)
 
-        create_id, ent_id, logical_id, _, _, _ = self.bob_results[1]
+        ok_type, create_id, ent_id, logical_id, _, _, _ = self.bob_results[1]
+        self.assertEqual(ok_type, egpB.CK_OK)
         self.assertEqual(create_id, bob_create_id)
         self.assertEqual(ent_id, (bob.nodeID, alice.nodeID, 1))
         self.assertEqual(logical_id, 2)
 
-        create_id, ent_id, logical_id, _, _, _ = self.bob_results[2]
+        ok_type, create_id, ent_id, logical_id, _, _, _ = self.bob_results[2]
+        self.assertEqual(ok_type, egpB.CK_OK)
         self.assertEqual(create_id, bob_create_id)
         self.assertEqual(ent_id, (bob.nodeID, alice.nodeID, 2))
         self.assertEqual(logical_id, 3)
@@ -214,7 +218,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Verify that the create id incremented for each call and was tracked for each request
         for create_id, result in zip(alice_create_info, self.alice_results):
-            stored_id, ent_id, _, _, _, _ = result
+            ok_type, stored_id, ent_id, _, _, _, _ = result
+            self.assertEqual(ok_type, egpA.CK_OK)
             self.assertEqual(stored_id, create_id)
 
         # Verify that the pydynaa create events were scheduled correctly
@@ -291,8 +296,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         correlated_measurements = defaultdict(int)
         total_measurements = defaultdict(int)
         for resA, resB in zip(self.alice_results, self.bob_results):
-            a_create, a_id, a_m, a_basis, a_t = resA
-            b_create, b_id, b_m, b_basis, b_t = resB
+            a_ok_type, a_create, a_id, a_m, a_basis, a_t = resA
+            b_ok_type, b_create, b_id, b_m, b_basis, b_t = resB
+            self.assertEqual(a_ok_type, egpA.MD_OK)
+            self.assertEqual(b_ok_type, egpB.MD_OK)
             self.assertEqual(a_create, b_create)
             self.assertEqual(a_id, b_id)
             self.assertEqual(a_t, b_t)
@@ -359,10 +366,11 @@ class TestNodeCentricEGP(unittest.TestCase):
         correlated_measurements = defaultdict(int)
         total_measurements = defaultdict(int)
         for resA, resB in zip(self.alice_results, self.bob_results):
-            if len(resA) == 6:
+            self.assertEqual(resA[0], resB[0])
+            if resA[0] == egpA.CK_OK:
                 continue
-            a_create, a_id, a_m, a_basis, a_t = resA
-            b_create, b_id, b_m, b_basis, b_t = resB
+            _, a_create, a_id, a_m, a_basis, a_t = resA
+            _, b_create, b_id, b_m, b_basis, b_t = resB
             self.assertEqual(a_create, b_create)
             self.assertEqual(a_id, b_id)
             self.assertEqual(a_t, b_t)
@@ -436,8 +444,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         for resA, resB in zip(self.alice_results, self.bob_results):
             self.assertEqual(len(resA), len(resB))
             if len(resA) > 2:
-                qA = alice.qmem.peek(resA[2])[0]
-                qB = bob.qmem.peek(resB[2])[0]
+                qA = alice.qmem.peek(resA[3])[0]
+                qB = bob.qmem.peek(resB[3])[0]
                 self.assertEqual(qA.qstate, qB.qstate)
                 self.assertIn(qB, qA.qstate._qubits)
                 self.assertIn(qA, qB.qstate._qubits)
@@ -640,11 +648,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(self.alice_results[0], self.bob_results[0])
 
         # Check that alice only has an entanglement identifier for one of the pairs in her request
-        alice_oks = list(filter(lambda info: len(info) == 6 and info[1][:2] == (alice.nodeID, bob.nodeID),
+        alice_oks = list(filter(lambda info: len(info) == 7 and info[2][:2] == (alice.nodeID, bob.nodeID),
                                 self.alice_results))
         self.assertEqual(len(alice_oks), 1)
         [ok_message] = alice_oks
-        create_id, ent_id, logical_id, _, _, _ = ok_message
+        ok_type, create_id, ent_id, logical_id, _, _, _ = ok_message
+        self.assertEqual(ok_type, egpA.CK_OK)
         self.assertEqual(create_id, alice_create_id)
         expected_mhp = 0
 
@@ -653,7 +662,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Check that any additional entanglement identifiers bob's egp may have passed up were expired
         # Get the issued ok's containing entanglement identifiers corresponding to alice's create
-        bob_oks = list(filter(lambda info: len(info) == 6 and info[1][:2] == (alice.nodeID, bob.nodeID),
+        bob_oks = list(filter(lambda info: len(info) == 7 and info[2][:2] == (alice.nodeID, bob.nodeID),
                               self.bob_results))
 
         # Get the expiration message we received from alice
@@ -663,7 +672,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         [expiry_message] = expiry_messages
 
         invalid_oks = set(bob_oks) - set(alice_oks)
-        uncovered_ids = [ok_message[1] for ok_message in invalid_oks]
+        uncovered_ids = [ok_message[2] for ok_message in invalid_oks]
         seq_start, seq_end = expiry_message[1]
         expired_seq_range = list(range(seq_start, seq_end))
 
@@ -673,9 +682,9 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Check that we were able to resynchronize for bob's request
         # Get the gen ok's corresponding to bob's request after the error
-        alice_gens_post_error = list(filter(lambda info: len(info) == 6 and info[1][:2] == (bob.nodeID, alice.nodeID),
+        alice_gens_post_error = list(filter(lambda info: len(info) == 7 and info[2][:2] == (bob.nodeID, alice.nodeID),
                                             self.alice_results))
-        bob_gens_post_error = list(filter(lambda info: len(info) == 6 and info[1][:2] == (bob.nodeID, alice.nodeID),
+        bob_gens_post_error = list(filter(lambda info: len(info) == 7 and info[2][:2] == (bob.nodeID, alice.nodeID),
                                           self.bob_results))
 
         # Check that we were able to complete the request
@@ -684,9 +693,9 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Check that the sequence numbers match
         for alice_gen, bob_gen in zip(alice_gens_post_error, bob_gens_post_error):
-            self.assertEqual(alice_gen[1][2], bob_gen[1][2])
-            qA = alice.qmem.peek(alice_gen[2])[0]
-            qB = bob.qmem.peek(bob_gen[2])[0]
+            self.assertEqual(alice_gen[2][2], bob_gen[2][2])
+            qA = alice.qmem.peek(alice_gen[3])[0]
+            qB = bob.qmem.peek(bob_gen[3])[0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
@@ -729,11 +738,11 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Verify that when both detect MHP Sequence number skip then results are the same
         self.assertEqual(len(self.alice_results), 2)
         self.assertEqual(self.alice_results, self.bob_results)
-        self.assertEqual(self.alice_results[0][1][:3], (alice.nodeID, bob.nodeID, 0))
+        self.assertEqual(self.alice_results[0][2][:3], (alice.nodeID, bob.nodeID, 0))
 
         # Verify that first create was successful
-        idA = self.alice_results[0][2]
-        idB = self.bob_results[0][2]
+        idA = self.alice_results[0][3]
+        idB = self.bob_results[0][3]
         qA = alice.qmem.peek(idA)[0]
         qB = bob.qmem.peek(idB)[0]
         self.assertEqual(qA.qstate.dm.shape, (4, 4))
@@ -836,8 +845,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_run(5)
         self.assertEqual(len(self.alice_results), 2)
         self.assertEqual(len(self.alice_results), len(self.bob_results))
-        create_id, alice_ent_id, _, _, _, _ = self.alice_results[-1]
-        _, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        ok_type, create_id, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        _, _, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(ok_type, egpA.CK_OK)
         self.assertEqual(create_id, expected_id)
         self.assertEqual(alice_ent_id, bob_ent_id)
 
@@ -853,8 +863,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_run(12)
         self.assertEqual(len(self.alice_results), 3)
         self.assertEqual(len(self.bob_results), 4)
-        _, alice_ent_id, _, _, _, _ = self.alice_results[-1]
-        create_id, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        _, _, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        ok_type, create_id, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(ok_type, egpA.CK_OK)
         self.assertEqual(create_id, expected_id)
         self.assertEqual(alice_ent_id, bob_ent_id)
 
@@ -870,8 +881,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_run(18)
         self.assertEqual(len(self.alice_results), 4)
         self.assertEqual(len(self.bob_results), 6)
-        create_id, alice_ent_id, _, _, _, _ = self.alice_results[-1]
-        _, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        ok_type, create_id, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        _, _, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(ok_type, egpA.CK_OK)
         self.assertEqual(create_id, expected_id)
         self.assertEqual(alice_ent_id, bob_ent_id)
 
@@ -881,7 +893,6 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_run(23)
         self.assertEqual(len(self.alice_results), 5)
         self.assertEqual(self.alice_results[-1], (egpA.dqp.DQ_REJECT, expected_id))
-
 
     def test_events(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)

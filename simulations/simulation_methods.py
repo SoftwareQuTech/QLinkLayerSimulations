@@ -157,8 +157,8 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=
     dqp_conn = network.get_connection(nodeA, nodeB, "dqp_conn")
 
     # Create our EGP instances and connect them
-    egpA = NodeCentricEGP(nodeA, throw_local_queue_events=collect_queue_data)
-    egpB = NodeCentricEGP(nodeB, throw_local_queue_events=collect_queue_data)
+    egpA = NodeCentricEGP(nodeA, throw_local_queue_events=collect_queue_data, accept_all_requests=True)
+    egpB = NodeCentricEGP(nodeB, throw_local_queue_events=collect_queue_data, accept_all_requests=True)
     egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn,
                                   alphaA=alphaA, alphaB=alphaB)
 
