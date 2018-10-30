@@ -356,9 +356,9 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         """
         requestA = self.node_requests.get(self.nodeA.nodeID)
         pass_AM = requestA.pass_data
-        aid_A = pass_AM[1]
+        aid_A = pass_AM
         pass_BM = self.node_requests[self.nodeB.nodeID].pass_data
-        aid_B = pass_BM[1]
+        aid_B = pass_BM
 
         mhp_seq = self.mhp_seq
         resp_MA = (outcome, mhp_seq, aid_A)

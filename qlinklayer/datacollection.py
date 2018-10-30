@@ -4,6 +4,7 @@ from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
+from qlinklayer.egp import NodeCentricEGP
 
 
 class EGPDataSequence(PM_SQLDataSequence, metaclass=abc.ABCMeta):
@@ -218,8 +219,8 @@ class EGPOKSequence(EGPDataSequence):
     def getData(self, time, source=None):
         scenario = source[0]
         ok = scenario.get_ok()
-        create_id = ok[0]
-        other_id = ok[1][1]
+        create_id = ok[1]
+        other_id = ok[2][1]
 
         nodeID = scenario.node.nodeID
 
@@ -234,7 +235,7 @@ class EGPOKSequence(EGPDataSequence):
         else:
             nr_attempts = -1
 
-        data = [nodeID, ok[0]] + list(ok[1]) + list(ok[2:]) + [nr_attempts]
+        data = [ok[0], nodeID, ok[1]] + list(ok[2]) + list(ok[3:]) + [nr_attempts]
         return [data, True]
 
 
@@ -247,12 +248,15 @@ class EGPOKDataPoint(EGPDataPoint):
                 self.from_raw_data(data)
         else:
             self.timestamp = None
+            self.ok_type = None
             self.node_id = None
             self.create_id = None
             self.origin_id = None
             self.other_id = None
             self.mhp_seq = None
             self.logical_id = None
+            self.measurement_outcome = None
+            self.measurement_basis = None
             self.goodness = None
             self.goodness_time = None
             self.create_time = None
@@ -260,50 +264,52 @@ class EGPOKDataPoint(EGPDataPoint):
             self.success = None
 
     def from_raw_data(self, data):
-        try:
-            self.timestamp = data[0]
-            self.node_id = data[1]
-            self.create_id = data[2]
-            self.origin_id = data[3]
-            self.other_id = data[4]
-            self.mhp_seq = data[5]
-            self.logical_id = data[6]
-            self.goodness = data[7]
-            self.goodness_time = data[8]
-            self.create_time = data[9]
-            self.attempts = data[10]
-            self.success = data[11]
-        except IndexError:
+        ok_type = data[1]
+        if ok_type == NodeCentricEGP.CK_OK:
+            self.timestamp, self.ok_type, self.node_id, self.create_id, self.origin_id, self.other_id, self.mhp_seq,\
+                self.logical_id, self.goodness, self.goodness_time, self.create_time, self.attempts, self.success = data
+        elif ok_type == NodeCentricEGP.MD_OK:
+            self.timestamp, self.ok_type, self.node_id, self.create_id, self.origin_id, self.other_id, self.mhp_seq,\
+                self.measurement_outcome, self.measurement_basis, self.create_time, self.attempts, self.success = data
+        else:
             raise ValueError("Cannot parse data")
 
     def from_data_point(self, data):
         if isinstance(data, EGPOKDataPoint):
-            self.timestamp = self.timestamp
-            self.node_id = self.node_id
-            self.create_id = self.create_id
-            self.origin_id = self.origin_id
-            self.other_id = self.other_id
-            self.mhp_seq = self.mhp_seq
-            self.logical_id = self.logical_id
-            self.goodness = self.goodness
-            self.goodness_time = self.goodness_time
-            self.create_time = self.create_time
-            self.attempts = self.attempts
-            self.success = self.success
+            self.timestamp = data.timestamp
+            self.ok_type = data.ok_type
+            self.node_id = data.node_id
+            self.create_id = data.create_id
+            self.origin_id = data.origin_id
+            self.other_id = data.other_id
+            self.mhp_seq = data.mhp_seq
+            self.logical_id = data.logical_id
+            self.measurement_outcome = data.measurement_outcome
+            self.measurement_basis = data.measurement_basis
+            self.goodness = data.goodness
+            self.goodness_time = data.goodness_time
+            self.create_time = data.create_time
+            self.attempts = data.attempts
+            self.success = data.success
         else:
             raise ValueError("'data' is not an instance of this class")
 
     def printable_data(self):
         to_print = "EGP OK Data-point:\n"
         to_print += "    Timestamp: {}\n".format(self.timestamp)
+        to_print += "    OK Type: {}\n".format("CK" if self.ok_type == NodeCentricEGP.CK_OK else "MD")
         to_print += "    Node ID: {}\n".format(self.node_id)
         to_print += "    Create ID: {}\n".format(self.create_id)
         to_print += "    Origin ID: {}\n".format(self.origin_id)
         to_print += "    Other ID: {}\n".format(self.other_id)
         to_print += "    MHP Seq: {}\n".format(self.mhp_seq)
-        to_print += "    Logical ID: {}\n".format(self.logical_id)
-        to_print += "    Goodness: {}\n".format(self.goodness)
-        to_print += "    Goodness Time: {}\n".format(self.goodness_time)
+        if self.ok_type == NodeCentricEGP.CK_OK:
+            to_print += "    Logical ID: {}\n".format(self.logical_id)
+            to_print += "    Goodness: {}\n".format(self.goodness)
+            to_print += "    Goodness Time: {}\n".format(self.goodness_time)
+        else:
+            to_print += "    Measurement Outcome: {}\n".format(self.measurement_outcome)
+            to_print += "    Measurement Basis: {}\n".format(self.measurement_basis)
         to_print += "    Create Time: {}\n".format(self.create_time)
         to_print += "    Attempts: {}\n".format(self.attempts)
         to_print += "    Success: {}\n".format(self.success)

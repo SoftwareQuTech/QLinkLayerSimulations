@@ -402,10 +402,14 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         self.ok_storage.append(result)
 
         # Extract fields from result
-        create_id, ent_id, outcome, basis, t_create = result
+        ok_type, create_id, ent_id, outcome, basis, t_create = result
 
         # Store the basis/bit choice and the midpoint outcomes for QubErr or key generation
-        meas_data = (basis, outcome)
+        if ok_type == self.egp.MD_OK:
+            meas_data = (basis, outcome)
+        else:
+            raise ValueError("Did not receive measure directly OK!")
+
         self.measurement_storage[ent_id] = meas_data
 
     def get_ok(self, remove=True):

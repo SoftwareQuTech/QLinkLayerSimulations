@@ -63,7 +63,8 @@ $F_{\min}$ & Minimum acceptable fidelity (with high confidence). \\
 $t_{\max}$ & Maximum acceptable waiting time before request is completed. \\
 Purpose ID & Identifying the purpose or application at this node (optional, default 0). \\
 Priority & Manual setting of a priority for entanglement production (optional).\\
-Store & Instructs the EGP whether to store the entangled qubit into memory. \\
+Store & Instructs the EGP whether to store the entangled qubit into memory (optional, default True).\\
+Measure Directly & Instructs the EGP to return measurements on entangled qubits (optional,  default False). \\
 create ID & Sequence number identifying this CREATE command.
 \end{tabular}
 \end{description}
@@ -71,7 +72,7 @@ create ID & Sequence number identifying this CREATE command.
 Following the reception of the CREATE command, several actions of the EGP are possible. Let us start with the positive outcome, and then consider possible
 errors. An OK message will be delivered at both nodes involved in the entanglement generation process.
 \begin{description}
-\item[OK] Entangled pair has successfully been produced deterministically (heralded). One message per pair created, delivered immediately (best effort) following pair creation.
+\item[CK\_OK] Entangled pair has successfully been produced deterministically (heralded). One message per pair created, delivered immediately (best effort) following pair creation.
 With high confidence, the minimum acceptable fidelity $F_{\min}$ has been met, and the entanglement has been generated
 within the specified time frame $t_{\max}$. Information about the entanglement generation is provided, including an entanglement identifier. This identifier is required
 to be globally unique, and agreed upon by $A$ and $B$. That is, $A$ and $B$ can locally use this entanglement identifier to determine which of their qubits is entangled with the remote
@@ -86,7 +87,7 @@ seqID & Sequence number. Unique (up to wrap around) between $A$ and $B$, and \\
 
 \smallskip
 \noindent
-In addition the OK message also includes the following local information. We remark that Qubit IDs are exclusively local information (akin to the memory address
+In addition the CK\_OK message also includes the following local information. We remark that Qubit IDs are exclusively local information (akin to the memory address
 in a computer) and not in general shared between network nodes.\\
 \noindent
 \begin{tabular}{ll}
@@ -98,6 +99,18 @@ $t_{Create}$ & Time the pair was produced.\\
 $logical\_id$ & Logical ID of the qubit locally holding the entanglement.
 \end{tabular}
 \end{description}
+\begin{description}
+\item[MD\_OK] Measurement of of heralded entangled pair has successfully been performed. One message per pair created, delivered immediately (best effort) following heralding at midpoint.
+The MD\_OK also includes an entanglement identifier so that measurement results can be related by peers at higher layers. The MD\_OK message includes the following local information in addition to the entanglement identifier. \\
+\noindent
+\begin{tabular}{ll}
+create ID & The create ID that this entangled pair corresponds to. \\
+Measurement Outcome & The value measured on the communication qubit. \\
+Measurement Basis & The measurement basis used (chosen randomly from Z and X bases).\\
+$t_{Create}$ & Time the bit was produced.\\
+\end{tabular}
+\end{description}
+
 Entanglement generation may fail for wide number of reasons, some of which form an immediate error. It may also be that the entanglement later expires, or is discarded
 of which the EGP will inform the higher layer. Let us start by listing the immediate failure modes, where in all such cases the create ID will be included allowing the
 higher layer to identify which request has failed.\\
