@@ -120,11 +120,11 @@ class EGPCreateSequence(EGPDataSequence):
 
     def get_column_names(self):
         # TODO ITEMS AFTER "Timestamp and "Node ID" currently have to be sorted....
-        return ["Timestamp", "Node ID", "CQC Request" "Success"]
+        return ["Timestamp", "Node ID", "CQC Request", "Success"]
 
     def getData(self, time, source=None):
         nodeID, cqc_request = source[0].get_create_info()
-        return [nodeID, cqc_request, True]
+        return [(nodeID, cqc_request), True]
 
 
 class EGPCreateDataPoint(EGPDataPoint):
