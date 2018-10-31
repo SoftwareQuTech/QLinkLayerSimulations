@@ -13,8 +13,8 @@ from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCCmdHeader, CQCEPRRequestHeader, \
-    CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, CQC_VERSION, CQC_TP_EPR_OK
-from SimulaQron.cqc.backend.entInfoHeader import ENT_INFO_LENGTH, EntInfoHeader
+    CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, CQC_VERSION, CQC_TP_EPR_OK, CQCNotifyHeader, CQC_NOTIFY_LENGTH
+from SimulaQron.cqc.backend.entInfoHeader import ENT_INFO_LENGTH, EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 import random
 import bitstring
 
@@ -34,33 +34,55 @@ class EGPRequest:
                      'uint:1=measure_directly'
     HDR_LENGTH = 24
 
-    def __init__(self, cqc_request):
+    def __init__(self, cqc_request=None):
         """
         Stores required parameters of Entanglement Generation Protocol Request
         :param: bytes
             The cqc request consisting of CQCHeader, CQCCmdHeader, CQCEPRRequestHeader
         """
-        cqc_header = CQCHeader(cqc_request[:CQC_HDR_LENGTH])
-        cqc_request = cqc_request[CQC_HDR_LENGTH:]
-        cqc_cmd_header = CQCCmdHeader(cqc_request[:CQC_CMD_HDR_LENGTH])
-        cqc_request = cqc_request[CQC_CMD_HDR_LENGTH:]
-        cqc_epr_req_header = CQCEPRRequestHeader(cqc_request)
+        if cqc_request:
+            cqc_header = CQCHeader(cqc_request[:CQC_HDR_LENGTH])
+            cqc_request = cqc_request[CQC_HDR_LENGTH:]
+            cqc_cmd_header = CQCCmdHeader(cqc_request[:CQC_CMD_HDR_LENGTH])
+            cqc_request = cqc_request[CQC_CMD_HDR_LENGTH:]
+            cqc_epr_req_header = CQCEPRRequestHeader(cqc_request)
 
-        self.other_ip = cqc_epr_req_header.remote_ip
-        self.other_port = cqc_epr_req_header.remote_port
+            self.other_ip = cqc_epr_req_header.remote_ip
+            self.other_port = cqc_epr_req_header.remote_port
 
-        # For now let the ID be just the IP to be consistent with EasySquid notion of nodeIDs
-        self.otherID = self.other_ip
+            # For now let the ID be just the IP to be consistent with EasySquid notion of nodeIDs
+            self.otherID = self.other_ip
 
-        self.num_pairs = cqc_epr_req_header.num_pairs
-        self.min_fidelity = cqc_epr_req_header.min_fidelity
-        self.max_time = cqc_epr_req_header.max_time
-        self.purpose_id = cqc_header.app_id
-        self.priority = cqc_epr_req_header.priority
-        self.create_id = None
-        self.create_time = None
-        self.store = cqc_epr_req_header.store
-        self.measure_directly = cqc_epr_req_header.measure_directly
+            self.num_pairs = cqc_epr_req_header.num_pairs
+            self.min_fidelity = cqc_epr_req_header.min_fidelity
+            self.max_time = cqc_epr_req_header.max_time
+            self.purpose_id = cqc_header.app_id
+            self.priority = cqc_epr_req_header.priority
+            self.create_id = 0
+            self.create_time = 0
+            self.store = bool(cqc_epr_req_header.store)
+            self.measure_directly = bool(cqc_epr_req_header.measure_directly)
+
+            self.is_set = True
+
+        else:
+            self.other_ip = 0
+            self.other_port = 0
+
+            # For now let the ID be just the IP to be consistent with EasySquid notion of nodeIDs
+            self.otherID = self.other_ip
+
+            self.num_pairs = 0
+            self.min_fidelity = 0
+            self.max_time = 0
+            self.purpose_id = 0
+            self.priority = 0
+            self.create_id = 0
+            self.create_time = 0
+            self.store = True
+            self.measure_directly = False
+
+            self.is_set = False
 
     def __copy__(self):
         """
@@ -70,10 +92,12 @@ class EGPRequest:
         :return: obj `~qlinklayer.egp.EGPRequest`
             A copy of the EGPRequest object
         """
-        c = type(self)(other_ip=self.other_ip, other_port=self.other_port, num_pairs=self.num_pairs,
-                       min_fidelity=self.min_fidelity, max_time=self.max_time, purpose_id=self.purpose_id,
-                       priority=self.priority, store=self.store, measure_directly=self.measure_directly)
-        c.assign_create_id(self.create_id, self.create_time)
+        c = EGPRequest()
+        c.unpack(self.pack())
+        # c = type(self)(other_ip=self.other_ip, other_port=self.other_port, num_pairs=self.num_pairs,
+        #                min_fidelity=self.min_fidelity, max_time=self.max_time, purpose_id=self.purpose_id,
+        #                priority=self.priority, store=self.store, measure_directly=self.measure_directly)
+        # c.assign_create_id(self.create_id, self.create_time)
         return c
 
     def assign_create_id(self, create_id, create_time):
@@ -93,10 +117,13 @@ class EGPRequest:
         Pack the data in packet form.
         :return: str
         """
-        if self.create_time is None:
-            raise ValueError("Cannot pack if create_time is None")
-        if self.create_id is None:
-            raise ValueError("Cannot pack if create_id is None")
+        if not self.is_set:
+            return 0
+
+        # if self.create_time is None:
+        #     raise ValueError("Cannot pack if create_time is None")
+        # if self.create_id is None:
+        #     raise ValueError("Cannot pack if create_id is None")
         to_pack = {"other_ip": self.other_ip,
                    "other_port": self.other_port,
                    "purpose_id": self.purpose_id,
@@ -123,7 +150,10 @@ class EGPRequest:
         request_fields = request_Bitstring.unpack(self.package_format)
         self.other_ip = request_fields[0]
         self.other_port = request_fields[1]
-        self.otherID = (self.other_ip, self.other_port)
+
+        # For now let the ID be just the IP to be consistent with EasySquid notion of nodeIDs
+        self.otherID = self.other_ip
+
         self.purpose_id = request_fields[2]
         self.create_time = request_fields[3]
         self.min_fidelity = request_fields[4]
@@ -133,6 +163,8 @@ class EGPRequest:
         self.priority = request_fields[8]
         self.store = bool(request_fields[9])
         self.measure_directly = bool(request_fields[10])
+
+        self.is_set = True
 
 
 class EGP(EasyProtocol):
@@ -1056,29 +1088,51 @@ class NodeCentricEGP(EGP):
         if self.scheduler.handling_measure_directly():
             ent_id = (creatorID, creq.otherID, mhp_seq)
             m, basis = self.get_measurement_outcome(creq)
-            result = (self.MD_OK, creq.create_id, ent_id, m, basis, t_create)
+            result = self.construct_cqc_ok_message(EntInfoMeasDirectHeader.type, creq.create_id, ent_id, fidelity_estimate, t_create, m=m, basis=basis)
+            # result = (self.MD_OK, creq.create_id, ent_id, m, basis, t_create)
 
         else:
             ent_id = (creatorID, creq.otherID, mhp_seq)
             t_goodness = t_create
-            result = (self.CK_OK, creq.create_id, ent_id, logical_id, fidelity_estimate, t_goodness, t_create)
+            result = self.construct_cqc_ok_message(EntInfoCreateKeepHeader.type, creq.create_id, ent_id, fidelity_estimate, t_create, logical_id=logical_id, t_goodness=t_goodness)
+            # result = (self.CK_OK, creq.create_id, ent_id, logical_id, fidelity_estimate, t_goodness, t_create)
 
         return result
 
     @staticmethod
-    def construct_cqc_ok_message(type, ent_id, fidelity_estimate, t_create, logical_id=None, t_goodness=None,
+    def construct_cqc_ok_message(type, create_id, ent_id, fidelity_estimate, t_create, logical_id=None, t_goodness=None,
                                  m=None, basis=None):
         """
         Construct a CQC message for returning OK of created EPR pair.
         :return: bytes
         """
-        if
-        cqc_header = CQCHeader()
-        cqc_header.setVals(version=CQC_VERSION, tp=CQC_TP_EPR_OK, app_id=0, length=ENT_INFO_LENGTH)
+        # TODO only using appID/port 0 for now
+        if type == EntInfoCreateKeepHeader.type:
+            cqc_header = CQCHeader()
+            cqc_header.setVals(version=CQC_VERSION, tp=CQC_TP_EPR_OK, app_id=0, length=ENT_INFO_LENGTH)
 
-        cqc_ent_info_header = EntInfoHeader()
-        cqc_ent_info_header.setVals(node_A=ent_id[0], port_A=0, node_B=ent_id[1], port_B=0, app_id_A=0, app_id_B=0,
-                                    id_AB=ent_id[2], timestamp=t_create)
+            cqc_notify_header = CQCNotifyHeader()
+            cqc_notify_header.setVals(logical_id, 0, 0, 0, 0, 0)
+
+            creatorID, otherID, mhp_seq = ent_id
+            cqc_ent_info_header = EntInfoCreateKeepHeader()
+            cqc_ent_info_header.setVals(ip_A=creatorID, port_A=0, ip_B=otherID, port_B=0, mhp_seq=mhp_seq, t_create=t_create, t_goodness=t_goodness, goodness=fidelity_estimate, DF=0, create_id=create_id)
+
+        elif type == EntInfoMeasDirectHeader.type:
+            cqc_header = CQCHeader()
+            cqc_header.setVals(version=CQC_VERSION, tp=CQC_TP_EPR_OK, app_id=0, length=ENT_INFO_LENGTH)
+
+            cqc_notify_header = CQCNotifyHeader()
+            cqc_notify_header.setVals(0, 0, 0, 0, 0, 0)
+
+            creatorID, otherID, mhp_seq = ent_id
+            cqc_ent_info_header = EntInfoMeasDirectHeader()
+            cqc_ent_info_header.setVals(ip_A=creatorID, port_A=0, ip_B=otherID, port_B=0, mhp_seq=mhp_seq, meas_out=m, basis=basis, t_create=t_create, goodness=fidelity_estimate, DF=0, create_id=create_id)
+        else:
+            raise ValueError("Unknown EPR OK message type")
+
+        cqc_ok_message = cqc_header.pack() + cqc_notify_header.pack() + cqc_ent_info_header.pack()
+        return cqc_ok_message
 
     def _return_ok(self, mhp_seq, aid):
         """

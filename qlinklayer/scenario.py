@@ -7,7 +7,9 @@ from netsquid.pydynaa import EventType
 from netsquid.simutil import sim_time
 from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FORMALISM
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCCmdHeader, CQCEPRRequestHeader, CQC_TP_COMMAND, \
-    CQC_CMD_EPR, CQC_VERSION, CQC_CMD_HDR_LENGTH, CQC_EPR_REQ_LENGTH
+    CQC_CMD_EPR, CQC_VERSION, CQC_CMD_HDR_LENGTH, CQC_EPR_REQ_LENGTH, CQC_HDR_LENGTH, CQCNotifyHeader, \
+    CQC_NOTIFY_LENGTH
+from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
 
 class EGPSimulationScenario(TimedProtocol):
@@ -276,8 +278,8 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         self.ok_storage.append(result)
 
         # Extract fields from result
-        create_id, ent_id, f_goodness, t_create, t_goodness = result
-        creator_id, peer_id, mhp_seq, logical_id = ent_id
+        create_id, ent_id, logical_id, f_goodness, t_goodness, t_create = self.unpack_cqc_ok(result)
+        creator_id, peer_id, mhp_seq = ent_id
 
         # Store the qubit state for collection
         self.store_qstate(logical_id, create_id, peer_id, mhp_seq)
@@ -293,6 +295,31 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
 
         # Free the qubit for the EGP
         self.qmm.free_qubit(logical_id)
+
+    @staticmethod
+    def unpack_cqc_ok(result):
+        """
+        Unpacks the CQC message containing the OK from EGP of type create-and-keep
+        :param result: bytes
+        :return: tuple (create_id, ent_id, logical_id, f_goodness, t_create, t_goodness)
+        """
+        cqc_header = CQCHeader(result[:CQC_HDR_LENGTH])
+        result = result[CQC_HDR_LENGTH:]
+        cqc_notify_header = CQCNotifyHeader(result[:CQC_NOTIFY_LENGTH])
+        result = result[CQC_NOTIFY_LENGTH:]
+        cqc_ent_info_header = EntInfoCreateKeepHeader(result)
+
+        create_id = cqc_ent_info_header.create_id
+        creator_id = cqc_ent_info_header.ip_A
+        peer_id = cqc_ent_info_header.ip_B
+        mhp_seq = cqc_ent_info_header.mhp_seq
+        ent_id = (creator_id, peer_id, mhp_seq)
+        logical_id = cqc_notify_header.qubit_id
+        f_goodness = cqc_ent_info_header.goodness
+        t_create = cqc_ent_info_header.t_create
+        t_goodness = cqc_ent_info_header.t_goodness
+
+        return create_id, ent_id, logical_id, f_goodness, t_create, t_goodness
 
     def store_qstate(self, qubit_id, source_id, other_id, mhp_seq):
         """
@@ -426,15 +453,37 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         self.ok_storage.append(result)
 
         # Extract fields from result
-        ok_type, create_id, ent_id, outcome, basis, t_create = result
+        create_id, ent_id, outcome, basis, t_create = self.unpack_cqc_ok(result)
 
         # Store the basis/bit choice and the midpoint outcomes for QubErr or key generation
-        if ok_type == self.egp.MD_OK:
-            meas_data = (basis, outcome)
-        else:
-            raise ValueError("Did not receive measure directly OK!")
+        meas_data = (basis, outcome)
 
         self.measurement_storage[ent_id] = meas_data
+
+    @staticmethod
+    def unpack_cqc_ok(result):
+        """
+        Unpacks the CQC message containing the OK from EGP of type measure-directly
+        :param result: bytes
+        :return: tuple (create_id, ent_id, meas_out, basis, f_goodness, t_create)
+        """
+        cqc_header = CQCHeader(result[:CQC_HDR_LENGTH])
+        result = result[CQC_HDR_LENGTH:]
+        cqc_notify_header = CQCNotifyHeader(result[:CQC_NOTIFY_LENGTH])
+        result = result[CQC_NOTIFY_LENGTH:]
+        cqc_ent_info_header = EntInfoMeasDirectHeader(result)
+
+        create_id = cqc_ent_info_header.create_id
+        creator_id = cqc_ent_info_header.ip_A
+        peer_id = cqc_ent_info_header.ip_B
+        mhp_seq = cqc_ent_info_header.mhp_seq
+        ent_id = (creator_id, peer_id, mhp_seq)
+        meas_out = cqc_ent_info_header.meas_out
+        basis = cqc_ent_info_header.basis
+        f_goodness = cqc_ent_info_header.goodness
+        t_create = cqc_ent_info_header.t_create
+
+        return create_id, ent_id, meas_out, basis, f_goodness, t_create
 
     def get_ok(self, remove=True):
         """
