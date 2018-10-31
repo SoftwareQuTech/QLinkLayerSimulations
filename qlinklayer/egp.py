@@ -303,10 +303,6 @@ class NodeCentricEGP(EGP):
     ERR_EXPIRE = 46
     ERR_CREATE = 47
 
-    # OK Types
-    CK_OK = 0
-    MD_OK = 1
-
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None, throw_local_queue_events=False,
                  accept_all_requests=False):
         """
@@ -1089,13 +1085,11 @@ class NodeCentricEGP(EGP):
             ent_id = (creatorID, creq.otherID, mhp_seq)
             m, basis = self.get_measurement_outcome(creq)
             result = self.construct_cqc_ok_message(EntInfoMeasDirectHeader.type, creq.create_id, ent_id, fidelity_estimate, t_create, m=m, basis=basis)
-            # result = (self.MD_OK, creq.create_id, ent_id, m, basis, t_create)
 
         else:
             ent_id = (creatorID, creq.otherID, mhp_seq)
             t_goodness = t_create
             result = self.construct_cqc_ok_message(EntInfoCreateKeepHeader.type, creq.create_id, ent_id, fidelity_estimate, t_create, logical_id=logical_id, t_goodness=t_goodness)
-            # result = (self.CK_OK, creq.create_id, ent_id, logical_id, fidelity_estimate, t_goodness, t_create)
 
         return result
 

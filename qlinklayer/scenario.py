@@ -278,8 +278,8 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         self.ok_storage.append(result)
 
         # Extract fields from result
-        create_id, ent_id, logical_id, f_goodness, t_goodness, t_create = self.unpack_cqc_ok(result)
-        creator_id, peer_id, mhp_seq = ent_id
+        create_id, ent_id, logical_id, _, _, _ = self.unpack_cqc_ok(result)
+        _, peer_id, mhp_seq = ent_id
 
         # Store the qubit state for collection
         self.store_qstate(logical_id, create_id, peer_id, mhp_seq)
@@ -453,7 +453,7 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         self.ok_storage.append(result)
 
         # Extract fields from result
-        create_id, ent_id, outcome, basis, t_create = self.unpack_cqc_ok(result)
+        _, ent_id, outcome, basis, _, _ = self.unpack_cqc_ok(result)
 
         # Store the basis/bit choice and the midpoint outcomes for QubErr or key generation
         meas_data = (basis, outcome)

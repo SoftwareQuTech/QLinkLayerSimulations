@@ -4,7 +4,9 @@ from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
-from qlinklayer.egp import NodeCentricEGP
+from qlinklayer.egp import NodeCentricEGP, EGPRequest
+from qlinklayer.scenario import MeasureBeforeSuccessScenario, MeasureAfterSuccessScenario
+from SimulaQron.cqc.backend.entInfoHeader import EntInfoMeasDirectHeader, EntInfoCreateKeepHeader
 
 
 class EGPDataSequence(PM_SQLDataSequence, metaclass=abc.ABCMeta):
@@ -118,15 +120,11 @@ class EGPCreateSequence(EGPDataSequence):
 
     def get_column_names(self):
         # TODO ITEMS AFTER "Timestamp and "Node ID" currently have to be sorted....
-        return ["Timestamp", "Node ID", "Create ID", "Create_Time", "Max Time", "Measure Directly", "Min Fidelity",
-                "Num Pairs", "Other ID", "Priority", "Purpose ID", "Store", "Success"]
+        return ["Timestamp", "Node ID", "CQC Request" "Success"]
 
     def getData(self, time, source=None):
-        nodeID, request = source[0].get_create_info()
-        create_info = request.get_create_info()
-        request_data = [vars(request)[k] for k in sorted(vars(request))]
-        val = [nodeID] + request_data
-        return [val, create_info != (None, None)]
+        nodeID, cqc_request = source[0].get_create_info()
+        return [nodeID, cqc_request, True]
 
 
 class EGPCreateDataPoint(EGPDataPoint):
@@ -152,20 +150,19 @@ class EGPCreateDataPoint(EGPDataPoint):
 
     def from_raw_data(self, data):
         try:
-            self.timestamp = data[0]
-            self.node_id = data[1]
-            self.create_id = data[2]
-            self.create_time = data[3]
-            self.max_time = data[4]
-            self.measure_directly = data[5]
-            self.min_fidelity = data[6]
-            self.num_pairs = data[7]
-            self.other_id = data[8]
-            self.priority = data[9]
-            self.store = data[10]
-            self.success = data[11]
-        except IndexError:
-            raise ValueError("Cannot parse data")
+            self.timestamp, self.node_id, cqc_request, self.success = data
+            request = EGPRequest(cqc_request=cqc_request)
+            self.create_id = request.create_id
+            self.create_time = request.create_time
+            self.max_time = request.max_time
+            self.measure_directly = request.measure_directly
+            self.min_fidelity = request.min_fidelity
+            self.num_pairs = request.num_pairs
+            self.other_id = request.otherID
+            self.priority = request.priority
+            self.store = request.store
+        except Exception as err:
+            raise ValueError("Cannot parse data since {}".format(err))
 
     def from_data_point(self, data):
         if isinstance(data, EGPCreateDataPoint):
@@ -213,14 +210,21 @@ class EGPOKSequence(EGPDataSequence):
         self._attempt_collectors = attempt_collectors
 
     def get_column_names(self):
-        return ["Timestamp", "Node ID", "Create ID", "Origin ID", "Other ID", "MHP Seq", "Logical ID", "Goodness",
-                "Goodness Time", "Create Time", "Attempts", "Success"]
+        return ["Timestamp", "Node ID", "OK_TYPE", "CQC_OK", "Attempts", "Success"]
 
     def getData(self, time, source=None):
         scenario = source[0]
         ok = scenario.get_ok()
-        create_id = ok[1]
-        other_id = ok[2][1]
+        try:
+            create_id, ent_id, _, _, _, _ = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
+            ok_type = EntInfoCreateKeepHeader.type
+        except ValueError:
+            try:
+                create_id, ent_id, _, _, _, _ = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
+                ok_type = EntInfoMeasDirectHeader.type
+            except ValueError:
+                raise ValueError("Unknown OK type")
+        other_id = ent_id[1]
 
         nodeID = scenario.node.nodeID
 
@@ -235,7 +239,7 @@ class EGPOKSequence(EGPDataSequence):
         else:
             nr_attempts = -1
 
-        data = [ok[0], nodeID, ok[1]] + list(ok[2]) + list(ok[3:]) + [nr_attempts]
+        data = [nodeID, ok_type, ok, nr_attempts]
         return [data, True]
 
 
@@ -264,15 +268,30 @@ class EGPOKDataPoint(EGPDataPoint):
             self.success = None
 
     def from_raw_data(self, data):
-        ok_type = data[1]
-        if ok_type == NodeCentricEGP.CK_OK:
-            self.timestamp, self.ok_type, self.node_id, self.create_id, self.origin_id, self.other_id, self.mhp_seq,\
-                self.logical_id, self.goodness, self.goodness_time, self.create_time, self.attempts, self.success = data
-        elif ok_type == NodeCentricEGP.MD_OK:
-            self.timestamp, self.ok_type, self.node_id, self.create_id, self.origin_id, self.other_id, self.mhp_seq,\
-                self.measurement_outcome, self.measurement_basis, self.create_time, self.attempts, self.success = data
+        self.timestamp = data[0]
+        self.node_id = data[1]
+        self.ok_type = data[2]
+        ok = data[3]
+        self.attempts = data[4]
+        self.success = data[5]
+
+        if self.ok_type == EntInfoMeasDirectHeader.type:
+            self.create_id, ent_id, self.meas_out, self.basis, self.goodness, self.t_create = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
+            self.origin_id, self.other_id, self.mhp_seq = ent_id
+        elif self.ok_type == EntInfoCreateKeepHeader.type:
+            self.create_id, ent_id, self.logical_id, self.goodness, self.t_create, self.t_goodness = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
+            self.origin_id, self.other_id, self.mhp_seq = ent_id
         else:
             raise ValueError("Cannot parse data")
+
+        # if ok_type == NodeCentricEGP.CK_OK:
+        #     self.timestamp, self.ok_type, self.node_id, self.create_id, self.origin_id, self.other_id, self.mhp_seq,\
+        #         self.logical_id, self.goodness, self.goodness_time, self.create_time, self.attempts, self.success = data
+        # elif ok_type == NodeCentricEGP.MD_OK:
+        #     self.timestamp, self.ok_type, self.node_id, self.create_id, self.origin_id, self.other_id, self.mhp_seq,\
+        #         self.measurement_outcome, self.measurement_basis, self.create_time, self.attempts, self.success = data
+        # else:
+        #     raise ValueError("Cannot parse data")
 
     def from_data_point(self, data):
         if isinstance(data, EGPOKDataPoint):
