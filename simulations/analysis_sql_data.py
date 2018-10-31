@@ -162,7 +162,7 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
         node_id = data_point.node_id
         req_id = data_point.create_id, data_point.origin_id, data_point.other_id
         mhp_seq = data_point.mhp_seq
-        gen_info = data_point.create_time, data_point.attempts
+        gen_info = data_point.t_create, data_point.attempts
 
         if node_id in gens:
             gens[node_id][req_id].append((node_id,) + req_id + (mhp_seq,) + gen_info)

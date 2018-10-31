@@ -6,7 +6,10 @@ from easysquid.easyprotocol import TimedProtocol
 from netsquid.pydynaa import EventType
 from netsquid.simutil import sim_time
 from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FORMALISM
-from qlinklayer.egp import EGPRequest
+from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCCmdHeader, CQCEPRRequestHeader, CQC_TP_COMMAND, \
+    CQC_CMD_EPR, CQC_VERSION, CQC_CMD_HDR_LENGTH, CQC_EPR_REQ_LENGTH, CQC_HDR_LENGTH, CQCNotifyHeader, \
+    CQC_NOTIFY_LENGTH
+from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
 
 class EGPSimulationScenario(TimedProtocol):
@@ -103,12 +106,13 @@ class EGPSimulationScenario(TimedProtocol):
             max_time = num_pairs * self.tmax_pair
 
             # Create a request
-            request = EGPRequest(otherID=self.otherID, num_pairs=num_pairs, min_fidelity=self.min_fidelity,
-                                 max_time=max_time, purpose_id=self.purpose_id, priority=self.priority,
-                                 store=self.store, measure_directly=self.measure_directly)
+            cqc_request = self.construct_cqc_epr_request(otherID=self.otherID, num_pairs=num_pairs,
+                                                         min_fidelity=self.min_fidelity, max_time=max_time,
+                                                         purpose_id=self.purpose_id, priority=self.priority,
+                                                         store=self.store, measure_directly=self.measure_directly)
 
             # Give the request to the egp
-            self._create(request)
+            self._create(cqc_request)
 
             self.created_requests += 1
 
@@ -125,7 +129,29 @@ class EGPSimulationScenario(TimedProtocol):
         else:
             return idA
 
-    def _create(self, request):
+    @staticmethod
+    def construct_cqc_epr_request(otherID, num_pairs=1, min_fidelity=0.5, max_time=0, purpose_id=0, priority=0,
+                                  store=True, measure_directly=False):
+        """
+        Construct a CQC message for creating an EPR pair, to be passed to the create method of EGP.
+        :return: bytes
+        """
+        cqc_header = CQCHeader()
+        cqc_header.setVals(version=CQC_VERSION, tp=CQC_TP_COMMAND, app_id=purpose_id,
+                           length=CQC_CMD_HDR_LENGTH + CQC_EPR_REQ_LENGTH)
+
+        cqc_cmd_header = CQCCmdHeader()
+        cqc_cmd_header.setVals(qubit_id=0, instr=CQC_CMD_EPR, notify=True, block=True, action=False)
+
+        cqc_epr_request_header = CQCEPRRequestHeader()
+        cqc_epr_request_header.setVals(remote_ip=otherID, remote_port=0, num_pairs=num_pairs, min_fidelity=min_fidelity,
+                                       max_time=max_time, priority=priority, store=store,
+                                       measure_directly=measure_directly)
+
+        cqc_message = cqc_header.pack() + cqc_cmd_header.pack() + cqc_epr_request_header.pack()
+        return cqc_message
+
+    def _create(self, cqc_request):
         """
         Internal method for calling the EGP's create method and storing the creation id and timestamp info for
         data collection
@@ -133,9 +159,9 @@ class EGPSimulationScenario(TimedProtocol):
             The request we are creating
         """
         # Only extract result information if the create was successfully submitted
-        result = self.egp.create(creq=request)
+        result = self.egp.create(cqc_request=cqc_request)
         if result is not None:
-            self.create_storage.append((self.egp.node.nodeID, request))
+            self.create_storage.append((self.egp.node.nodeID, cqc_request))
             logger.debug("Scheduling create event now.")
             self._schedule_now(self._EVT_CREATE)
 
@@ -252,8 +278,8 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         self.ok_storage.append(result)
 
         # Extract fields from result
-        create_id, ent_id, f_goodness, t_create, t_goodness = result
-        creator_id, peer_id, mhp_seq, logical_id = ent_id
+        create_id, ent_id, logical_id, _, _, _ = self.unpack_cqc_ok(result)
+        _, peer_id, mhp_seq = ent_id
 
         # Store the qubit state for collection
         self.store_qstate(logical_id, create_id, peer_id, mhp_seq)
@@ -269,6 +295,31 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
 
         # Free the qubit for the EGP
         self.qmm.free_qubit(logical_id)
+
+    @staticmethod
+    def unpack_cqc_ok(result):
+        """
+        Unpacks the CQC message containing the OK from EGP of type create-and-keep
+        :param result: bytes
+        :return: tuple (create_id, ent_id, logical_id, f_goodness, t_create, t_goodness)
+        """
+        cqc_header = CQCHeader(result[:CQC_HDR_LENGTH])
+        result = result[CQC_HDR_LENGTH:]
+        cqc_notify_header = CQCNotifyHeader(result[:CQC_NOTIFY_LENGTH])
+        result = result[CQC_NOTIFY_LENGTH:]
+        cqc_ent_info_header = EntInfoCreateKeepHeader(result)
+
+        create_id = cqc_ent_info_header.create_id
+        creator_id = cqc_ent_info_header.ip_A
+        peer_id = cqc_ent_info_header.ip_B
+        mhp_seq = cqc_ent_info_header.mhp_seq
+        ent_id = (creator_id, peer_id, mhp_seq)
+        logical_id = cqc_notify_header.qubit_id
+        f_goodness = cqc_ent_info_header.goodness
+        t_create = cqc_ent_info_header.t_create
+        t_goodness = cqc_ent_info_header.t_goodness
+
+        return create_id, ent_id, logical_id, f_goodness, t_create, t_goodness
 
     def store_qstate(self, qubit_id, source_id, other_id, mhp_seq):
         """
@@ -402,15 +453,37 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         self.ok_storage.append(result)
 
         # Extract fields from result
-        ok_type, create_id, ent_id, outcome, basis, t_create = result
+        _, ent_id, outcome, basis, _, _ = self.unpack_cqc_ok(result)
 
         # Store the basis/bit choice and the midpoint outcomes for QubErr or key generation
-        if ok_type == self.egp.MD_OK:
-            meas_data = (basis, outcome)
-        else:
-            raise ValueError("Did not receive measure directly OK!")
+        meas_data = (basis, outcome)
 
         self.measurement_storage[ent_id] = meas_data
+
+    @staticmethod
+    def unpack_cqc_ok(result):
+        """
+        Unpacks the CQC message containing the OK from EGP of type measure-directly
+        :param result: bytes
+        :return: tuple (create_id, ent_id, meas_out, basis, f_goodness, t_create)
+        """
+        cqc_header = CQCHeader(result[:CQC_HDR_LENGTH])
+        result = result[CQC_HDR_LENGTH:]
+        cqc_notify_header = CQCNotifyHeader(result[:CQC_NOTIFY_LENGTH])
+        result = result[CQC_NOTIFY_LENGTH:]
+        cqc_ent_info_header = EntInfoMeasDirectHeader(result)
+
+        create_id = cqc_ent_info_header.create_id
+        creator_id = cqc_ent_info_header.ip_A
+        peer_id = cqc_ent_info_header.ip_B
+        mhp_seq = cqc_ent_info_header.mhp_seq
+        ent_id = (creator_id, peer_id, mhp_seq)
+        meas_out = cqc_ent_info_header.meas_out
+        basis = cqc_ent_info_header.basis
+        f_goodness = cqc_ent_info_header.goodness
+        t_create = cqc_ent_info_header.t_create
+
+        return create_id, ent_id, meas_out, basis, f_goodness, t_create
 
     def get_ok(self, remove=True):
         """

@@ -7,6 +7,7 @@ from qlinklayer.distQueue import DistributedQueue
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.egp import EGPRequest
+from qlinklayer.scenario import EGPSimulationScenario
 
 
 class TestRequestScheduler(unittest.TestCase):
@@ -44,8 +45,8 @@ class TestRequestScheduler(unittest.TestCase):
 
     def test_get_queue(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
-        request = EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=1, purpose_id=0,
-                             priority=0)
+        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=1, purpose_id=0,
+                             priority=0))
         test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
         self.assertEqual(test_scheduler.get_queue(request), 0)
 
@@ -64,8 +65,8 @@ class TestRequestScheduler(unittest.TestCase):
         qmmA = QuantumMemoryManagement(node=self.nodeA)
         test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
 
-        request = EGPRequest(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=12, purpose_id=0,
-                             priority=0)
+        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=12, purpose_id=0,
+                             priority=0))
 
         conn = dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",
