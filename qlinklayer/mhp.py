@@ -717,7 +717,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             logger.debug("{} Beginning entanglement attempt".format(self.node.nodeID))
             NodeCentricMHP.run_protocol(self)
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error occured attempting entanglement")
             self._handle_error(None, self.ERR_LOCAL)
 
@@ -872,10 +872,10 @@ class SimulatedNodeCentricMHPService(Service):
         :return:
         """
         nodeID = node.nodeID
-        if nodeID not in self.node_info:
-            raise Exception
-        else:
-            return self.node_info[nodeID]
+        return self._node_proto_by_id(nodeID)
+
+    def _node_proto_by_id(self, nodeID):
+        return self.node_info[nodeID]
 
     def configure_node_proto(self, node, stateProvider=None, callback=None):
         """

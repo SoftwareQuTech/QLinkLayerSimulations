@@ -122,16 +122,19 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         :return: obj `~numpy.matrix`
             A density matrix of the estimated entangled state
         """
-        # Calculate the probability that the left or right detector click depending on the probability of emission
-        # Probability of click for photon from A
-        # Probability of click for photon from B
-        # Probility of click for photons from both
         if pdark == 1:
             raise EasySquidException("Probability of dark count 1 does not allow for generating entanglement!")
 
-        p0 = 0.5 * (alphaA * (1 - alphaB) * etaA +
-                    (1 - alphaA) * alphaB * etaB +
-                    alphaA * alphaB * (1 - (1 - etaA) * (1 - etaB)))
+        # Calculate the probability that the left or right detector click depending on the probability of emission
+        # Probability of click for photon from A
+        p0 = alphaA * (1 - alphaB) * etaA
+
+        # Probability of click for photon from B
+        p0 += (1 - alphaA) * alphaB * etaB
+
+        # Probility of click for photons from both
+        p0 += alphaA * alphaB * (1 - (1 - etaA) * (1 - etaB))
+        p0 *= 0.5
 
         # Due to symmetries the probability is the same for the other detector
         p1 = p0
@@ -156,15 +159,18 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
 
         # Calculate the post-measurement state in the case that a dark count causes the detector to click
         if p2 != 0:
-            rho2 = (1 / p2) * (
-                # Probability that neither endpoint emits a photon
-                (1 - alphaA) * (1 - alphaB) * dm00 +
-                # Probability that left endpoint emits a photon and it gets lost
-                (alphaA * (1 - alphaB) * (1 - etaA)) * dm10 +
-                # Probability that right endpoint emits a photon and it gets lost
-                ((1 - alphaA) * alphaB * (1 - etaB)) * dm01 +
-                # Probability that both endpoints emit a photon and both are lost
-                (1 - etaA) * (1 - etaB) * alphaA * alphaB * dm11)
+            # Probability that neither endpoint emits a photon
+            rho2 = (1 - alphaA) * (1 - alphaB) * dm00
+
+            # Probability that left endpoint emits a photon and it gets lost
+            rho2 += (alphaA * (1 - alphaB) * (1 - etaA)) * dm10
+
+            # Probability that right endpoint emits a photon and it gets lost
+            rho2 += ((1 - alphaA) * alphaB * (1 - etaB)) * dm01
+
+            # Probability that both endpoints emit a photon and both are lost
+            rho2 += (1 - etaA) * (1 - etaB) * alphaA * alphaB * dm11
+            rho2 *= (1 / p2)
 
         # Probability of no clicks is zero then there is no influence
         else:
