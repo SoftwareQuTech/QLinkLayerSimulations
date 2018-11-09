@@ -726,8 +726,6 @@ class NodeCentricEGP(EGP):
 
             if gen[0]:
                 # Store the gen for pickup by mhp
-                # import pdb
-                # pdb.set_trace()
                 self.mhp_service.put_ready_data(self.node.nodeID, gen)
                 return True
 
