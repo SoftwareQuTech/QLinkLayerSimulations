@@ -3,7 +3,7 @@ from easysquid.easynetwork import EasyNetwork
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from netsquid.simutil import sim_run, sim_reset
-from qlinklayer.distQueue import DistributedQueue
+from qlinklayer.distQueue import EGPDistributedQueue
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.egp import EGPRequest
@@ -17,8 +17,8 @@ class TestRequestScheduler(unittest.TestCase):
         self.nodeA = QuantumNode(name="TestA", nodeID=1, memDevice=memA)
         self.nodeB = QuantumNode(name="TestB", nodeID=2, memDevice=memB)
 
-        self.dqpA = DistributedQueue(node=self.nodeA)
-        self.dqpB = DistributedQueue(node=self.nodeB)
+        self.dqpA = EGPDistributedQueue(node=self.nodeA)
+        self.dqpB = EGPDistributedQueue(node=self.nodeB)
         self.dqpA.connect_to_peer_protocol(self.dqpB)
 
     def test_init(self):
@@ -45,8 +45,9 @@ class TestRequestScheduler(unittest.TestCase):
 
     def test_get_queue(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
-        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=1, purpose_id=0,
-                             priority=0))
+        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1,
+                                                                             min_fidelity=1, max_time=1, purpose_id=0,
+                                                                             priority=0))
         test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
         self.assertEqual(test_scheduler.get_queue(request), 0)
 
@@ -59,14 +60,15 @@ class TestRequestScheduler(unittest.TestCase):
 
     def test_next(self):
         sim_reset()
-        dqpA = DistributedQueue(node=self.nodeA)
-        dqpB = DistributedQueue(node=self.nodeB)
+        dqpA = EGPDistributedQueue(node=self.nodeA, accept_all=True)
+        dqpB = EGPDistributedQueue(node=self.nodeB, accept_all=True)
         dqpA.connect_to_peer_protocol(dqpB)
         qmmA = QuantumMemoryManagement(node=self.nodeA)
         test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
 
-        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=12, purpose_id=0,
-                             priority=0))
+        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1,
+                                                                             min_fidelity=1, max_time=12, purpose_id=0,
+                                                                             priority=0))
 
         conn = dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",
@@ -78,10 +80,14 @@ class TestRequestScheduler(unittest.TestCase):
         self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
 
         # Check that an item not agreed upon also yields a default request
-        dqpA.add(request)
+        test_scheduler.add_request(request)
         self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
 
-        sim_run(11)
+        for i in range(11):
+            sim_run(11)
+            test_scheduler.inc_cycle()
+            self.assertEqual(test_scheduler.get_default_gen(), test_scheduler.next())
+        test_scheduler.inc_cycle()
 
         # Check that QMM reserve failure yields a default request
         comm_q = qmmA.reserve_communication_qubit()

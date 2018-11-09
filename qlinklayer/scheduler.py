@@ -1,10 +1,9 @@
 #
 # Scheduler
 #
+from math import ceil
 from netsquid import pydynaa
-from netsquid.simutil import sim_time
 from easysquid.toolbox import logger
-from functools import partial
 
 
 class RequestScheduler(pydynaa.Entity):
@@ -13,7 +12,6 @@ class RequestScheduler(pydynaa.Entity):
     """
 
     def __init__(self, distQueue, qmm):
-
         # Distributed Queue to schedule from
         self.distQueue = distQueue
 
@@ -31,30 +29,120 @@ class RequestScheduler(pydynaa.Entity):
         self.other_mem = (0, 0)
 
         # Generation tracking
-        self.requests = {}
-        self.curr_request = None
-        self.curr_gen = None
-        self.default_gen = self.get_default_gen()
-        self.outstanding_gens = []
-        self.outstanding_items = {}
-        self.timed_out_requests = []
-        self.prev_requests = []
-        self._suspend = False
-        self.resumeID = -1
-        self.resume_time = 0.0
+        self.requests = {}                          # Tracks requests that can be scheduled
+        self.schedule_backlog = {}                  # Backlog of requests waiting to be scheduled
+        self.curr_request = None                    # The current request being handled
+        self.curr_gen = None                        # The current generation being handled
+        self.default_gen = self.get_default_gen()   # The default generation
+        self.outstanding_gens = []                  # List of outstanding generations
+        self.outstanding_items = {}                 # List of outstanding requests
+        self.timed_out_requests = []                # List of requests that have timed out
+        self.prev_requests = []                     # Previous requests (for filtering delayed communications)
+        self.max_prev_requests = 5                  # Number of previous requests to store
+
+        # Suspended generation tracking
+        self.num_suspended_cycles = 0
 
         # Timing information
-        self.mhp_full_cycle = 0.0
+        self.max_mhp_cycle_number = 2**16       # Max cycle number for scheduling
+        self.mhp_cycle_number = 0               # Current cycle number
+        self.mhp_cycle_period = 0.0             # Cycle period
+        self.mhp_cycle_offset = 10              # Offset to accompany for communication variance
+        self.mhp_full_cycle = 0.0               # Full MHP generation + communication RTT period
+        self.local_trigger = 0.0                # Trigger for local MHP
+        self.remote_trigger = 0.0               # Trigger for remote MHP
 
-    def configure_mhp_timings(self, full_cycle):
+    def configure_mhp_timings(self, cycle_period, full_cycle, local_trigger, remote_trigger):
         """
         Provides scheduler relevant timing information for external MHP to help properly schedule entanglement
         generation
         :param full_cycle: float
             The length of a full mhp cycle including the classical communication time
+        :param cycle_period: float
+            The duration of an MHP timeStep
+        :param local_trigger: float
+            The trigger offset for the local MHP
+        :param remote_trigger: float
+            The trigger offset for the remote MHP
         :return:
         """
+        self.local_trigger = local_trigger
+        self.remote_trigger = remote_trigger
+        self.mhp_cycle_period = cycle_period
         self.mhp_full_cycle = full_cycle
+
+    def inc_cycle(self):
+        """
+        Increments the locally tracked MHP cycle number.  Checks if any of the items in the backlog can be
+        scheduled
+        """
+        # Calculate the new cycle number mod the max
+        self.mhp_cycle_number = (self.mhp_cycle_number + 1) % self.max_mhp_cycle_number
+        logger.debug("Incremented MHP cycle to {}".format(self.mhp_cycle_number))
+
+        # Decrement any suspended cycles
+        if self.num_suspended_cycles > 0:
+            self.num_suspended_cycles -= 1
+
+        # Comb through the backlog for requests to schedule
+        backlog = list(self.schedule_backlog.items())
+        for key, request in backlog:
+            if self.check_schedule_cycle_bounds(request.sched_cycle):
+                aid = self.outstanding_items[key]
+                self.requests[aid] = request
+                self.schedule_backlog.pop(key)
+
+    def check_schedule_cycle_bounds(self, sched_cycle):
+        """
+        Checks whether the provided schedule cycle slot falls within our accepting window
+        :param sched_cycle: int
+            The mhp cycle number to check
+        """
+        right_boundary = self.mhp_cycle_number
+        left_boundary = (right_boundary - self.max_mhp_cycle_number // 2) % self.max_mhp_cycle_number
+
+        # Check if the provided time falls within our modular window
+        if left_boundary < right_boundary:
+            return left_boundary <= sched_cycle <= right_boundary
+        else:
+            return sched_cycle <= right_boundary or sched_cycle >= left_boundary
+
+    def get_schedule_cycle(self, request):
+        """
+        Estimates a reasonable MHP cycle number when the request can begin processing
+        :param request: obj `~qlinklayer.egp.EGPRequest
+            The request to get the schedule cycle for.  Currently unused but available for more sophisticated
+            decision making
+        :return: int
+            The cycle number that this request should be scheduled at
+        """
+        # The bottleneck on how early we can start the request depends on how frequent the cycles occur and the time
+        # it may take to propagate the request to the remote queue
+        bottleneck = max(self.mhp_cycle_period, 2 * self.distQueue.comm_delay)
+
+        # Provide some extra buffer room to accompany variance in communication time
+        cycle_delay = self.mhp_cycle_offset
+
+        # Compensate for the bottleneck
+        if self.mhp_cycle_period:
+            cycle_delay += ceil(bottleneck / self.mhp_cycle_period)
+            cycle_delay += ceil(max(0.0, self.remote_trigger - self.local_trigger) / self.mhp_cycle_period)
+
+        return (self.mhp_cycle_number + cycle_delay) % self.max_mhp_cycle_number
+
+    def add_request(self, request):
+        """
+        Adds a request to the distributed queue
+        :param request: obj `~qlinklayer.egp.EGPRequest`
+            The request to be added
+        """
+        # Decide which cycle the request should begin processing
+        schedule_cycle = self.get_schedule_cycle(request)
+
+        # Store the request into the queue
+        qid = self.get_queue(request)
+        request.add_sched_cycle(schedule_cycle)
+        self.distQueue.add(request, qid)
 
     def suspend_generation(self, t):
         """
@@ -62,34 +150,24 @@ class RequestScheduler(pydynaa.Entity):
         :param t: float
             The amount of simulation time to suspend entanglement generation for
         """
+        # Compute the number of suspended cycles
+        if not self.mhp_cycle_period:
+            num_suspended_cycles = 1
+        else:
+            num_suspended_cycles = ceil(t / self.mhp_cycle_period)
 
-        resume_time = sim_time() + t
-        if resume_time >= self.resume_time:
-            # Set up an event handler to resume entanglement generation
-            self._suspend = True
-            self.resume_time = resume_time
-            self.resumeID += 1
-            self.resume_handler = pydynaa.EventHandler(partial(self._resume_generation_handler, resumeID=self.resumeID))
-            EVT_RESUME = pydynaa.EventType("RESUME", "Triggers when we believe peer finished correction")
-            self._wait_once(self.resume_handler, entity=self, event_type=EVT_RESUME)
-            logger.debug("Scheduling resume event after {}.".format(t))
-            self._schedule_after(t, EVT_RESUME)
+        # Update the number of suspended cycles if it exceeds the amount we are currently suspended for
+        if num_suspended_cycles > self.num_suspended_cycles:
+            logger.debug("Suspending generation for {} cycles".format(num_suspended_cycles))
+            self.num_suspended_cycles = num_suspended_cycles
 
-    def resume_generation(self):
+    def suspended(self):
         """
-        Manually re-enables entanglement generation
+        Checks if the scheduler is currently suspending generation
+        :return: bool
+            True/False whether we are suspended or not
         """
-        self._suspend = False
-
-    def _resume_generation_handler(self, evt, resumeID):
-        """
-        Callback handler to flip the suspend flag and allow the scheduler to resume entanglement generation
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The event that triggered this handler
-        """
-        if resumeID == self.resumeID:
-            logger.debug("Resuming generation")
-            self._suspend = False
+        return self.num_suspended_cycles > 0
 
     def update_other_mem_size(self, mem):
         """
@@ -133,20 +211,33 @@ class RequestScheduler(pydynaa.Entity):
 
         next_gen = self.get_default_gen()
 
-        if self.qmm.is_busy() or self._suspend:
+        if self.qmm.is_busy():
+            logger.debug("QMM is currently busy")
+            next_gen = self.default_gen
+
+        elif self.suspended():
+            logger.debug("Generation is currently suspended")
             next_gen = self.default_gen
 
         elif self.curr_gen:
             next_gen = self.curr_gen
+            logger.debug("Scheduler has next gen {}".format(next_gen))
 
         # If there are outstanding generations and we have memory, overwrite with a request
         elif self.outstanding_gens:
             next_gen = self.get_next_gen_template()
+            logger.debug("Scheduler has next gen {}".format(next_gen))
 
         # If there are outstanding requests then create the gen templates and try to get one
         elif self.outstanding_items:
+            logger.debug("No available generations, processing outstanding items")
             self._process_outstanding_items()
-            next_gen = self.get_next_gen_template()
+            if self.outstanding_gens:
+                next_gen = self.get_next_gen_template()
+                logger.debug("Scheduler has next gen {}".format(next_gen))
+
+        else:
+            logger.debug("Scheduler has no items to process")
 
         # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
         if not self.handling_measure_directly() and next_gen[0]:
@@ -165,12 +256,19 @@ class RequestScheduler(pydynaa.Entity):
         return False, None, None, None, None
 
     def generating(self):
+        """
+        Tells if the scheduler is currently handling a generation
+        :return: bool
+            True/False
+        """
+        # Check the current generation to see if the flag is True
         return self.curr_gen[0] if self.curr_gen else None
 
     def curr_aid(self):
         """
         Returns the aid for the current generation request if any else none
-        :return:
+        :return: tuple of (int, int)
+            Specifies the (QID, QSEQ) corresponding to the current request if any
         """
         return self.curr_gen[1] if self.curr_gen else None
 
@@ -263,6 +361,14 @@ class RequestScheduler(pydynaa.Entity):
         return self.requests.get(aid)
 
     def previous_request(self, aid):
+        """
+        Checks if the provided AID was a previous request.  Used by higher layers for determining if communications were
+        delayed and should be filtered out
+        :param aid: tuple of (int, int)
+            The absolute queue ID corresponding to the request to check
+        :return: bool
+            Whether the specified AID was a previously processed request
+        """
         return aid in self.prev_requests
 
     def clear_request(self, aid):
@@ -273,21 +379,28 @@ class RequestScheduler(pydynaa.Entity):
         :return: list of tuples
             The removed outstanding generations
         """
+        # Remove any outstanding generations
         removed_gens = self._prune_request_generations(aid=aid)
 
+        # Add the request to the previous request list, drop any that are too old
         self.prev_requests.append(aid)
-        if len(self.prev_requests) > 5:
+        if len(self.prev_requests) > self.max_prev_requests:
             self.prev_requests.pop(0)
 
+        # Check if this is a request currently being processed
         if self.curr_aid() == aid:
             logger.debug("Cleared current gen")
             removed_gens.append(self.curr_gen)
+
+            # Vacate the reserved locations within the QMM
             self.qmm.vacate_qubit(self.curr_gen[2])
             self.qmm.vacate_qubit(self.curr_gen[3])
             self.curr_gen = None
 
         logger.debug("Removed remaining generations for {}: {}".format(aid, removed_gens))
         request = self.requests.pop(aid, None)
+
+        # Remove request info if available
         if request:
             key = (request.create_id, request.otherID)
             self.outstanding_items.pop(key, None)
@@ -295,6 +408,7 @@ class RequestScheduler(pydynaa.Entity):
             if self.curr_request == request:
                 self.curr_request = None
 
+        # If this item timed out need to remove from the queue
         qid, qseq = aid
         if self.distQueue.contains_item(qid, qseq):
             queue_item = self.distQueue.remove_item(qid, qseq)
@@ -303,9 +417,6 @@ class RequestScheduler(pydynaa.Entity):
             else:
                 # Remove queue item from pydynaa
                 queue_item.remove()
-
-        # Check if we have any requests to follow up with and begin processing them
-        self._process_outstanding_items()
 
         return removed_gens
 
@@ -376,17 +487,29 @@ class RequestScheduler(pydynaa.Entity):
         # Store the request under the absolute queue id
         aid = (qid, qseq)
         request = queue_item.request
-        self.requests[aid] = request
 
         # Store the absolute queue id under a unique request key
         logger.debug("Scheduling request {}".format(aid))
+
         key = (request.create_id, request.otherID)
         self.outstanding_items[key] = aid
+        self.schedule_backlog[key] = request
 
         if queue_item.lifetime:
             self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
 
-        self._process_outstanding_items()
+    def _get_next_request(self):
+        """
+        Gets the next request for processing
+        :return: tuple of (tuple, request)
+            The absolute queue ID and request (if any)
+        """
+        # Simply process the requests in FIFO order (for now...)
+        sorted_request_aids = sorted(self.requests.keys(), key=lambda aid: aid[1])
+        if sorted_request_aids:
+            aid = sorted_request_aids[0]
+            return aid, self.requests[aid]
+        return None, None
 
     def _process_outstanding_items(self):
         """
@@ -395,13 +518,17 @@ class RequestScheduler(pydynaa.Entity):
         :return:
         """
         # Check if we are already processing a generation request or if we have any requests to service
-        if not self.requests and not self.curr_gen:
+        if not self.requests:
+            logger.debug("No available requests to process")
             return
 
-        # Simply process the requests in FIFO order (for now...)
-        sorted_request_aids = sorted(self.requests.keys(), key=lambda aid: aid[1])
-        next_aid = sorted_request_aids[0]
-        next_request = self.requests[next_aid]
+        if self.curr_gen:
+            logger.debug("Currently processing generation")
+            return
+
+        next_aid, next_request = self._get_next_request()
+        if next_aid is None and next_request is None:
+            return
 
         logger.debug("Creating gen templates for request {}".format(vars(next_request)))
 
@@ -426,11 +553,14 @@ class RequestScheduler(pydynaa.Entity):
         if key in self.outstanding_items:
             logger.error("Failed to service request in time, clearing")
             aid = self.outstanding_items[key]
-            request = self.requests[aid]
+            if aid in self.requests.keys():
+                request = self.requests[aid]
             self.timed_out_requests.append(request)
             self.clear_request(aid=aid)
             logger.debug("Scheduling request timeout event now.")
             self._schedule_now(self._EVT_REQ_TIMEOUT)
+        self.outstanding_items.pop(key, None)
+        self.schedule_backlog.pop(key, None)
 
     def _prune_request_generations(self, aid):
         """

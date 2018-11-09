@@ -276,22 +276,15 @@ class EGPOKDataPoint(EGPDataPoint):
         self.success = data[5]
 
         if self.ok_type == EntInfoMeasDirectHeader.type:
-            self.create_id, ent_id, self.meas_out, self.basis, self.goodness, self.t_create = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
+            self.create_id, ent_id, self.meas_out, self.basis, self.goodness,\
+                self.t_create = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
             self.origin_id, self.other_id, self.mhp_seq = ent_id
         elif self.ok_type == EntInfoCreateKeepHeader.type:
-            self.create_id, ent_id, self.logical_id, self.goodness, self.t_create, self.t_goodness = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
+            self.create_id, ent_id, self.logical_id, self.goodness, self.t_create,\
+                self.t_goodness = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
             self.origin_id, self.other_id, self.mhp_seq = ent_id
         else:
             raise ValueError("Cannot parse data")
-
-        # if ok_type == NodeCentricEGP.CK_OK:
-        #     self.timestamp, self.ok_type, self.node_id, self.create_id, self.origin_id, self.other_id, self.mhp_seq,\
-        #         self.logical_id, self.goodness, self.goodness_time, self.create_time, self.attempts, self.success = data
-        # elif ok_type == NodeCentricEGP.MD_OK:
-        #     self.timestamp, self.ok_type, self.node_id, self.create_id, self.origin_id, self.other_id, self.mhp_seq,\
-        #         self.measurement_outcome, self.measurement_basis, self.create_time, self.attempts, self.success = data
-        # else:
-        #     raise ValueError("Cannot parse data")
 
     def from_data_point(self, data):
         if isinstance(data, EGPOKDataPoint):
@@ -698,32 +691,3 @@ class AttemptCollector(Entity):
         for (key, attempts) in self._attempts.items():
             total_attempts += attempts
         return total_attempts
-
-# class StateCollector(Entity):
-#     def __init__(self, scenario):
-#         """
-#         Collects quantum state data for succesful entanglement generations.
-#         These can be retrieved using the entanglement ID.
-#
-#         :param scenario: :obj:`qlinklayer.scenario.EGPSimulationScenario`
-#         """
-#         super(StateCollector, self).__init__()
-#
-#         self._scenario = scenario
-#
-#         # Listen to OK events at the scenario
-#         self.evt_handler = EventHandler(self._ok_handler)
-#         self._wait(self.evt_handler, entity=self._scenario, event_type=self._scenario._EVT_OK)
-#
-#         # Data storage
-#         self._qstate = {}
-#
-#     def _ok_handler(self, event):
-#         """
-#         Handles the OK event and collects the quantum state.
-#         :param event:
-#         :return:
-#         """
-#         # Got OK message
-#         # Get the results
-#         result = self._scenarioVkkkkk

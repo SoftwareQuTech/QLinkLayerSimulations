@@ -89,7 +89,7 @@ def parse_table_data_from_sql(results_path, base_table_name, max_real_time=None)
     else:
         try:
             conn = sqlite3.connect(results_path)
-        except sqlite3.OperationalError as err:
+        except sqlite3.OperationalError:
             logger.error("sqlite3 could not open the file {}, check that the path is correct".format(results_path))
             return None
         c = conn.cursor()

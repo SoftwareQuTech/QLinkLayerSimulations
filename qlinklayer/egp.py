@@ -7,13 +7,13 @@ from easysquid.quantumProgram import QuantumProgram
 from easysquid import qProgramLibrary as qprgms
 from qlinklayer.toolbox import LinkLayerException
 from qlinklayer.scheduler import RequestScheduler
-from qlinklayer.distQueue import FilteredDistributedQueue
+from qlinklayer.distQueue import EGPDistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
-from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCCmdHeader, CQCEPRRequestHeader, \
-    CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, CQC_VERSION, CQC_TP_EPR_OK, CQCNotifyHeader, CQC_NOTIFY_LENGTH
+from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH,\
+    CQC_VERSION, CQC_TP_EPR_OK, CQCNotifyHeader
 from SimulaQron.cqc.backend.entInfoHeader import ENT_INFO_LENGTH, EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 import random
 import bitstring
@@ -29,10 +29,11 @@ class EGPRequest:
                      'float:32=max_time, ' \
                      'uint:16=create_id, ' \
                      'uint:8=num_pairs, ' \
-                     'uint:4=priority', \
+                     'uint:4=priority, ' \
+                     'uint:16=sched_cycle', \
                      'uint:1=store, ' \
                      'uint:1=measure_directly'
-    HDR_LENGTH = 24
+    HDR_LENGTH = 26
 
     def __init__(self, cqc_request=None):
         """
@@ -43,7 +44,6 @@ class EGPRequest:
         if cqc_request:
             cqc_header = CQCHeader(cqc_request[:CQC_HDR_LENGTH])
             cqc_request = cqc_request[CQC_HDR_LENGTH:]
-            cqc_cmd_header = CQCCmdHeader(cqc_request[:CQC_CMD_HDR_LENGTH])
             cqc_request = cqc_request[CQC_CMD_HDR_LENGTH:]
             cqc_epr_req_header = CQCEPRRequestHeader(cqc_request)
 
@@ -62,7 +62,7 @@ class EGPRequest:
             self.create_time = 0
             self.store = bool(cqc_epr_req_header.store)
             self.measure_directly = bool(cqc_epr_req_header.measure_directly)
-
+            self.sched_cycle = 0
             self.is_set = True
 
         else:
@@ -81,7 +81,7 @@ class EGPRequest:
             self.create_time = 0
             self.store = True
             self.measure_directly = False
-
+            self.sched_cycle = 0
             self.is_set = False
 
     def __copy__(self):
@@ -94,10 +94,6 @@ class EGPRequest:
         """
         c = EGPRequest()
         c.unpack(self.pack())
-        # c = type(self)(other_ip=self.other_ip, other_port=self.other_port, num_pairs=self.num_pairs,
-        #                min_fidelity=self.min_fidelity, max_time=self.max_time, purpose_id=self.purpose_id,
-        #                priority=self.priority, store=self.store, measure_directly=self.measure_directly)
-        # c.assign_create_id(self.create_id, self.create_time)
         return c
 
     def assign_create_id(self, create_id, create_time):
@@ -120,10 +116,6 @@ class EGPRequest:
         if not self.is_set:
             return 0
 
-        # if self.create_time is None:
-        #     raise ValueError("Cannot pack if create_time is None")
-        # if self.create_id is None:
-        #     raise ValueError("Cannot pack if create_id is None")
         to_pack = {"other_ip": self.other_ip,
                    "other_port": self.other_port,
                    "purpose_id": self.purpose_id,
@@ -134,7 +126,8 @@ class EGPRequest:
                    "num_pairs": self.num_pairs,
                    "priority": self.priority,
                    "store": self.store,
-                   "measure_directly": self.measure_directly}
+                   "measure_directly": self.measure_directly,
+                   "sched_cycle": self.sched_cycle}
         request_Bitstring = bitstring.pack(self.package_format, **to_pack)
         requestH = request_Bitstring.tobytes()
 
@@ -161,10 +154,14 @@ class EGPRequest:
         self.create_id = request_fields[6]
         self.num_pairs = request_fields[7]
         self.priority = request_fields[8]
-        self.store = bool(request_fields[9])
-        self.measure_directly = bool(request_fields[10])
+        self.sched_cycle = request_fields[9]
+        self.store = bool(request_fields[10])
+        self.measure_directly = bool(request_fields[11])
 
         self.is_set = True
+
+    def add_sched_cycle(self, cycle):
+        self.sched_cycle = cycle
 
 
 class EGP(EasyProtocol):
@@ -340,8 +337,8 @@ class NodeCentricEGP(EGP):
         }
 
         # Create local share of distributed queue
-        self.dqp = FilteredDistributedQueue(node=self.node, throw_local_queue_events=throw_local_queue_events,
-                                            accept_all=accept_all_requests)
+        self.dqp = EGPDistributedQueue(node=self.node, throw_local_queue_events=throw_local_queue_events,
+                                       accept_all=accept_all_requests)
         self.dqp.add_callback = self._add_to_queue_callback
 
         # Create the request scheduler
@@ -406,9 +403,6 @@ class NodeCentricEGP(EGP):
         self._setup_local_mhp()
         other_egp._setup_local_mhp()
 
-        # Give scheduler information about timing
-        self.scheduler.configure_mhp_timings(full_cycle=self.mhp.conn.full_cycle)
-
     def _setup_local_mhp(self):
         """
         Sets up the local mhp protocol that checks for entanglement requests periodically
@@ -416,6 +410,15 @@ class NodeCentricEGP(EGP):
         # Get our protocol from the service
         self.mhp = self.mhp_service.configure_node_proto(node=self.node, stateProvider=self.trigger_pair_mhp,
                                                          callback=self.handle_reply_mhp)
+
+        # Give scheduler information about timing
+        remote_node = self.mhp_service.get_node(nodeID=self.mhp.get_otherID())
+        scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, remote_node])
+        local_trigger = scheduling_offsets[self.node.nodeID]
+        remote_trigger = scheduling_offsets[self.mhp.get_otherID()]
+        self.scheduler.configure_mhp_timings(cycle_period=self.mhp_service.get_cycle_time(self.node),
+                                             full_cycle=self.mhp_service.get_full_cycle_time(self.node),
+                                             local_trigger=local_trigger, remote_trigger=remote_trigger)
 
         # Set a handler for emissions in the measure directly case
         self._emission_handler = EventHandler(self._handle_photon_emission)
@@ -430,10 +433,14 @@ class NodeCentricEGP(EGP):
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
         # Get the MHP timing offsets
-        scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, other_egp.node])
+        remote_node = self.mhp_service.get_node(nodeID=other_egp.node.nodeID)
+        scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, remote_node])
+        local_trigger = scheduling_offsets[self.node.nodeID]
+        remote_trigger = scheduling_offsets[remote_node.nodeID]
+        cycle_time = self.mhp_service.get_cycle_time(self.node)
 
         # Call DQP's connect to peer
-        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn, scheduling_offsets)
+        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn, local_trigger, remote_trigger, cycle_time)
 
     def _connect_egp(self, other_egp, egp_conn=None):
         """
@@ -460,6 +467,7 @@ class NodeCentricEGP(EGP):
         local_measurement_delay = self.qmm.get_measurement_delay(0)
         remote_measurement_delay = other_egp.qmm.get_measurement_delay(0)
         self.max_measurement_delay = max(local_measurement_delay, remote_measurement_delay)
+        other_egp.max_measurement_delay = self.max_measurement_delay
         self.max_move_delay = max_move_delay
         other_egp.max_move_delay = max_move_delay
 
@@ -680,12 +688,7 @@ class NodeCentricEGP(EGP):
             Tuple containing the qid where requests was stored and the request identifier within that
             queue
         """
-        # Get the qid we should store the request in from the scheduler
-        qid = self.scheduler.get_queue(creq)
-        logger.debug("Got QID {} from scheduler".format(qid))
-
-        # Store the request into the distributed queue
-        self.dqp.add(creq, qid)
+        self.scheduler.add_request(creq)
 
     def _add_to_queue_callback(self, result):
         """
@@ -716,10 +719,10 @@ class NodeCentricEGP(EGP):
         Handler to be given to the MHP service that allows it to ask the scheduler
         if there are any requests and to receive a request to process
         """
-        self.scheduler.configure_mhp_timings(full_cycle=self.mhp.conn.full_cycle)
         try:
             # Get scheduler's next gen task
             gen = self.scheduler.next()
+            self.scheduler.inc_cycle()
 
             if gen[0]:
                 # Store the gen for pickup by mhp
@@ -872,7 +875,6 @@ class NodeCentricEGP(EGP):
             # Check if we need to correct the qubit
             if r == 2:
                 logger.debug("Applying correction, suspending generation")
-
                 if self.node.nodeID != creq.otherID:
                     # Suspend for an estimated amount of time until our peer is ready to continue generation
                     suspend_time += self.this_corr_delay
@@ -1074,7 +1076,7 @@ class NodeCentricEGP(EGP):
 
         # Create entanglement identifier
         logical_id = self.scheduler.curr_storage_id()
-        creatorID = self.conn.idA if self.conn.idB == creq.otherID else self.conn.idB
+        creatorID = self.node.nodeID if self.get_otherID() == creq.otherID else self.get_otherID()
 
         # Construct result information
         now = self.get_current_time()
@@ -1084,12 +1086,15 @@ class NodeCentricEGP(EGP):
         if self.scheduler.handling_measure_directly():
             ent_id = (creatorID, creq.otherID, mhp_seq)
             m, basis = self.get_measurement_outcome(creq)
-            result = self.construct_cqc_ok_message(EntInfoMeasDirectHeader.type, creq.create_id, ent_id, fidelity_estimate, t_create, m=m, basis=basis)
+            result = self.construct_cqc_ok_message(EntInfoMeasDirectHeader.type, creq.create_id, ent_id,
+                                                   fidelity_estimate, t_create, m=m, basis=basis)
 
         else:
             ent_id = (creatorID, creq.otherID, mhp_seq)
             t_goodness = t_create
-            result = self.construct_cqc_ok_message(EntInfoCreateKeepHeader.type, creq.create_id, ent_id, fidelity_estimate, t_create, logical_id=logical_id, t_goodness=t_goodness)
+            result = self.construct_cqc_ok_message(EntInfoCreateKeepHeader.type, creq.create_id, ent_id,
+                                                   fidelity_estimate, t_create, logical_id=logical_id,
+                                                   t_goodness=t_goodness)
 
         return result
 
@@ -1110,7 +1115,9 @@ class NodeCentricEGP(EGP):
 
             creatorID, otherID, mhp_seq = ent_id
             cqc_ent_info_header = EntInfoCreateKeepHeader()
-            cqc_ent_info_header.setVals(ip_A=creatorID, port_A=0, ip_B=otherID, port_B=0, mhp_seq=mhp_seq, t_create=t_create, t_goodness=t_goodness, goodness=fidelity_estimate, DF=0, create_id=create_id)
+            cqc_ent_info_header.setVals(ip_A=creatorID, port_A=0, ip_B=otherID, port_B=0, mhp_seq=mhp_seq,
+                                        t_create=t_create, t_goodness=t_goodness, goodness=fidelity_estimate,
+                                        DF=0, create_id=create_id)
 
         elif type == EntInfoMeasDirectHeader.type:
             cqc_header = CQCHeader()
@@ -1121,7 +1128,9 @@ class NodeCentricEGP(EGP):
 
             creatorID, otherID, mhp_seq = ent_id
             cqc_ent_info_header = EntInfoMeasDirectHeader()
-            cqc_ent_info_header.setVals(ip_A=creatorID, port_A=0, ip_B=otherID, port_B=0, mhp_seq=mhp_seq, meas_out=m, basis=basis, t_create=t_create, goodness=fidelity_estimate, DF=0, create_id=create_id)
+            cqc_ent_info_header.setVals(ip_A=creatorID, port_A=0, ip_B=otherID, port_B=0, mhp_seq=mhp_seq,
+                                        meas_out=m, basis=basis, t_create=t_create, goodness=fidelity_estimate,
+                                        DF=0, create_id=create_id)
         else:
             raise ValueError("Unknown EPR OK message type")
 
@@ -1168,7 +1177,7 @@ class NodeCentricEGP(EGP):
 
         # Schedule event if request completed
         if self.scheduler.get_request(aid) is None:
-            logger.debug("Finished measure directly request, clearing stored results")
+            logger.debug("Finished request, clearing stored results")
             self.measurement_results = []
             self._schedule_now(self._EVT_REQ_COMPLETED)
 

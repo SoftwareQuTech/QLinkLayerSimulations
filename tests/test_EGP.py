@@ -11,7 +11,7 @@ from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from easysquid.toolbox import SimulationScheduler, logger
 from netsquid.simutil import sim_reset, sim_run
-from qlinklayer.egp import NodeCentricEGP, EGPRequest
+from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
@@ -163,10 +163,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
-                                   purpose_id=1, priority=10)
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=2000,
-                                 purpose_id=2, priority=2)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        purpose_id=1, priority=10)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=2000,
+                                                                      purpose_id=2, priority=2)
 
         # Schedule a sequence of various create requests
         alice_create_id, alice_create_time = egpA.create(alice_request)
@@ -225,8 +227,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         alice_pairs = 1
         num_requests = 4
-        alice_requests = [EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
-                                     purpose_id=1, priority=10) for _ in range(num_requests)]
+        alice_requests = [EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                          min_fidelity=0.5, max_time=1000,
+                                                                          purpose_id=1, priority=10)
+                          for _ in range(num_requests)]
 
         # Schedule a sequence of various create requests
         alice_create_info = []
@@ -265,10 +269,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=10000,
-                                   purpose_id=1, priority=10)
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=20000,
-                                 purpose_id=2, priority=2)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=10000,
+                                                                        purpose_id=1, priority=10)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=20000,
+                                                                      purpose_id=2, priority=2)
 
         alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
         bob_scheduled_create = partial(egpB.create, cqc_request=bob_request)
@@ -298,10 +304,13 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_num_bits = 255
         bob_num_bits = 255
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
-                                   purpose_id=1, priority=10, measure_directly=True)
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
-                                 purpose_id=2, priority=2, measure_directly=True)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_bits,
+                                                                        min_fidelity=0.5, max_time=10000,
+                                                                        purpose_id=1, priority=10,
+                                                                        measure_directly=True)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
+                                                                      min_fidelity=0.5, max_time=20000,
+                                                                      purpose_id=2, priority=2, measure_directly=True)
 
         alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
         bob_scheduled_create = partial(egpB.create, cqc_request=bob_request)
@@ -359,17 +368,23 @@ class TestNodeCentricEGP(unittest.TestCase):
         alice_num_bits = 255
         bob_num_pairs = 2
         bob_num_bits = 255
-        alice_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_pairs, min_fidelity=0.5, max_time=10000,
-                                       purpose_id=1, priority=10)
+        alice_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                            num_pairs=alice_num_pairs, min_fidelity=0.5,
+                                                                            max_time=10000, purpose_id=1, priority=10)
 
-        alice_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_bits, min_fidelity=0.5, max_time=10000,
-                                        purpose_id=1, priority=10, measure_directly=True)
+        alice_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                             num_pairs=alice_num_bits, min_fidelity=0.5,
+                                                                             max_time=10000, purpose_id=1, priority=10,
+                                                                             measure_directly=True)
 
-        bob_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_pairs, min_fidelity=0.5, max_time=20000,
-                                     purpose_id=2, priority=2)
+        bob_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_pairs,
+                                                                          min_fidelity=0.5, max_time=20000,
+                                                                          purpose_id=2, priority=2)
 
-        bob_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits, min_fidelity=0.5, max_time=20000,
-                                      purpose_id=2, priority=2, measure_directly=True)
+        bob_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
+                                                                           min_fidelity=0.5, max_time=20000,
+                                                                           purpose_id=2, priority=2,
+                                                                           measure_directly=True)
 
         alice_scheduled_epr = partial(egpA.create, cqc_request=alice_request_epr)
         alice_scheduled_bits = partial(egpA.create, cqc_request=alice_request_bits)
@@ -426,7 +441,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
         egpA, egpB = self.create_egps(alice, bob, connected=False, accept_all=True)
 
-        egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
+        egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.1)
         dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
         mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=0.02, lengthB=0.03,
                                                     use_time_window=True, measure_directly=True)
@@ -443,10 +458,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=10000,
-                                   purpose_id=1, priority=10)
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=20000,
-                                 purpose_id=2, priority=2)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=10000,
+                                                                        purpose_id=1, priority=10)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=20000,
+                                                                      purpose_id=2, priority=2)
 
         alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
         bob_scheduled_create = partial(egpB.create, cqc_request=bob_request)
@@ -459,7 +476,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = self.create_network(egpA, egpB)
         network.start()
 
-        sim_run(10000)
+        sim_run(12000)
 
         # Don't include t_goodness and t_create, since these could differ
         alice_results = list(map(lambda res: res[:-2], self.alice_results))
@@ -477,6 +494,36 @@ class TestNodeCentricEGP(unittest.TestCase):
                 self.assertIn(qB, qA.qstate._qubits)
                 self.assertIn(qA, qB.qstate._qubits)
 
+    def test_rollover_mhp_cycle(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        alice_pairs = 1
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=10000,
+                                                                        purpose_id=1, priority=10)
+
+        offset = 5
+        egpA.scheduler.mhp_cycle_number = egpA.scheduler.max_mhp_cycle_number - offset
+        egpB.scheduler.mhp_cycle_number = egpB.scheduler.max_mhp_cycle_number - offset
+        sched_time = egpA.scheduler.get_schedule_cycle(alice_request)
+        self.assertGreaterEqual(sched_time, 0)
+        self.assertLess(sched_time, egpA.scheduler.max_mhp_cycle_number)
+        create_id, create_time = egpA.create(cqc_request=alice_request)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(10)
+
+        # Verify both nodes have all results
+        self.assertEqual(len(self.alice_results), alice_pairs)
+        self.assertEqual(self.alice_results, self.bob_results)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.check_memories(alice.qmem, bob.qmem, range(alice_pairs))
+
     def test_unresponsive_dqp(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
         egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
@@ -488,8 +535,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         num_requests = 3
-        alice_requests = [EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1000,
-                                     purpose_id=1, priority=10) for _ in range(num_requests)]
+        alice_requests = [EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                          min_fidelity=0.5, max_time=1000,
+                                                                          purpose_id=1, priority=10)
+                          for _ in range(num_requests)]
 
         # Schedule egp CREATE commands mid simulation to ensure timeout order when checking results
         sim_scheduler = SimulationScheduler()
@@ -536,8 +585,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
         max_time = 10
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=max_time,
-                                   purpose_id=1, priority=10)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                        min_fidelity=0.5, max_time=max_time,
+                                                                        purpose_id=1, priority=10)
 
         alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
         # Schedule a sequence of various create requests
@@ -562,16 +612,16 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Make the MHP at the peer unresponsive
         egpB.mhp.stop()
 
+        # Get the start time of the generation attempts
+        mhp_start = egpA.scheduler.get_schedule_cycle(alice_request) * egpA.mhp.timeStep
         sim_run(max_time + 1)
 
-        dqp_delay = egpA.dqp.conn.channel_from_A.compute_delay() + egpA.dqp.conn.channel_from_B.compute_delay()
-        egp_delay = egpA.conn.channel_from_A.compute_delay() + egpA.conn.channel_from_B.compute_delay()
-        mhp_start_delay = max(dqp_delay, egp_delay)
-        mhp_start = egpA.mhp.timeStep * ceil(mhp_start_delay / egpA.mhp.timeStep)
+        # Calculate the amount of time a full generation cycle takes
+        cycles_per_gen = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.timeStep)
+        gen_time = cycles_per_gen * egpA.mhp.timeStep
 
-        mhp_conn_delay = egpA.mhp.conn.channel_A_to_M.compute_delay() + egpA.mhp.conn.channel_M_to_A.compute_delay()
-        mhp_cycle = egpA.mhp.timeStep * ceil(egpA.mhp.timeStep + mhp_conn_delay / egpA.mhp.timeStep)
-        num_timeouts = int((max_time - mhp_start) // (mhp_cycle))
+        # Calculate the number of errors we should have received
+        num_timeouts = int((max_time - mhp_start) // gen_time)
 
         # Assert that there were a few entanglement attempts before timing out the request
         expected_err_mhp = egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER
@@ -579,7 +629,6 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Unresponsive error two times followed by a timeout of the request
         expected_results = [(expected_err_mhp, 0)] * num_timeouts + [(expected_err_egp, alice_request)]
-
         self.assertEqual(len(self.alice_results), len(expected_results))
         self.assertEqual(self.alice_results[:num_timeouts], expected_results[:num_timeouts])
 
@@ -600,8 +649,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=100,
-                                   purpose_id=1, priority=10)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                        min_fidelity=0.5, max_time=100,
+                                                                        purpose_id=1, priority=10)
 
         egpA.create(alice_request)
 
@@ -656,12 +706,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
 
         alice_pairs = 4
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
-                                   purpose_id=1, priority=10)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        purpose_id=1, priority=10)
 
         bob_pairs = 4
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=1000,
-                                 purpose_id=1, priority=10)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=1000,
+                                                                      purpose_id=1, priority=10)
 
         alice_create_id, create_time = egpA.create(alice_request)
         egpB.create(bob_request)
@@ -752,8 +804,9 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         egpA.mhp.conn._get_next_mhp_seq = bad_inc
         alice_pairs = 3
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
-                                   purpose_id=1, priority=10)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        purpose_id=1, priority=10)
 
         egpA.create(cqc_request=alice_request)
 
@@ -802,21 +855,25 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # EGP Request that requests entanglement with self
-        node_self_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
-                                       priority=10)
+        node_self_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=5,
+                                                                            min_fidelity=0.5, max_time=10, purpose_id=1,
+                                                                            priority=10)
 
         # EGP Request that requests entanglement with unknown node
         unknown_id = 100
-        node_unknown_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=unknown_id, num_pairs=5, min_fidelity=0.5, max_time=10, purpose_id=1,
-                                          priority=10)
+        node_unknown_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=unknown_id, num_pairs=5,
+                                                                               min_fidelity=0.5, max_time=10,
+                                                                               purpose_id=1, priority=10)
 
         # EGP Request that requets more fidelity than we
-        unsuppfid_requet = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1, min_fidelity=1, max_time=10, purpose_id=1,
-                                      priority=10)
+        unsuppfid_requet = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                           min_fidelity=1, max_time=10, purpose_id=1,
+                                                                           priority=10)
 
         # max_time that is too short for us to fulfill
-        unsupptime_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=1e-9, purpose_id=1,
-                                        priority=10)
+        unsupptime_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                             min_fidelity=0.5, max_time=1e-9,
+                                                                             purpose_id=1, priority=10)
 
         egpA.create(cqc_request=node_self_request)
         egpA.create(cqc_request=node_unknown_request)
@@ -844,12 +901,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=False)
 
         alice_purpose_id = 1
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=10000,
-                                   purpose_id=alice_purpose_id, priority=10)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                        min_fidelity=0.5, max_time=10000,
+                                                                        purpose_id=alice_purpose_id, priority=10)
 
         bob_purpose_id = 2
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=1, min_fidelity=0.5, max_time=20000,
-                                 purpose_id=bob_purpose_id, priority=2)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=1,
+                                                                      min_fidelity=0.5, max_time=20000,
+                                                                      purpose_id=bob_purpose_id, priority=2)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
@@ -943,10 +1002,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_pairs = 1
         bob_pairs = 2
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=1000,
-                                   purpose_id=1, priority=10)
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=2000,
-                                 purpose_id=2, priority=2)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        purpose_id=1, priority=10)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=2000,
+                                                                      purpose_id=2, priority=2)
 
         alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
         bob_scheduled_create = partial(egpB.create, cqc_request=bob_request)

@@ -285,34 +285,8 @@ class TimeoutLocalQueue(LocalQueue):
         if isinstance(queue_item, _TimeoutLocalQueueItem):
             logger.debug("TimedLocalQueue has queue item {}".format(vars(queue_item)))
 
-            # timeout_evt_handler = EventHandler(self._timeout_handler)
-            # self._wait_once(timeout_evt_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
-
             schedule_evt_handler = EventHandler(self._schedule_handler)
             self._wait_once(schedule_evt_handler, entity=queue_item, event_type=queue_item._EVT_SCHEDULE)
-
-    # def _timeout_handler(self, evt):
-    #     """
-    #     Timeout handler for queue item timeout event
-    #     :param evt: obj `~netsquid.pydynaa.Event`
-    #         The event that triggered this handler
-    #     """
-    #     # Grab the item that timed out
-    #     queue_item = evt.source
-    #     logger.debug("Timeout Triggered")
-    #
-    #     # Check if the item is still stored locally
-    #     if self.contains(queue_item.seq):
-    #         logger.debug("Removing item from queue")
-    #         self.remove_item(queue_item.seq)
-    #
-    #         # Store the item for retrieval by higher layers
-    #         self.timed_out_items.append(queue_item)
-    #         logger.debug("Scheduling processing timeout event now.")
-    #         self._schedule_now(self._EVT_PROC_TIMEOUT)
-    #
-    #     else:
-    #         logger.debug("Item already removed!")
 
     def _schedule_handler(self, evt):
         """
@@ -375,5 +349,5 @@ class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
         """
         Schedules the item's schedule event for triggering pickup by the local queue
         """
-        logger.debug("Scheduling timeout event at {}.".format(self.scheduleAt))
+        logger.debug("Scheduling ready event at {}.".format(self.scheduleAt))
         self._schedule_at(self.scheduleAt, self._EVT_SCHEDULE)

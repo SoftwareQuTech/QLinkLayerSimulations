@@ -313,14 +313,17 @@ def run_simulation(results_path, name=None, config=None, create_probA=1, create_
                     wall_time_sim_step_duration, previous_timestep / SECOND, timestep / SECOND))
             mhp_cycles = math.floor(sim_time() / mhp_conn.t_cycle)
             if name:
-                logger.info("Simulation: \"{}\": ".format(name) +
-                            "Time advanced: {}/{} s real time.  ".format(sim_time() / SECOND, max_sim_time) +
-                            "{}/{} s wall time. ".format(now - start_time, max_wall_time) +
-                            "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle))
+                info_message = "Simulation: \"{}\": ".format(name)
+                info_message += "Time advanced: {}/{} s real time.  ".format(sim_time() / SECOND, max_sim_time)
+                info_message += "{}/{} s wall time. ".format(now - start_time, max_wall_time)
+                info_message += "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle)
+                logger.info(info_message)
+
             else:
-                logger.info("Time advanced: {}/{} s real time.  ".format(sim_time() / SECOND, max_sim_time) +
-                            "{}/{} s wall time. ".format(now - start_time, max_wall_time) +
-                            "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle))
+                info_message = "Time advanced: {}/{} s real time.  ".format(sim_time() / SECOND, max_sim_time)
+                info_message += "{}/{} s wall time. ".format(now - start_time, max_wall_time)
+                info_message += "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle)
+                logger.info(info_message)
 
             # Save additional data relevant for the simulation
             if save_additional_data:

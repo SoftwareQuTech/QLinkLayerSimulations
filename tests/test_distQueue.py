@@ -419,8 +419,9 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         network.start()
 
         # Test that we cannot add a request
-        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1, min_fidelity=0.5, max_time=10000,
-                             purpose_id=0, priority=10))
+        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                             min_fidelity=0.5, max_time=10000,
+                                                                             purpose_id=0, priority=10))
 
         # Test that no rule results in rejection of request
         aliceDQ.add(request)

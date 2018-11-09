@@ -303,7 +303,6 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         :param result: bytes
         :return: tuple (create_id, ent_id, logical_id, f_goodness, t_create, t_goodness)
         """
-        cqc_header = CQCHeader(result[:CQC_HDR_LENGTH])
         result = result[CQC_HDR_LENGTH:]
         cqc_notify_header = CQCNotifyHeader(result[:CQC_NOTIFY_LENGTH])
         result = result[CQC_NOTIFY_LENGTH:]
@@ -467,9 +466,7 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         :param result: bytes
         :return: tuple (create_id, ent_id, meas_out, basis, f_goodness, t_create)
         """
-        cqc_header = CQCHeader(result[:CQC_HDR_LENGTH])
         result = result[CQC_HDR_LENGTH:]
-        cqc_notify_header = CQCNotifyHeader(result[:CQC_NOTIFY_LENGTH])
         result = result[CQC_NOTIFY_LENGTH:]
         cqc_ent_info_header = EntInfoMeasDirectHeader(result)
 
