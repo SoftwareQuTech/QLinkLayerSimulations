@@ -306,16 +306,12 @@ class _LocalQueueItem:
         self.request = request
         self.seq = seq
         self.scheduleAt = scheduleAt
-        self.metadata = {}
 
         # Flag whether this queue item is ready to be executed
         self.ready = False
 
     def prepare(self):
         pass
-
-    def add_metadata(self, key, value):
-        self.metadata[key] = value
 
 
 class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):

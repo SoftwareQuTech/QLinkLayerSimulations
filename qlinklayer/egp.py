@@ -342,7 +342,6 @@ class NodeCentricEGP(EGP):
         self.dqp.add_callback = self._add_to_queue_callback
 
         # Create the request scheduler
-        self.mhp_cycle_number = 0
         self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
         self.request_timeout_handler = EventHandler(self._request_timeout_handler)
         self._wait(self.request_timeout_handler, entity=self.scheduler, event_type=self.scheduler._EVT_REQ_TIMEOUT)
@@ -367,14 +366,14 @@ class NodeCentricEGP(EGP):
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
         if not self.conn:
-            # Set up communication channel for EGP level messages
-            self._connect_egp(other_egp, egp_conn)
-
             # Set up MHP Service
             self._connect_mhp(other_egp, mhp_service, mhp_conn, alphaA=alphaA, alphaB=alphaB)
 
             # Set up distributed queue
             self._connect_dqp(other_egp, dqp_conn)
+
+            # Set up communication channel for EGP level messages
+            self._connect_egp(other_egp, egp_conn)
 
         else:
             logger.warning("Attempted to configure EGP with new connection while already connected")
@@ -404,12 +403,6 @@ class NodeCentricEGP(EGP):
         self._setup_local_mhp()
         other_egp._setup_local_mhp()
 
-        # Give scheduler information about timing
-        local_trigger = self.mhp.t0
-        remote_trigger = self.mhp_service._node_proto_by_id(self.get_otherID()).t0
-        self.scheduler.configure_mhp_timings(cycle_period=self.mhp.timeStep, full_cycle=self.mhp.conn.full_cycle,
-                                             local_trigger=local_trigger, remote_trigger=remote_trigger)
-
     def _setup_local_mhp(self):
         """
         Sets up the local mhp protocol that checks for entanglement requests periodically
@@ -417,6 +410,15 @@ class NodeCentricEGP(EGP):
         # Get our protocol from the service
         self.mhp = self.mhp_service.configure_node_proto(node=self.node, stateProvider=self.trigger_pair_mhp,
                                                          callback=self.handle_reply_mhp)
+
+        # Give scheduler information about timing
+        remote_node = self.mhp_service.get_node(nodeID=self.mhp.get_otherID())
+        scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, remote_node])
+        local_trigger = scheduling_offsets[self.node.nodeID]
+        remote_trigger = scheduling_offsets[self.mhp.get_otherID()]
+        self.scheduler.configure_mhp_timings(cycle_period=self.mhp_service.get_cycle_time(self.node),
+                                             full_cycle=self.mhp_service.get_full_cycle_time(self.node),
+                                             local_trigger=local_trigger, remote_trigger=remote_trigger)
 
         # Set a handler for emissions in the measure directly case
         self._emission_handler = EventHandler(self._handle_photon_emission)
@@ -431,9 +433,11 @@ class NodeCentricEGP(EGP):
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
         # Get the MHP timing offsets
-        local_trigger = self.mhp.t0
-        remote_trigger = self.mhp_service._node_proto_by_id(self.get_otherID()).t0
-        cycle_time = self.mhp.conn.t_cycle
+        remote_node = self.mhp_service.get_node(nodeID=other_egp.node.nodeID)
+        scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, remote_node])
+        local_trigger = scheduling_offsets[self.node.nodeID]
+        remote_trigger = scheduling_offsets[remote_node.nodeID]
+        cycle_time = self.mhp_service.get_cycle_time(self.node)
 
         # Call DQP's connect to peer
         self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn, local_trigger, remote_trigger, cycle_time)
@@ -463,6 +467,7 @@ class NodeCentricEGP(EGP):
         local_measurement_delay = self.qmm.get_measurement_delay(0)
         remote_measurement_delay = other_egp.qmm.get_measurement_delay(0)
         self.max_measurement_delay = max(local_measurement_delay, remote_measurement_delay)
+        other_egp.max_measurement_delay = self.max_measurement_delay
         self.max_move_delay = max_move_delay
         other_egp.max_move_delay = max_move_delay
 
@@ -683,10 +688,6 @@ class NodeCentricEGP(EGP):
             Tuple containing the qid where requests was stored and the request identifier within that
             queue
         """
-        local_trigger = self.mhp.t0
-        remote_trigger = self.mhp_service._node_proto_by_id(self.get_otherID()).t0
-        self.scheduler.configure_mhp_timings(cycle_period=self.mhp.timeStep, full_cycle=self.mhp.conn.full_cycle,
-                                             local_trigger=local_trigger, remote_trigger=remote_trigger)
         self.scheduler.add_request(creq)
 
     def _add_to_queue_callback(self, result):
@@ -718,17 +719,15 @@ class NodeCentricEGP(EGP):
         Handler to be given to the MHP service that allows it to ask the scheduler
         if there are any requests and to receive a request to process
         """
-        local_trigger = self.mhp.t0
-        remote_trigger = self.mhp_service._node_proto_by_id(self.get_otherID()).t0
-        self.scheduler.configure_mhp_timings(cycle_period=self.mhp.timeStep, full_cycle=self.mhp.conn.full_cycle,
-                                             local_trigger=local_trigger, remote_trigger=remote_trigger)
         try:
-            self.scheduler.inc_cycle()
             # Get scheduler's next gen task
             gen = self.scheduler.next()
+            self.scheduler.inc_cycle()
 
             if gen[0]:
                 # Store the gen for pickup by mhp
+                # import pdb
+                # pdb.set_trace()
                 self.mhp_service.put_ready_data(self.node.nodeID, gen)
                 return True
 

@@ -494,6 +494,36 @@ class TestNodeCentricEGP(unittest.TestCase):
                 self.assertIn(qB, qA.qstate._qubits)
                 self.assertIn(qA, qB.qstate._qubits)
 
+    def test_rollover_mhp_cycle(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        alice_pairs = 1
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=10000,
+                                                                        purpose_id=1, priority=10)
+
+        offset = 5
+        egpA.scheduler.mhp_cycle_number = egpA.scheduler.max_mhp_cycle_number - offset
+        egpB.scheduler.mhp_cycle_number = egpB.scheduler.max_mhp_cycle_number - offset
+        sched_time = egpA.scheduler.get_schedule_cycle(alice_request)
+        self.assertGreaterEqual(sched_time, 0)
+        self.assertLess(sched_time, egpA.scheduler.max_mhp_cycle_number)
+        create_id, create_time = egpA.create(cqc_request=alice_request)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(10)
+
+        # Verify both nodes have all results
+        self.assertEqual(len(self.alice_results), alice_pairs)
+        self.assertEqual(self.alice_results, self.bob_results)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.check_memories(alice.qmem, bob.qmem, range(alice_pairs))
+
     def test_unresponsive_dqp(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
         egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)

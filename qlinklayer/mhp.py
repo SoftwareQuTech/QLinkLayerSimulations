@@ -874,7 +874,25 @@ class SimulatedNodeCentricMHPService(Service):
         nodeID = node.nodeID
         return self._node_proto_by_id(nodeID)
 
+    def get_node(self, nodeID):
+        """
+        Provided a nodeID returns the node
+        :param nodeID: int
+            ID of the node we want to retrieve
+        :return: obj `~easysquid.qnode.QuantumNode`
+            The node we are looking for
+        """
+        proto = self._node_proto_by_id(nodeID)
+        return proto.node
+
     def _node_proto_by_id(self, nodeID):
+        """
+        Provided a nodeID returns the protocol running on that node
+        :param nodeID: int
+            The ID of the node we want the protocol for
+        :return: obj `~easysquid.easyprotocol.EasyProtocol`
+            The protocol running on the node
+        """
         return self.node_info[nodeID]
 
     def configure_node_proto(self, node, stateProvider=None, callback=None):
@@ -939,6 +957,18 @@ class SimulatedNodeCentricMHPService(Service):
         """
         node_proto = self.get_node_proto(node)
         cycle_time = node_proto.conn.t_cycle
+        return cycle_time
+
+    def get_full_cycle_time(self, node):
+        """
+        Returns the duration of a full MHP generation cycle (init, emission, communication RTT, detection window)
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            The node to obtain the full cycle time for
+        :return: float
+            The full cycle time
+        """
+        node_proto = self.get_node_proto(node)
+        cycle_time = node_proto.conn.full_cycle
         return cycle_time
 
     def get_mhp_conn(self, node):
