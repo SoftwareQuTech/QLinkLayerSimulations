@@ -99,8 +99,8 @@ class TestNodeCentricEGP(unittest.TestCase):
     def check_memories(self, aliceMemory, bobMemory, addresses):
         # Check the entangled pairs, ignore communication qubit
         for i in addresses:
-            qA = aliceMemory.peek(i + 1)[0]
-            qB = bobMemory.peek(i + 1)[0]
+            qA = aliceMemory.peek(i)[0]
+            qB = bobMemory.peek(i)[0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
@@ -680,6 +680,63 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
         self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
+    def test_request_timeout(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(alice, bob, connected=False, accept_all=True)
+
+        egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.1)
+        dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
+        mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=0.02, lengthB=0.03,
+                                                    use_time_window=True, measure_directly=True)
+        egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
+
+        sim_scheduler = SimulationScheduler()
+        alice_pairs = 2
+        bob_pairs = 2
+
+        # Use a max time that is a multiple of the mhp timestep and allows the request to begin processing
+        max_time = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.timeStep) * egpA.mhp.timeStep * 5
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=max_time,
+                                                                        purpose_id=1, priority=10)
+
+        # This request should be completed successfully after the first one times out
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=10000,
+                                                                      purpose_id=2, priority=2)
+
+        alice_create_id, _ = egpA.create(cqc_request=alice_request)
+        bob_create_id, _ = egpB.create(cqc_request=bob_request)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(10000)
+
+        # There should be at least a timeout message and the two successful generations from bob's request
+        self.assertGreaterEqual(len(self.alice_results), 3)
+        self.assertEqual(len(self.alice_results), len(self.bob_results))
+
+        # Check that the timeout message is in the results
+        self.assertIn((egpA.ERR_TIMEOUT, alice_create_id), self.alice_results)
+
+        # Check that the oks correspond to bob's request and worked
+        for alice_ok, bob_ok in zip(self.alice_results[-2:], self.bob_results[-2:]):
+            self.assertEqual(alice_ok[0], EntInfoCreateKeepHeader.type)
+            self.assertEqual(alice_ok[0], bob_ok[0])
+            self.assertEqual(alice_ok[1], bob_create_id)
+            self.assertEqual(alice_ok[1], bob_ok[1])
+            self.assertEqual(alice_ok[2], bob_ok[2])
+            aID, bID = alice_ok[3], bob_ok[3]
+            qA = alice.qmem.peek(aID)[0]
+            qB = bob.qmem.peek(bID)[0]
+            self.assertEqual(qA.qstate.dm.shape, (4, 4))
+            self.assertTrue(qA.qstate.compare(qB.qstate))
+            self.assertIn(qB, qA.qstate._qubits)
+            self.assertIn(qA, qB.qstate._qubits)
+
 
     def test_one_node_expires(self):
         alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
