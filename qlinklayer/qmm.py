@@ -3,8 +3,9 @@
 #
 from easysquid.toolbox import logger, EasySquidException
 from easysquid.easygate import ZGate
-from easysquid.quantumProgram import MeasurementOp
+# from easysquid.quantumProgram import MeasurementOp
 from netsquid.qubits import qubitapi as qapi
+from netsquid.components.instructions import INSTR_MEASURE, INSTR_Z
 
 
 class QuantumMemoryManagement:
@@ -58,10 +59,12 @@ class QuantumMemoryManagement:
         :return: float
             The amount of time it takes to apply the z gate to the electron
         """
-        return self.node.qmem.get_operation_time(ZGate(), comm_id)
+        return self.node.qmem.get_instruction_duration(INSTR_Z, [comm_id])
+        # return self.node.qmem.get_operation_time(ZGate(), comm_id)
 
     def get_measurement_delay(self, qubit_id):
-        return self.node.qmem.get_operation_time(MeasurementOp(), qubit_id)
+        return self.node.qmem.get_instruction_duration(INSTR_MEASURE, [qubit_id])
+        # return self.node.qmem.get_operation_time(MeasurementOp(), qubit_id)
 
     def qubit_reserved(self, id):
         """

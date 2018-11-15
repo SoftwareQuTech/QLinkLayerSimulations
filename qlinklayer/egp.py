@@ -1,6 +1,7 @@
 import abc
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
+from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_MEASURE
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid.quantumProgram import QuantumProgram
@@ -907,14 +908,16 @@ class NodeCentricEGP(EGP):
 
             # Constuct a quantum program
             prgm = QuantumProgram()
-            q = prgm.load_mem_qubits(qmem=self.node.qmem)[comm_q]
+            q = prgm.get_qubit_indices(1)[0]
+            # q = prgm.load_mem_qubits(qmem=self.node.qmem)[comm_q]
 
             # Make a random basis choice
             basis = random.randint(0, 1)
 
             if basis:
                 logger.debug("Measuring comm_q {} in Hadamard basis".format(comm_q))
-                q.H()
+                prgm.apply(INSTR_H, q)
+                # q.H()
             else:
                 logger.debug("Measuring comm_q {} in Standard basis".format(comm_q))
 
@@ -923,18 +926,22 @@ class NodeCentricEGP(EGP):
             # Set a flag to make sure we catch replies that occur during the measurement
             self.measurement_in_progress = True
             self.scheduler.suspend_generation(self.max_measurement_delay)
-            q.measure(callback=self._handle_measurement_outcome)
-            self.node.qmem.execute_program(prgm)
+            prgm.apply(INSTR_MEASURE, q, output_key="m")
+            self.node.qmem.set_program_done_callback(self._handle_measurement_outcome, prgm=prgm)
+            self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q])
+            # q.measure(callback=self._handle_measurement_outcome)
+            # self.node.qmem.execute_program(prgm)
 
-    def _handle_measurement_outcome(self, outcome):
+    def _handle_measurement_outcome(self, prgm):
         """
         Handles the measurement outcome from measureing the communication qubit
         directly after the photon was emitted.
         Calls back to complete MHP reply handling.
-        :param outcome: int
-            The measurement outcome
+        :param prgm: :obj:`netsquid.QuantumProgram`
+            The quantum program to be able to access the measurement outcome
         :return: None
         """
+        outcome = prgm.output["m"][0]
         # Saves measurement outcome
         self.measurement_in_progress = False
         logger.debug("Measured {} on qubit".format(outcome))
@@ -1005,17 +1012,22 @@ class NodeCentricEGP(EGP):
 
         # Construct a quantum program to correct and move
         prgm = QuantumProgram()
-        qs = prgm.load_mem_qubits(self.node.qmem)
-        qs[comm_q].Z()
+        qs = prgm.get_qubit_indices(2)
+        prgm.apply(INSTR_Z, qs[0])
+        # qs = prgm.load_mem_qubits(self.node.qmem)
+        # qs[comm_q].Z()
 
         # Check if we need to move the qubit into storage
         if comm_q != storage_q:
-            qs[storage_q].init()
-            qprgms.move_using_CNOTs(prgm, comm_q, storage_q)
+            prgm.apply(INSTR_INIT, qs[1])
+            # qs[1].init()
+            qprgms.move_using_CNOTs(prgm, qs[0], qs[1])
 
         # Set the callback of the program
-        prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
-        self.node.qmem.execute_program(prgm)
+        self.node.qmem.set_program_done_callback(self._return_ok, mhp_seq=mhp_seq, aid=aid)
+        self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q, storage_q])
+        # prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
+        # self.node.qmem.execute_program(prgm)
 
     def _move_comm_to_storage(self, mhp_seq, aid):
         """
@@ -1035,13 +1047,17 @@ class NodeCentricEGP(EGP):
 
             # Construct a quantum program to move the qubit
             prgm = QuantumProgram()
-            qs = prgm.load_mem_qubits(qmem=self.node.qmem)
-            qs[storage_q].init()
-            qprgms.move_using_CNOTs(prgm, comm_q, storage_q)
+            qs = prgm.get_qubit_indices(2)
+            prgm.apply(INSTR_INIT, qs[1])
+            # qs = prgm.load_mem_qubits(qmem=self.node.qmem)
+            # qs[storage_q].init()
+            qprgms.move_using_CNOTs(prgm, qs[0], qs[1])
 
             # Set the callback
-            prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
-            self.node.qmem.execute_program(prgm)
+            self.node.qmem.set_program_done_callback(self._return_ok, mhp_seq=mhp_seq, aid=aid)
+            self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q, storage_q])
+            # prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
+            # self.node.qmem.execute_program(prgm)
 
         # Otherwise proceed to return the okay
         else:
