@@ -99,8 +99,8 @@ class TestNodeCentricEGP(unittest.TestCase):
     def check_memories(self, aliceMemory, bobMemory, addresses):
         # Check the entangled pairs, ignore communication qubit
         for i in addresses:
-            qA = aliceMemory.peek(i)[0]
-            qB = bobMemory.peek(i)[0]
+            qA = aliceMemory.peek(i + 1)[0]
+            qB = bobMemory.peek(i + 1)[0]
             self.assertEqual(qA.qstate.dm.shape, (4, 4))
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
