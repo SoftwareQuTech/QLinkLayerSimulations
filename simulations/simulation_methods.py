@@ -173,11 +173,6 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=
     return egpA, egpB
 
 
-def _calc_prob_success_handler(midpoint, additional_data):
-    p_succ = midpoint._prob_of_success
-    additional_data["p_succ"] = p_succ
-
-
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, name=None, config=None, create_probA=1, create_probB=0, min_pairs=1, max_pairs=1,
                    tmax_pair=0,
@@ -255,12 +250,6 @@ def run_simulation(results_path, name=None, config=None, create_probA=1, create_
     collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, results_path, measure_directly,
                                        collect_queue_data=collect_queue_data)
 
-    # Schedule event handler to listen the probability of success being computed
-    if save_additional_data:
-        midpoint = mhp_conn.midPoint
-        p_succ_handler = ns.EventHandler(lambda event: _calc_prob_success_handler(midpoint, additional_data))
-        ns.Entity()._wait_once(p_succ_handler, entity=midpoint, event_type=midpoint._EVT_CALC_PROB)
-
     # Start the simulation
     network.start()
 
@@ -330,6 +319,14 @@ def run_simulation(results_path, name=None, config=None, create_probA=1, create_
                 # Collect simulation times
                 additional_data["total_real_time"] = sim_time()
                 additional_data["total_wall_time"] = time() - start_time
+
+                # Collect probability of success
+                midpoint = mhp_conn.midPoint
+                if midpoint._nr_of_meas > 0:
+                    additional_data["p_succ"] = midpoint._nr_of_succ / midpoint._nr_of_meas
+                else:
+                    additional_data["p_succ"] = None
+                p_succ = additional_data["p_succ"]
                 with open(results_path + "_additional_data.json", 'w') as json_file:
                     json.dump(additional_data, json_file, indent=4)
 
