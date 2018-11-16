@@ -326,7 +326,6 @@ def run_simulation(results_path, name=None, config=None, create_probA=1, create_
                     additional_data["p_succ"] = midpoint._nr_of_succ / midpoint._nr_of_meas
                 else:
                     additional_data["p_succ"] = None
-                p_succ = additional_data["p_succ"]
                 with open(results_path + "_additional_data.json", 'w') as json_file:
                     json.dump(additional_data, json_file, indent=4)
 

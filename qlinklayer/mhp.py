@@ -533,29 +533,30 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
         # Don't bother swapping because neither party requested entanglement
         if num_production_requests == 0:
-            return
+            pass
 
         # Error if we only received on qubit during this cycle
         elif num_production_requests != 2:
             for _, qubit in self.qubits.items():
                 if qubit:
                     self._drop_qubit(qubit)
-            raise EasySquidException("Missing qubit from one node!")
+            dataA, dataB = self._get_error_data(self.ERR_NO_CLASSICAL_OTHER)
+            self._send_to_node(self.nodeA, dataA)
+            self._send_to_node(self.nodeB, dataB)
+            logger.warning("Midpoint only received entanglement generation data from one node")
 
-        for (id, q) in self.qubits.items():
-            if q is None:
-                q = create_qubits(1)[0]
-                q.is_number_state = True
-                self.qubits[id] = q
+        else:
+            for (id, q) in self.qubits.items():
+                if q is None:
+                    q = create_qubits(1)[0]
+                    q.is_number_state = True
+                    self.qubits[id] = q
 
-        outcome = self.midPoint.measure(self.qubits[self.idA], self.qubits[self.idB])
-        self.last_outcome = outcome
-        logger.debug("Scheduling entanglement event now.")
-        self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
+            outcome = self.midPoint.measure(self.qubits[self.idA], self.qubits[self.idB])
+            self.last_outcome = outcome
+            logger.debug("Scheduling entanglement event now.")
+            self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
-        # Check current classical messages
-        present = self._check_current_messages()
-        if present:
             self._send_notification_to_both(outcome)
 
         # Reset incoming data
