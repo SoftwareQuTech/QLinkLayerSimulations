@@ -175,6 +175,12 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
             all_gens[node_id] = []
             all_gens[node_id].append((node_id,) + gen_info + req_id + (mhp_seq,))
 
+    # For consistent output, create empty dict if no gens
+    if len(gens) == 0:
+        gens = {0: defaultdict(list), 1: defaultdict(list)}
+    if len(all_gens) == 0:
+        all_gens = {0: [], 1: []}
+
     return (requests, rejected_requests), (gens, all_gens), total_requested_pairs
 
 
@@ -197,6 +203,10 @@ def get_attempt_data(all_gens):
                 gen_attempts[nodeID][ent_id] = attempts
             else:
                 gen_attempts[nodeID] = {ent_id: attempts}
+
+    # For consistent output, create empty dict if no gens
+    if len(gen_attempts) == 0:
+        gen_attempts = {0: {}, 1: {}}
 
     return gen_attempts
 
@@ -910,14 +920,17 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         prnt.print("Number of attempts equal for the two nodes, for each generation: {}".format(are_equal))
         # TODO assuming that node attempts are equal for the two nodes
         nr_of_gens = len(list(all_gens.values())[0])
-        avg_attempt_per_gen = sum(gen_attemptsA.values()) / nr_of_gens
+        if nr_of_gens > 0:
+            avg_attempt_per_gen = sum(gen_attemptsA.values()) / nr_of_gens
+            prnt.print("Minimum number of attempts for a generation: {}".format(min(gen_attemptsA.values())))
+            prnt.print("Maximum number of attempts for a generation: {}".format(max(gen_attemptsA.values())))
+        else:
+            avg_attempt_per_gen = None
         prnt.print("Average number of attempts per successful generation: {}".format(avg_attempt_per_gen))
-        prnt.print("Minimum number of attempts for a generation: {}".format(min(gen_attemptsA.values())))
-        prnt.print("Maximum number of attempts for a generation: {}".format(max(gen_attemptsA.values())))
         prnt.print("")
 
-    prnt.print(
-        "Total number of generated pairs: {} of total requested {}".format(nr_of_gens, total_requested_pairs))
+        prnt.print(
+            "Total number of generated pairs: {} of total requested {}".format(nr_of_gens, total_requested_pairs))
     prnt.print(
         "Total number of entanglement attempts for successful generations: {}".format(sum(gen_attemptsA.values())))
 
@@ -946,10 +959,17 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         prnt.print("Number of attempted entanglement generations / Number of MHP cycles = {}".format(fractionA))
         prnt.print("")
         if gen_attempts:
+            if avg_attempt_per_gen is None:
+                avg_prob_per_attempt = None
+                avg_prob_per_MHP_cycle = None
+            else:
+                avg_prob_per_attempt = 1 / avg_attempt_per_gen
+                avg_prob_per_MHP_cycle = avg_prob_per_attempt * fractionA
+
             prnt.print(
-                "Average probability of generating entanglement per attempt: {}".format(1 / avg_attempt_per_gen))
+                "Average probability of generating entanglement per attempt: {}".format(avg_prob_per_attempt))
             prnt.print("Average probability of generating entanglement per MHP cycle: {}".format(
-                1 / avg_attempt_per_gen * fractionA))
+                avg_prob_per_MHP_cycle))
         try:
             prnt.print("Probability of midpoint declaring success: {}".format(additional_data["p_succ"]))
         except KeyError:

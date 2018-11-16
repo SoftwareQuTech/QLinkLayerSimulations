@@ -901,6 +901,10 @@ class NodeCentricEGP(EGP):
         :param evt: obj `~netsquid.pydynaa.Event`
             The event that triggered this handler
         """
+        # Check if this request has timed out in the mean time
+        if self.scheduler.curr_request is None:
+            return
+
         if self.scheduler.curr_request.measure_directly:
             logger.debug("Beginning measurement of qubit for measure directly")
             # Grab the current generation information
