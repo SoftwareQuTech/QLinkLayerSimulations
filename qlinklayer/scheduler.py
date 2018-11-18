@@ -33,8 +33,6 @@ class RequestScheduler(pydynaa.Entity):
         self.schedule_backlog = {}                  # Backlog of requests waiting to be scheduled
         self.curr_request = None                    # The current request being handled
         self.curr_gen = None                        # The current generation being handled
-        self.default_gen = self.get_default_gen()   # The default generation
-        self.outstanding_gens = []                  # List of outstanding generations
         self.outstanding_items = {}                 # List of outstanding requests
         self.timed_out_requests = []                # List of requests that have timed out
         self.prev_requests = []                     # Previous requests (for filtering delayed communications)
@@ -213,31 +211,17 @@ class RequestScheduler(pydynaa.Entity):
 
         if self.qmm.is_busy():
             logger.debug("QMM is currently busy")
-            next_gen = self.default_gen
 
         elif self.suspended():
             logger.debug("Generation is currently suspended")
-            next_gen = self.default_gen
 
         elif self.curr_gen:
             next_gen = self.curr_gen
             logger.debug("Scheduler has next gen {}".format(next_gen))
 
-        # If there are outstanding generations and we have memory, overwrite with a request
-        elif self.outstanding_gens:
+        else:
             next_gen = self.get_next_gen_template()
             logger.debug("Scheduler has next gen {}".format(next_gen))
-
-        # If there are outstanding requests then create the gen templates and try to get one
-        elif self.outstanding_items:
-            logger.debug("No available generations, processing outstanding items")
-            self._process_outstanding_items()
-            if self.outstanding_gens:
-                next_gen = self.get_next_gen_template()
-                logger.debug("Scheduler has next gen {}".format(next_gen))
-
-        else:
-            logger.debug("Scheduler has no items to process")
 
         # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
         if not self.handling_measure_directly() and next_gen[0]:
@@ -287,36 +271,37 @@ class RequestScheduler(pydynaa.Entity):
         :return: tuple
             Represents the information to be used for the next entanglement generation attempts
         """
-        logger.debug("Filling next available gen template")
+        # Check if we are already processing a generation request or if we have any requests to service
+        if not self.requests or not self.outstanding_items:
+            logger.debug("No available requests to process")
+            return self.get_default_gen()
 
-        # Obtain the next template
-        gen_template = self.outstanding_gens[0]
+        if self.curr_gen:
+            logger.debug("Currently processing generation")
+            return self.get_default_gen()
 
-        # Obtain the request to check for generation options
-        aid = gen_template[1]
-        request = self.get_request(aid)
+        aid, request = self._get_next_request()
+        if aid is None and request is None:
+            return self.get_default_gen()
 
         # Check if we have the resources to fulfill this generation
         if self._has_resources_for_gen(request):
+            logger.debug("Filling next available gen template")
+
             # Reserve resources in the quantum memory
             comm_q, storage_q = self.reserve_resources_for_gen(request)
             self.my_free_memory = self.qmm.get_free_mem_ad()
 
-            # Fill in the template
-            gen_template[2] = comm_q
-            gen_template[3] = storage_q
-
             # Convert to a tuple
-            next_gen = tuple(gen_template)
+            next_gen = (True, aid, comm_q, storage_q, None)
 
             logger.debug("Created gen request {}".format(next_gen))
-            self.outstanding_gens.pop(0)
             self.curr_gen = next_gen
+            self.curr_request = request
+            return next_gen
 
         else:
-            next_gen = self.get_default_gen()
-
-        return next_gen
+            return self.get_default_gen()
 
     def mark_gen_completed(self, aid):
         """
@@ -379,9 +364,6 @@ class RequestScheduler(pydynaa.Entity):
         :return: list of tuples
             The removed outstanding generations
         """
-        # Remove any outstanding generations
-        removed_gens = self._prune_request_generations(aid=aid)
-
         # Add the request to the previous request list, drop any that are too old
         self.prev_requests.append(aid)
         if len(self.prev_requests) > self.max_prev_requests:
@@ -390,14 +372,12 @@ class RequestScheduler(pydynaa.Entity):
         # Check if this is a request currently being processed
         if self.curr_aid() == aid:
             logger.debug("Cleared current gen")
-            removed_gens.append(self.curr_gen)
 
             # Vacate the reserved locations within the QMM
             self.qmm.vacate_qubit(self.curr_gen[2])
             self.qmm.vacate_qubit(self.curr_gen[3])
             self.curr_gen = None
 
-        logger.debug("Removed remaining generations for {}: {}".format(aid, removed_gens))
         request = self.requests.pop(aid, None)
 
         # Remove request info if available
@@ -417,8 +397,6 @@ class RequestScheduler(pydynaa.Entity):
             else:
                 # Remove queue item from pydynaa
                 queue_item.remove()
-
-        return removed_gens
 
     def _has_resources_for_gen(self, request):
         """
@@ -511,34 +489,6 @@ class RequestScheduler(pydynaa.Entity):
             return aid, self.requests[aid]
         return None, None
 
-    def _process_outstanding_items(self):
-        """
-        Makes decisions on which request to process next.  Currently sorts the requests by queue sequence number
-        and chooses the lowest to process first.
-        :return:
-        """
-        # Check if we are already processing a generation request or if we have any requests to service
-        if not self.requests:
-            logger.debug("No available requests to process")
-            return
-
-        if self.curr_gen:
-            logger.debug("Currently processing generation")
-            return
-
-        next_aid, next_request = self._get_next_request()
-        if next_aid is None and next_request is None:
-            return
-
-        logger.debug("Creating gen templates for request {}".format(vars(next_request)))
-
-        # Create templates for all generations part of this request
-        for i in range(next_request.num_pairs):
-            gen_template = [True, next_aid, None, None, None]
-            self.outstanding_gens.append(gen_template)
-
-        self.curr_request = next_request
-
     def _handle_item_timeout(self, evt):
         """
         Timeout handler that is triggered when a queue item times out.  If the item has not been serviced yet
@@ -561,19 +511,6 @@ class RequestScheduler(pydynaa.Entity):
             self._schedule_now(self._EVT_REQ_TIMEOUT)
         self.outstanding_items.pop(key, None)
         self.schedule_backlog.pop(key, None)
-
-    def _prune_request_generations(self, aid):
-        """
-        Filters the oustanding generations list of any generation requests corresponding to the provided absolute queue
-        id.  To be used when clearing a request
-        :param aid: tuple of (int, int)
-            Absolute queue ID of the request we want to filter generations for
-        """
-        logger.debug("Pruning remaining generations for aid {}".format(aid))
-        removed = list(filter(lambda gen: gen[1] == aid, self.outstanding_gens))
-        self.outstanding_gens = list(filter(lambda gen: gen[1] != aid, self.outstanding_gens))
-        logger.debug("Pruned generations {}".format(removed))
-        return removed
 
     def _reset_outstanding_req_data(self):
         """
