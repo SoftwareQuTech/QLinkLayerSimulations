@@ -36,9 +36,10 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
     Stub for a scheduler to decide how we assign and consume elements of the queue.
     """
 
-    def __init__(self, distQueue, qmm):
+    def __init__(self, distQueue, qmm, feu=None):
         # Distributed Queue to schedule from
         self.distQueue = distQueue
+        self.feu = feu
 
         # Queue service timeout handler
         self._EVT_REQ_TIMEOUT = pydynaa.EventType("REQ TIMEOUT", "Triggers when request was not completed in time")
@@ -101,6 +102,9 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             self.mhp_cycle_number = mhp_cycle_number
         if mhp_cycle_offset is not None:
             self.mhp_cycle_offset = mhp_cycle_offset
+
+    def add_feu(self, feu):
+        self.feu = feu
 
     def inc_cycle(self):
         """
@@ -328,7 +332,6 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         :return: tuple
             Represents the information to be used for the next entanglement generation attempts
         """
-
         if self.curr_gen:
             logger.debug("Currently processing generation")
             return self.get_default_gen()
