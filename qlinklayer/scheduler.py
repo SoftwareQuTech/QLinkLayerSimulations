@@ -334,7 +334,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         """
         if self.curr_gen:
             logger.debug("Currently processing generation")
-            return self.get_default_gen()
+            return self.curr_gen
 
         aid, request = self._get_next_request()
         if aid is None and request is None:

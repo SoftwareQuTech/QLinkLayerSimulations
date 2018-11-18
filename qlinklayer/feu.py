@@ -126,6 +126,15 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         self.estimated_fidelity = self._estimate_fidelity()
         return self.estimated_fidelity
 
+    def estimate_fidelity(self):
+        """
+        Updates the internally recorded estimate and returns
+        :return: float
+            The estimated fidelity
+        """
+        self.estimated_fidelity = self._estimate_fidelity()
+        return self.estimated_fidelity
+
     def _estimate_fidelity(self):
         """
         Calculates the fidelity by extracting parameters from the mhp components, calculating an estimated state of
