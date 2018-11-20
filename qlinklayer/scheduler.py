@@ -349,6 +349,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             self.my_free_memory = self.qmm.get_free_mem_ad()
 
             # Convert to a tuple
+            params = ()
             next_gen = (True, aid, comm_q, storage_q, None)
 
             logger.debug("Created gen request {}".format(next_gen))
