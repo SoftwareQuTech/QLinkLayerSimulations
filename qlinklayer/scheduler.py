@@ -544,6 +544,20 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         else:
             return None, None
 
+    def _check_request(self, request):
+        """
+        Checks if a given request can be serviced at this time
+        :param request: obj `~qlinklayer.egp.EGPRequest`
+            The request to check
+        :return: bool
+            Whether the request can be serviced or not
+        """
+        if self.feu:
+            if request.min_fidelity > self.feu.estimated_fidelity:
+                return False
+
+        return True
+
     def _handle_item_timeout(self, queue_item):
         """
         Timeout handler that is triggered when a queue item times out.  If the item has not been serviced yet
