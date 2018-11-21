@@ -1053,6 +1053,323 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpB, evtType=egpB._EVT_ENT_COMPLETED, ds=bob_ent_tester)
         pm.addEvent(source=egpB, evtType=egpB._EVT_REQ_COMPLETED, ds=bob_req_tester)
 
+    def test_one_node_expires(self):
+        alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
+
+        # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
+        def faulty_send(node, data, conn):
+            logger.debug("Faulty send, MHP Seq {}".format(conn.mhp_seq))
+            if node.nodeID == alice.nodeID:
+                if not conn.mhp_seq == 1:
+                    logger.debug("Sending to {}".format(node.nodeID))
+                    conn.channel_M_to_A.send(data)
+
+            elif node.nodeID == bob.nodeID:
+                logger.debug("Sending to {}".format(node.nodeID))
+                conn.channel_M_to_B.send(data)
+
+        egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
+
+        alice_pairs = 4
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        purpose_id=1, priority=10)
+
+        bob_pairs = 4
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=1000,
+                                                                      purpose_id=1, priority=10)
+
+        alice_create_id, create_time = egpA.create(alice_request)
+        egpB.create(bob_request)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(20)
+
+        # Check that we were able to get the first generation of alice's request completed
+        self.assertEqual(self.alice_results[0], self.bob_results[0])
+
+        # Check that alice only has an entanglement identifier for one of the pairs in her request
+        alice_oks = list(filter(lambda info: len(info) == 7 and info[2][:2] == (alice.nodeID, bob.nodeID),
+                                self.alice_results))
+        self.assertEqual(len(alice_oks), 1)
+        [ok_message] = alice_oks
+        _, create_id, ent_id, logical_id, _, _, _ = ok_message
+        self.assertEqual(create_id, alice_create_id)
+        expected_mhp = 0
+
+        # We ignore the logical id that the qubit was stored in
+        self.assertEqual(ent_id, (alice.nodeID, bob.nodeID, expected_mhp))
+
+        # Check that any additional entanglement identifiers bob's egp may have passed up were expired
+        # Get the issued ok's containing entanglement identifiers corresponding to alice's create
+        bob_oks = list(filter(lambda info: len(info) == 7 and info[2][:2] == (alice.nodeID, bob.nodeID),
+                              self.bob_results))
+
+        # Get the expiration message we received from alice
+        expiry_messages = list(filter(lambda info: len(info) == 2 and info[0] == egpB.ERR_EXPIRE, self.bob_results))
+
+        self.assertEqual(len(expiry_messages), 1)
+        [expiry_message] = expiry_messages
+
+        invalid_oks = set(bob_oks) - set(alice_oks)
+        uncovered_ids = [ok_message[2] for ok_message in invalid_oks]
+        seq_start, seq_end = expiry_message[1]
+        expired_seq_range = list(range(seq_start, seq_end))
+
+        # Verify that all entanglement identifiers bob has that alice does not have are covered within the expiry
+        for ent_id in uncovered_ids:
+            self.assertIn(ent_id[2], expired_seq_range)
+
+        # Check that we were able to resynchronize for bob's request
+        # Get the gen ok's corresponding to bob's request after the error
+        alice_gens_post_error = list(filter(lambda info: len(info) == 7 and info[2][:2] == (bob.nodeID, alice.nodeID),
+                                            self.alice_results))
+        bob_gens_post_error = list(filter(lambda info: len(info) == 7 and info[2][:2] == (bob.nodeID, alice.nodeID),
+                                          self.bob_results))
+
+        # Check that we were able to complete the request
+        self.assertEqual(len(alice_gens_post_error), bob_pairs)
+        self.assertEqual(len(alice_gens_post_error), len(bob_gens_post_error))
+
+        # Check that the sequence numbers match
+        for alice_gen, bob_gen in zip(alice_gens_post_error, bob_gens_post_error):
+            self.assertEqual(alice_gen[2][2], bob_gen[2][2])
+            qA = alice.qmem.peek(alice_gen[3])[0]
+            qB = bob.qmem.peek(bob_gen[3])[0]
+            self.assertEqual(qA.qstate.dm.shape, (4, 4))
+            self.assertTrue(qA.qstate.compare(qB.qstate))
+            self.assertIn(qB, qA.qstate._qubits)
+            self.assertIn(qA, qB.qstate._qubits)
+
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
+    def test_both_nodes_expire(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+
+        # Force the connection to "accidentally" increment MHP seq too much
+        self.inc_sequence = [2, 3, 4, 5, 6]
+
+        def bad_inc():
+            return self.inc_sequence.pop(0)
+
+        # Set up EGP
+        egpA, egpB = self.create_egps(alice, bob, connected=True, accept_all=True)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
+
+        egpA.mhp.conn._get_next_mhp_seq = bad_inc
+        alice_pairs = 3
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        purpose_id=1, priority=10)
+
+        egpA.create(cqc_request=alice_request)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+        sim_run(40)
+
+        # Verify that when both detect MHP Sequence number skip then results are the same
+        self.assertEqual(len(self.alice_results), 2)
+        self.assertEqual(self.alice_results, self.bob_results)
+        self.assertEqual(self.alice_results[0][2][:3], (alice.nodeID, bob.nodeID, 0))
+
+        # Verify that first create was successful
+        idA = self.alice_results[0][3]
+        idB = self.bob_results[0][3]
+        qA = alice.qmem.peek(idA)[0]
+        qB = bob.qmem.peek(idB)[0]
+        self.assertEqual(qA.qstate.dm.shape, (4, 4))
+        self.assertTrue(qA.qstate.compare(qB.qstate))
+        self.assertIn(qB, qA.qstate._qubits)
+        self.assertIn(qA, qB.qstate._qubits)
+
+        # Verify we have ERR_EXPIRE messages for individual generation requests
+        expiry_message = self.alice_results[1]
+        error_code, (seq_start, seq_end) = expiry_message
+        expired_seq_range = list(range(seq_start, seq_end))
+        self.assertEqual(error_code, egpA.ERR_EXPIRE)
+        expected_ids = [(alice.nodeID, bob.nodeID, 1), (alice.nodeID, bob.nodeID, 2)]
+        self.assertEqual(len(expected_ids), seq_end - seq_start)
+        for expired_id in expected_ids:
+            self.assertIn(expired_id[2], expired_seq_range)
+
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
+    def test_creation_failure(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
+
+        # EGP Request that requests entanglement with self
+        node_self_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=5,
+                                                                            min_fidelity=0.5, max_time=10, purpose_id=1,
+                                                                            priority=10)
+
+        # EGP Request that requests entanglement with unknown node
+        unknown_id = 100
+        node_unknown_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=unknown_id, num_pairs=5,
+                                                                               min_fidelity=0.5, max_time=10,
+                                                                               purpose_id=1, priority=10)
+
+        # EGP Request that requets more fidelity than we
+        unsuppfid_requet = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                           min_fidelity=1, max_time=10, purpose_id=1,
+                                                                           priority=10)
+
+        # max_time that is too short for us to fulfill
+        unsupptime_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                             min_fidelity=0.5, max_time=1e-9,
+                                                                             purpose_id=1, priority=10)
+
+        egpA.create(cqc_request=node_self_request)
+        egpA.create(cqc_request=node_unknown_request)
+        egpA.create(cqc_request=unsuppfid_requet)
+        egpA.create(cqc_request=unsupptime_request)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+        sim_run(0.01)
+
+        expected_results = [(NodeCentricEGP.ERR_CREATE, 0),
+                            (NodeCentricEGP.ERR_CREATE, 0),
+                            (NodeCentricEGP.ERR_UNSUPP, 0),
+                            (NodeCentricEGP.ERR_UNSUPP, 0)]
+
+        self.assertEqual(self.alice_results, expected_results)
+
+        # Verify that events were tracked
+        self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
+        self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
+    def test_queue_rules(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=False)
+
+        alice_purpose_id = 1
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                        min_fidelity=0.5, max_time=10000,
+                                                                        purpose_id=alice_purpose_id, priority=10)
+
+        bob_purpose_id = 2
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=1,
+                                                                      min_fidelity=0.5, max_time=20000,
+                                                                      purpose_id=bob_purpose_id, priority=2)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        # Verify neither alice nor bob can add requests
+        expected_id, _ = egpA.create(alice_request)
+        sim_run(1)
+        alice_expected = [(egpA.dqp.DQ_REJECT, expected_id)]
+        self.assertEqual(self.alice_results, alice_expected)
+
+        expected_id, _ = egpB.create(bob_request)
+        sim_run(2)
+        bob_expected = [(egpB.dqp.DQ_REJECT, expected_id)]
+        self.assertEqual(self.bob_results, bob_expected)
+
+        # Verify alice can submit when bob accepts
+        egpB.add_queue_rule(alice, alice_purpose_id)
+        expected_id, _ = egpA.create(alice_request)
+        sim_run(5)
+        self.assertEqual(len(self.alice_results), 2)
+        self.assertEqual(len(self.alice_results), len(self.bob_results))
+        _, create_id, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        _, _, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(create_id, expected_id)
+        self.assertEqual(alice_ent_id, bob_ent_id)
+
+        # Verify is still unable
+        expected_id, _ = egpB.create(bob_request)
+        sim_run(7)
+        self.assertEqual(len(self.bob_results), 3)
+        self.assertEqual(self.bob_results[-1], (egpB.dqp.DQ_REJECT, expected_id))
+
+        # Add a rule to alice for bob
+        egpA.add_queue_rule(bob, bob_purpose_id)
+        expected_id, _ = egpB.create(bob_request)
+        sim_run(12)
+        self.assertEqual(len(self.alice_results), 3)
+        self.assertEqual(len(self.bob_results), 4)
+        _, _, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        _, create_id, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(create_id, expected_id)
+        self.assertEqual(alice_ent_id, bob_ent_id)
+
+        # Remove a rule from alice
+        egpA.remove_queue_rule(bob, bob_purpose_id)
+        expected_id, _ = egpB.create(bob_request)
+        sim_run(13)
+        self.assertEqual(len(self.bob_results), 5)
+        self.assertEqual(self.bob_results[-1], (egpB.dqp.DQ_REJECT, expected_id))
+
+        # Verify alice can submit bob accepts
+        expected_id, _ = egpA.create(alice_request)
+        sim_run(18)
+        self.assertEqual(len(self.alice_results), 4)
+        self.assertEqual(len(self.bob_results), 6)
+        _, create_id, alice_ent_id, _, _, _, _ = self.alice_results[-1]
+        _, _, bob_ent_id, _, _, _, _ = self.bob_results[-1]
+        self.assertEqual(create_id, expected_id)
+        self.assertEqual(alice_ent_id, bob_ent_id)
+
+        # Remove alice's rule from bob
+        egpB.remove_queue_rule(alice, alice_purpose_id)
+        expected_id, _ = egpA.create(alice_request)
+        sim_run(23)
+        self.assertEqual(len(self.alice_results), 5)
+        self.assertEqual(self.alice_results[-1], (egpA.dqp.DQ_REJECT, expected_id))
+
+    def test_events(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+
+        pm = PM_Controller()
+        alice_ent_tester = PM_Test_Ent(name="AliceEntTester")
+        bob_ent_tester = PM_Test_Ent(name="BobEntTester")
+        alice_req_tester = PM_Test_Counter(name="AliceReqCounter")
+        bob_req_tester = PM_Test_Counter(name="BobReqCounter")
+
+        # Set up EGP
+        egpA = NodeCentricEGP(node=alice, err_callback=self.alice_callback, ok_callback=alice_ent_tester.store_data,
+                              accept_all_requests=True)
+        egpB = NodeCentricEGP(node=bob, err_callback=self.bob_callback, ok_callback=bob_ent_tester.store_data,
+                              accept_all_requests=True)
+        egpA.connect_to_peer_protocol(egpB)
+
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ENT_COMPLETED, ds=alice_ent_tester)
+        pm.addEvent(source=egpA, evtType=egpA._EVT_REQ_COMPLETED, ds=alice_req_tester)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ENT_COMPLETED, ds=bob_ent_tester)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_REQ_COMPLETED, ds=bob_req_tester)
+
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
         alice_pairs = 1
