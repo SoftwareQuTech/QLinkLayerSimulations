@@ -1,12 +1,36 @@
 #
 # Scheduler
 #
+import abc
 from math import ceil
 from netsquid import pydynaa
 from easysquid.toolbox import logger
+from qlinklayer.distQueue import EGPDistributedQueue
 
 
-class RequestScheduler(pydynaa.Entity):
+class Scheduler(metaclass=abc.ABCMeta):
+    """
+    Stub for a scheduler to decide how we assign and consume requests.
+    """
+    @abc.abstractmethod
+    def add_request(self, request):
+        """
+        Adds new request
+        :param request: Any
+        :return: Any
+        """
+        pass
+
+    @abc.abstractmethod
+    def next(self):
+        """
+        Returns next request (if any) to be processed.
+        :return: Any
+        """
+        pass
+
+
+class RequestScheduler(Scheduler, pydynaa.Entity):
     """
     Stub for a scheduler to decide how we assign and consume elements of the queue.
     """
@@ -50,7 +74,11 @@ class RequestScheduler(pydynaa.Entity):
         self.local_trigger = 0.0                # Trigger for local MHP
         self.remote_trigger = 0.0               # Trigger for remote MHP
 
-    def configure_mhp_timings(self, cycle_period, full_cycle, local_trigger, remote_trigger):
+        if isinstance(distQueue, EGPDistributedQueue):
+            distQueue.set_timeout_callback(self._handle_item_timeout)
+
+    def configure_mhp_timings(self, cycle_period, full_cycle, local_trigger, remote_trigger, max_mhp_cycle_number=None,
+                              mhp_cycle_number=None, mhp_cycle_offset=None):
         """
         Provides scheduler relevant timing information for external MHP to help properly schedule entanglement
         generation
@@ -62,12 +90,24 @@ class RequestScheduler(pydynaa.Entity):
             The trigger offset for the local MHP
         :param remote_trigger: float
             The trigger offset for the remote MHP
+        :param max_mhp_cycle_number: int
+            MHP cycle number wrap around
+        :param mhp_cycle_number: int
+            Current MHP cycle number
+        :param mhp_cycle_offset: int
+            How many MHP cycles should be passed before a request is considered ready
         :return:
         """
         self.local_trigger = local_trigger
         self.remote_trigger = remote_trigger
         self.mhp_cycle_period = cycle_period
         self.mhp_full_cycle = full_cycle
+        if max_mhp_cycle_number is not None:
+            self.max_mhp_cycle_number = max_mhp_cycle_number
+        if mhp_cycle_number is not None:
+            self.mhp_cycle_number = mhp_cycle_number
+        if mhp_cycle_offset is not None:
+            self.mhp_cycle_offset = mhp_cycle_offset
 
     def inc_cycle(self):
         """
@@ -77,6 +117,7 @@ class RequestScheduler(pydynaa.Entity):
         # Calculate the new cycle number mod the max
         self.mhp_cycle_number = (self.mhp_cycle_number + 1) % self.max_mhp_cycle_number
         logger.debug("Incremented MHP cycle to {}".format(self.mhp_cycle_number))
+        self.distQueue.update_mhp_cycle_number(self.mhp_cycle_number, self.max_mhp_cycle_number)
 
         # Decrement any suspended cycles
         if self.num_suspended_cycles > 0:
@@ -140,7 +181,17 @@ class RequestScheduler(pydynaa.Entity):
         # Store the request into the queue
         qid = self.get_queue(request)
         request.add_sched_cycle(schedule_cycle)
+        timeout_cycle = self.get_timeout_cycle(request)
+        request.add_timeout_cycle(timeout_cycle)
         self.distQueue.add(request, qid)
+
+    def get_timeout_cycle(self, request):
+        """
+        Gets the MHP cycle where this request should timeout
+        :param request: :obj:`qlinklayer.egp.EGPRequest`
+        :return: int
+        """
+        s
 
     def suspend_generation(self, t):
         """
@@ -497,6 +548,15 @@ class RequestScheduler(pydynaa.Entity):
             The event that triggered this handler
         """
         queue_item = evt.source
+        self._handle_item_timeout(queue_item)
+
+    def _handle_item_timeout(self, queue_item):
+        """
+        Timeout handler that is triggered when a queue item times out.  If the item has not been serviced yet
+        then the stored request and it's information is removed.
+        :param queue_item: obj `~qlinklayer.localQueue._LocalQueueItem`
+            The local queue item
+        """
         request = queue_item.request
         logger.debug("Removing local queue item from pydynaa")
         key = (request.create_id, request.otherID)
@@ -511,6 +571,7 @@ class RequestScheduler(pydynaa.Entity):
             self._schedule_now(self._EVT_REQ_TIMEOUT)
         self.outstanding_items.pop(key, None)
         self.schedule_backlog.pop(key, None)
+        self.distQueue.remove_item(queue_item.qid, queue_item.seq)
 
     def _reset_outstanding_req_data(self):
         """
