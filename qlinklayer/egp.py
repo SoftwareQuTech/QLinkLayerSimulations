@@ -64,8 +64,8 @@ class EGPRequest:
             self.create_time = 0
             self.store = bool(cqc_epr_req_header.store)
             self.measure_directly = bool(cqc_epr_req_header.measure_directly)
-            self.sched_cycle = -1
-            self.timeout_cycle = -1
+            self.sched_cycle = 0
+            self.timeout_cycle = 0
             self.is_set = True
 
         else:
@@ -84,8 +84,8 @@ class EGPRequest:
             self.create_time = 0
             self.store = True
             self.measure_directly = False
-            self.sched_cycle = -1
-            self.timeout_cycle = -1
+            self.sched_cycle = 0
+            self.timeout_cycle = 0
             self.is_set = False
 
     def __copy__(self):
@@ -96,6 +96,8 @@ class EGPRequest:
         :return: obj `~qlinklayer.egp.EGPRequest`
             A copy of the EGPRequest object
         """
+        if not self.is_set:
+            raise ValueError("Cannot copy a request which is not set")
         c = EGPRequest()
         c.unpack(self.pack())
         return c
@@ -448,7 +450,7 @@ class NodeCentricEGP(EGP):
         remote_trigger = scheduling_offsets[remote_node.nodeID]
 
         # Call DQP's connect to peer
-        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn, local_trigger, remote_trigger)
+        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn)
 
     def _connect_egp(self, other_egp, egp_conn=None):
         """

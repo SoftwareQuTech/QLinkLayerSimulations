@@ -6,6 +6,7 @@ from math import ceil
 from netsquid import pydynaa
 from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
+from qlinklayer.toolbox import check_schedule_cycle_bounds
 
 
 class Scheduler(metaclass=abc.ABCMeta):
@@ -40,12 +41,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         self.distQueue = distQueue
 
         # Queue service timeout handler
-        self.service_timeout_handler = pydynaa.EventHandler(self._handle_item_timeout)
         self._EVT_REQ_TIMEOUT = pydynaa.EventType("REQ TIMEOUT", "Triggers when request was not completed in time")
-
-        # Queue item schedule handler
-        self.schedule_handler = pydynaa.EventHandler(self._schedule_request)
-        self._wait(self.schedule_handler, entity=self.distQueue, event_type=self.distQueue._EVT_SCHEDULE)
 
         # Quantum memory management
         self.qmm = qmm
@@ -53,11 +49,8 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         self.other_mem = (0, 0)
 
         # Generation tracking
-        self.requests = {}                          # Tracks requests that can be scheduled
-        self.schedule_backlog = {}                  # Backlog of requests waiting to be scheduled
         self.curr_request = None                    # The current request being handled
         self.curr_gen = None                        # The current generation being handled
-        self.outstanding_items = {}                 # List of outstanding requests
         self.timed_out_requests = []                # List of requests that have timed out
         self.prev_requests = []                     # Previous requests (for filtering delayed communications)
         self.max_prev_requests = 5                  # Number of previous requests to store
@@ -116,6 +109,8 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         """
         # Calculate the new cycle number mod the max
         self.mhp_cycle_number = (self.mhp_cycle_number + 1) % self.max_mhp_cycle_number
+        if self.mhp_cycle_number == 0:  # Skip MHP cycle number 0
+            self.mhp_cycle_number = 1
         logger.debug("Incremented MHP cycle to {}".format(self.mhp_cycle_number))
         self.distQueue.update_mhp_cycle_number(self.mhp_cycle_number, self.max_mhp_cycle_number)
 
@@ -123,28 +118,13 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         if self.num_suspended_cycles > 0:
             self.num_suspended_cycles -= 1
 
-        # Comb through the backlog for requests to schedule
-        backlog = list(self.schedule_backlog.items())
-        for key, request in backlog:
-            if self.check_schedule_cycle_bounds(request.sched_cycle):
-                aid = self.outstanding_items[key]
-                self.requests[aid] = request
-                self.schedule_backlog.pop(key)
-
-    def check_schedule_cycle_bounds(self, sched_cycle):
-        """
-        Checks whether the provided schedule cycle slot falls within our accepting window
-        :param sched_cycle: int
-            The mhp cycle number to check
-        """
-        right_boundary = self.mhp_cycle_number
-        left_boundary = (right_boundary - self.max_mhp_cycle_number // 2) % self.max_mhp_cycle_number
-
-        # Check if the provided time falls within our modular window
-        if left_boundary < right_boundary:
-            return left_boundary <= sched_cycle <= right_boundary
-        else:
-            return sched_cycle <= right_boundary or sched_cycle >= left_boundary
+        # # Comb through the backlog for requests to schedule
+        # backlog = list(self.schedule_backlog.items())
+        # for key, request in backlog:
+        #     if check_schedule_cycle_bounds(self.mhp_cycle_number, self.max_mhp_cycle_number, request.sched_cycle):
+        #         aid = self.outstanding_items[key]
+        #         self.requests[aid] = request
+        #         self.schedule_backlog.pop(key)
 
     def get_schedule_cycle(self, request):
         """
@@ -191,7 +171,17 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         :param request: :obj:`qlinklayer.egp.EGPRequest`
         :return: int
         """
-        s
+        max_time = request.max_time
+
+        if max_time == 0:
+            return 0
+
+        # Compute how many MHP cycles this corresponds to
+        if self.mhp_cycle_period == 0:
+            raise ValueError("MHP cycle period cannot be zero when using timeouts")
+        mhp_cycles = int(max_time / self.mhp_cycle_period) + 1
+
+        return self.mhp_cycle_number + mhp_cycles
 
     def suspend_generation(self, t):
         """
@@ -322,10 +312,6 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         :return: tuple
             Represents the information to be used for the next entanglement generation attempts
         """
-        # Check if we are already processing a generation request or if we have any requests to service
-        if not self.requests or not self.outstanding_items:
-            logger.debug("No available requests to process")
-            return self.get_default_gen()
 
         if self.curr_gen:
             logger.debug("Currently processing generation")
@@ -394,7 +380,9 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         :return: obj `~qlinklayer.egp.EGPRequest`
             The request corresponding to this absolute queue id
         """
-        return self.requests.get(aid)
+        queue_item = self.distQueue.local_peek(aid[0], aid[1])
+        if queue_item is not None:
+            return queue_item.request
 
     def previous_request(self, aid):
         """
@@ -429,16 +417,6 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             self.qmm.vacate_qubit(self.curr_gen[3])
             self.curr_gen = None
 
-        request = self.requests.pop(aid, None)
-
-        # Remove request info if available
-        if request:
-            key = (request.create_id, request.otherID)
-            self.outstanding_items.pop(key, None)
-
-            if self.curr_request == request:
-                self.curr_request = None
-
         # If this item timed out need to remove from the queue
         qid, qseq = aid
         if self.distQueue.contains_item(qid, qseq):
@@ -447,6 +425,9 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
                 logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
             else:
                 # Remove queue item from pydynaa
+                request = queue_item.request
+                if self.curr_request == request:
+                    self.curr_request = None
                 queue_item.remove()
 
     def _has_resources_for_gen(self, request):
@@ -534,21 +515,14 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             The absolute queue ID and request (if any)
         """
         # Simply process the requests in FIFO order (for now...)
-        sorted_request_aids = sorted(self.requests.keys(), key=lambda aid: aid[1])
-        if sorted_request_aids:
-            aid = sorted_request_aids[0]
-            return aid, self.requests[aid]
-        return None, None
-
-    def _handle_item_timeout(self, evt):
-        """
-        Timeout handler that is triggered when a queue item times out.  If the item has not been serviced yet
-        then the stored request and it's information is removed.
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The event that triggered this handler
-        """
-        queue_item = evt.source
-        self._handle_item_timeout(queue_item)
+        queue_item = self.distQueue.queueList[0].peek()
+        if queue_item is None:
+            return None, None
+        if queue_item.ready:
+            aid = queue_item.qid, queue_item.seq
+            return aid, queue_item.request
+        else:
+            return None, None
 
     def _handle_item_timeout(self, queue_item):
         """
@@ -558,20 +532,11 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             The local queue item
         """
         request = queue_item.request
+        self.timed_out_requests.append(request)
         logger.debug("Removing local queue item from pydynaa")
-        key = (request.create_id, request.otherID)
-        if key in self.outstanding_items:
-            logger.error("Failed to service request in time, clearing")
-            aid = self.outstanding_items[key]
-            if aid in self.requests.keys():
-                request = self.requests[aid]
-            self.timed_out_requests.append(request)
-            self.clear_request(aid=aid)
-            logger.debug("Scheduling request timeout event now.")
-            self._schedule_now(self._EVT_REQ_TIMEOUT)
-        self.outstanding_items.pop(key, None)
-        self.schedule_backlog.pop(key, None)
-        self.distQueue.remove_item(queue_item.qid, queue_item.seq)
+        aid = queue_item.qid, queue_item.seq
+        self.clear_request(aid)
+        self._schedule_now(self._EVT_REQ_TIMEOUT)
 
     def _reset_outstanding_req_data(self):
         """

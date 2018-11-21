@@ -140,7 +140,6 @@ class LocalQueue(Entity):
         Get item off the top of the queue, if it is ready to be scheduled. 
         If no item is available, return None
         """
-
         if len(self.queue) == 0:
             # No items on queue
             return None
@@ -172,17 +171,20 @@ class LocalQueue(Entity):
         inc_seq = (self.popSeq + 1) % self.maxSeq
         return inc_seq if not self.queue.keys() else min(self.queue.keys())
 
-    def peek(self):
+    def peek(self, seq=None):
         """
-        Get item off the top of the queue without removing it
+        Get item off the top of the queue without removing it or the item with sequence number seq
         :return:
         """
         if len(self.queue) == 0:
             # No items on queue
             return None
 
-        # Get item off queue
-        return self.queue[self.popSeq]
+        if seq is None:
+            # Get item off queue
+            return self.queue[self.popSeq]
+        else:
+            return self.queue.get(seq)
 
     # def get_min_schedule(self):
     #     """
@@ -379,6 +381,7 @@ class _LocalQueueItem:
     def __init__(self, request, seq):
         self.request = request
         self.seq = seq
+        self.ready = False
 
 
 class _EGPLocalQueueItem(_LocalQueueItem, Entity):
@@ -420,13 +423,13 @@ class _EGPLocalQueueItem(_LocalQueueItem, Entity):
             The max MHP cycle
         """
         logger.debug("Updating to MHP cycle {}".format(current_cycle))
-        if self.timeout_cycle >= 0:
+        if self.timeout_cycle > 0:
             if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
                 logger.debug("Item timed out, calling callback")
                 self.timeout_callback(self)
                 # self._schedule_now(selAf._EVT_TIMEOUT)
         if not self.ready:
-            if self.schedule_cycle >= 0:
+            if self.schedule_cycle > 0:
                 if check_schedule_cycle_bounds(current_cycle, max_cycle, self.schedule_cycle):
                     self.ready = True
                     logger.debug("Item is ready to be scheduled")
