@@ -169,13 +169,13 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         max_time = request.max_time
 
         if max_time == 0:
-            return 0
+            return 0, 0
 
         # Compute how many MHP cycles this corresponds to
         if self.mhp_cycle_period == 0:
             raise ValueError("MHP cycle period cannot be zero when using timeouts")
         mhp_cycles = (int(max_time / self.mhp_cycle_period) + 1)
-        max_mhp_cycles_wrap_arounds = mhp_cycles // self.mhp_cycle_period
+        max_mhp_cycles_wrap_arounds = mhp_cycles // self.max_mhp_cycle_number
         timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
         if timeout_mhp_cycle == 0:
             timeout_mhp_cycle = 1
@@ -535,7 +535,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         logger.debug("Removing local queue item from pydynaa")
         aid = queue_item.qid, queue_item.seq
         self.clear_request(aid)
-        self._schedule_after(1, self._EVT_REQ_TIMEOUT)
+        self._schedule_now(self._EVT_REQ_TIMEOUT)
 
     def _reset_outstanding_req_data(self):
         """

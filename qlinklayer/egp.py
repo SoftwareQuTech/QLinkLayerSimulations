@@ -36,7 +36,7 @@ class EGPRequest:
                      'uint:4=priority, ' \
                      'uint:1=store, ' \
                      'uint:1=measure_directly'
-    HDR_LENGTH = 7 * 4
+    HDR_LENGTH = 30
 
     def __init__(self, cqc_request=None):
         """
