@@ -617,6 +617,71 @@ class TestEGPDistributedQueue(unittest.TestCase):
         self.assertTrue(queue_item_bob.ready)
         self.assertTrue(callback_called[1])
 
+    def test_faulty_queue_ID(self):
+        def add_callback(result):
+            self.assertEqual(result[0], aliceDQ.DQ_REJECT)
+            callback_called[0] = True
+        sim_reset()
+
+        callback_called = [False]
+
+        alice = QuantumNode("alice", nodeID=0)
+        bob = QuantumNode("bob", nodeID=1)
+        conn = ClassicalFibreConnection(alice, bob, length=.0001)
+        aliceDQ = EGPDistributedQueue(alice, conn, accept_all=True, numQueues=1)
+        bobDQ = EGPDistributedQueue(bob, conn, accept_all=True, numQueues=1)
+        aliceDQ.add_callback = add_callback
+
+        nodes = [
+            (alice, [aliceDQ]),
+            (bob, [bobDQ]),
+        ]
+        conns = [
+            (conn, "dqp_conn", [aliceDQ, bobDQ])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+        request = EGPRequest()
+        request.is_set = True
+        aliceDQ.add(request, qid=1)
+        sim_run(10)
+        self.assertTrue(callback_called[0])
+
+    def test_multiple_queues(self):
+        sim_reset()
+        alice = QuantumNode("alice", nodeID=0)
+        bob = QuantumNode("bob", nodeID=1)
+        conn = ClassicalFibreConnection(alice, bob, length=.0001)
+        aliceDQ = EGPDistributedQueue(alice, conn, accept_all=True, numQueues=2)
+        bobDQ = EGPDistributedQueue(bob, conn, accept_all=True, numQueues=2)
+
+        nodes = [
+            (alice, [aliceDQ]),
+            (bob, [bobDQ]),
+        ]
+        conns = [
+            (conn, "dqp_conn", [aliceDQ, bobDQ])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+        alice_requests = [EGPRequest(), EGPRequest()]
+        bob_requests = [EGPRequest(), EGPRequest()]
+        for req in alice_requests + bob_requests:
+            req.is_set = True
+        aliceDQ.add(alice_requests[0], qid=0)
+        aliceDQ.add(alice_requests[1], qid=1)
+        bobDQ.add(bob_requests[0], qid=0)
+        bobDQ.add(bob_requests[1], qid=1)
+        sim_run(10)
+        self.assertEqual(len(aliceDQ.queueList[0].queue), 2)
+        self.assertEqual(len(aliceDQ.queueList[1].queue), 2)
+        self.assertEqual(len(bobDQ.queueList[0].queue), 2)
+        self.assertEqual(len(bobDQ.queueList[1].queue), 2)
+
 
 if __name__ == "__main__":
-    unittest.main()
+    # unittest.main()
+    t = TestEGPDistributedQueue()
+    t.test_update_mhp_cycle_number()

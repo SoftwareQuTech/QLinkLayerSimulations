@@ -261,6 +261,32 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         self.conn.put_from(self.myID, [[cmd, data]])
 
+    def send_ADD_ACK(self, cseq, qseq, qid=0):
+        """
+        Sends an add ack to the other side.
+        Also calls post processing function
+        :param cseq: int
+            Communication sequence number
+        :param qseq: int
+            Queue item sequence number
+        :param qid: int
+            The queue ID (not part of the message but used for post_processing
+        :return: None
+        """
+        self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
+        self._post_process_send_ADD_ACK(qid, qseq)
+
+    def _post_process_send_ADD_ACK(self, qid, qseq):
+        """
+        Entry point (to be overridden) for post processing queue items that were added by the remote node
+        :param qid: int
+            Queue ID
+        :param qseq: int
+            Queue item sequence number
+        :return: None
+        """
+        pass
+
     def send_error(self, error, error_data=0):
         """
         Send error message to the other side.
@@ -471,7 +497,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.queueList[qid].add_with_id(nodeID, qseq, request)
 
             # Send ack
-            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qid])
+            self.send_ADD_ACK(cseq, qseq, qid)
 
         self._post_process_cmd_ADD(qid, qseq)
 
@@ -595,13 +621,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         # Grab item info, ack, and schedule
         cseq, qid, qseq, request = self.addAckBacklog.popleft()
-        self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
+        self.send_ADD_ACK(cseq, qseq, qid)
         self._post_process_release(qid, qseq)
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
             cseq, qid, qseq, request = self.addAckBacklog.popleft()
-            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
+            self.send_ADD_ACK(cseq, qseq, qid)
             self._post_process_release(qid, qseq)
 
     def _post_process_release(self, qid, qseq):
@@ -614,6 +640,18 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         pass
 
+    def has_queue_id(self, qid):
+        """
+        Returns True if queue ID exists otherwise False
+        :param qid:
+        :return:
+        """
+        try:
+            self.queueList[qid]
+            return True
+        except IndexError:
+            return False
+
     # API to add to Queue
 
     def add(self, request, qid=0):
@@ -625,6 +663,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             if self.add_callback:
                 self.add_callback(result=(self.DQ_ERR, qid, request))
             raise LinkLayerException()
+
+        if not self.has_queue_id(qid):
+            if self.add_callback:
+                logger.warning("Tried to add to non-existing queue ID")
+                self.add_callback(result=(self.DQ_REJECT, qid, 0, request))
+                return
 
         if (self.acksWaiting < self.myWsize) and (len(self.backlogAdd) == 0):
             # Still in window, and no backlog left to process, go add
@@ -774,7 +818,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Check if we are waiting for any acks from the slave
         if not self.waitAddAcks:
-            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, queue_seq])
+            self.send_ADD_ACK(cseq, queue_seq, qid)
 
         # Otherwise wait on a response for our ADDs we have in flight before we ack
         else:
@@ -1024,3 +1068,24 @@ class EGPDistributedQueue(FilteredDistributedQueue):
         logger.debug("Updating to MHP cycle {}".format(current_cycle))
         for queue in self.queueList:
             queue.update_mhp_cycle_number(current_cycle, max_cycle)
+
+    def _post_process_send_ADD_ACK(self, qid, qseq):
+        """
+        Entry point (to be overridden) for post processing queue items that were added by the remote node
+        :param qid: int
+            (Local) Queue ID where the item will be added
+        :param qseq: int
+            Sequence number within local queue of item
+        """
+        self.queueList[qid].ack(qseq)
+
+    def _post_process_cmd_ADD_ACK(self, qid, qseq):
+        """
+        Entry point (to be overridden) for post processing queue items that were acknowledged by the remote node
+        :param qid: int
+            (Local) Queue ID where the item will be added
+        :param qseq: int
+            Sequence number within local queue of item
+        """
+        self.queueList[qid].ack(qseq)
+

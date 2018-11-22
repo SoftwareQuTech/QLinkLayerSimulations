@@ -214,7 +214,25 @@ class LocalQueue(Entity):
         """
 
         try:
-            self.queue[seq].ready = True
+            queue_item = self.queue[seq]
+        except KeyError:
+            logger.warning("Sequence number {} not found in local queue".format(seq))
+            return
+
+        if queue_item.acked:
+            queue_item.ready = True
+            logger.debug("Item with seq {} is ready to be scheduled".format(seq))
+        else:
+            logger.warning("Sequence number {} is not acked and cannot be made ready yet".format(seq))
+            return
+
+    def ack(self, seq):
+        """
+        Mark the queue item with queue sequence number seq as acknowledged by remote node
+        """
+        try:
+            self.queue[seq].acked = True
+            logger.debug("Item with seq {} is acknowledged".format(seq))
         except KeyError:
             logger.warning("Sequence number {} not found in local queue".format(seq))
             # Not in queue
@@ -379,9 +397,10 @@ class TimeoutLocalQueue(LocalQueue):
 
 class _LocalQueueItem:
     def __init__(self, request, seq):
-        self.request = request
-        self.seq = seq
-        self.ready = False
+        self.request = request  # The request
+        self.seq = seq          # The queue sequence number
+        self.ready = False      # Whether the request is ready to be scheduled
+        self.acked = False      # Whether the queue items has been acknowledged from remote node
 
 
 class _EGPLocalQueueItem(_LocalQueueItem, Entity):
@@ -402,15 +421,6 @@ class _EGPLocalQueueItem(_LocalQueueItem, Entity):
         self.schedule_cycle = self.request.sched_cycle
         self.timeout_cycle = self.request.timeout_cycle
 
-        # Flag whether this queue item is ready to be executed
-        if self.schedule_cycle == -1:
-            self.ready = True
-        else:
-            self.ready = False
-
-        # self._EVT_TIMEOUT = EventType("QUEUE ITEM TIMEOUT", "Triggers when a queue item is stale")
-        # self._EVT_SCHEDULE = EventType("QUEUE ITEM SCHEDULE", "Triggers when a queue item is ready to be scheduled")
-
         self.timeout_callback = timeout_callback
 
     def update_mhp_cycle_number(self, current_cycle, max_cycle):
@@ -426,15 +436,18 @@ class _EGPLocalQueueItem(_LocalQueueItem, Entity):
         if self.timeout_cycle > 0:
             if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
                 logger.debug("Item timed out, calling callback")
+                if not self.acked:
+                    logger.warning("Item timed out before being acknowledged.")
                 self.timeout_callback(self)
-                # self._schedule_now(selAf._EVT_TIMEOUT)
-        if not self.ready:
-            if self.schedule_cycle > 0:
-                if check_schedule_cycle_bounds(current_cycle, max_cycle, self.schedule_cycle):
+        if self.acked:
+            if not self.ready:
+                if self.schedule_cycle > 0:
+                    if check_schedule_cycle_bounds(current_cycle, max_cycle, self.schedule_cycle):
+                        self.ready = True
+                        logger.debug("Item is ready to be scheduled")
+                else:
                     self.ready = True
                     logger.debug("Item is ready to be scheduled")
-                    # self._schedule_now(self._EVT_SCHEDULE)
-
 
 class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
     def __init__(self, request, seq, lifetime=0.0):
