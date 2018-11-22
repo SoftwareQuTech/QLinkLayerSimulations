@@ -5,18 +5,24 @@
 
 from netsquid.simutil import sim_time
 from netsquid.pydynaa import Entity, EventType, EventHandler
-from qlinklayer.toolbox import LinkLayerException
+from qlinklayer.toolbox import LinkLayerException, check_schedule_cycle_bounds
 from easysquid.toolbox import logger
 
 
 class LocalQueue(Entity):
-    """
-    Local queue of items ordered by sequence number, incl some additional features
-    keeping 
 
-    """
+    def __init__(self, wsize=None, maxSeq=None, throw_events=False):
+        """
+        Local queue of items ordered by sequence number, incl some additional features
+        Items have to manually be set to ready
 
-    def __init__(self, wsize=None, maxSeq=None, scheduleAfter=0, throw_events=False):
+        :param wsize: int
+            Maximum number of items to hold in the queue at any one time
+        :param maxSeq: int
+            Largest possible sequence number before wraparound
+        :param throw_events: bool
+            Whether to throw events or not when adding and removing entries (for data collection)
+        """
 
         # Largest possible sequence number before wraparound
         if maxSeq is None:
@@ -34,15 +40,12 @@ class LocalQueue(Entity):
         # Next sequence number to assign
         self.nextSeq = 0
 
-        # Time to first allow execution after addition
-        self.scheduleAfter = scheduleAfter
-
         # Actual queue
         # TODO not a great data structure
         self.queue = {}
 
         # Current sequence number that can be consumed
-        self.popSeq = 0
+        self.popSeq = None
 
         self.throw_events = throw_events
         if self.throw_events:
@@ -97,18 +100,28 @@ class LocalQueue(Entity):
             The request item that we are storing within the queue
         :return: None
         """
-        # Compute the minimum time at which this request can be served
-        now = sim_time()
-        sa = now + self.scheduleAfter
 
-        # TODO Needs fixing
-        lq = _LocalQueueItem(request, seq, sa)
+        lq = self.get_new_queue_item(request, seq)
         self.queue[seq] = lq
+
+        if self.popSeq is None:
+            self.popSeq = seq
 
         if self.throw_events:
             logger.debug("Scheduling item added event now.")
             self._schedule_now(self._EVT_ITEM_ADDED)
             self._seqs_added.append(seq)
+
+    def get_new_queue_item(self, request, seq):
+        """
+        Returns a fresh queue item instance
+        :param request: :obj:`qlinklayer.EGP.EGPRequest`
+            The request
+        :param seq: int
+            The queue item sequence number
+        :return: :obj:`qlinklayer.localQueue._EGPLocalQueueItem`
+        """
+        return _LocalQueueItem(request, seq)
 
     def remove_item(self, seq):
         """
@@ -141,7 +154,6 @@ class LocalQueue(Entity):
         Get item off the top of the queue, if it is ready to be scheduled. 
         If no item is available, return None
         """
-
         if len(self.queue) == 0:
             # No items on queue
             return None
@@ -149,10 +161,7 @@ class LocalQueue(Entity):
         # Get item off queue
         q = self.queue[self.popSeq]
 
-        # Check if it's ready to be scheduled
-        now = sim_time()
-
-        if q.scheduleAt <= now:
+        if q.ready:
             # Item ready
 
             # Remove from queue
@@ -173,30 +182,24 @@ class LocalQueue(Entity):
 
     def _get_next_pop_seq(self):
         # Return the next item if available otherwise increment
-        inc_seq = (self.popSeq + 1) % self.maxSeq
-        return inc_seq if not self.queue.keys() else min(self.queue.keys())
+        if len(self.queue) == 0:
+            return None
+        return min(self.queue.keys())
 
-    def peek(self):
+    def peek(self, seq=None):
         """
-        Get item off the top of the queue without removing it
+        Get item off the top of the queue without removing it or the item with sequence number seq
         :return:
         """
         if len(self.queue) == 0:
             # No items on queue
             return None
 
-        # Get item off queue
-        return self.queue[self.popSeq]
-
-    def get_min_schedule(self):
-        """
-        Get the smallest time at which we may schedule the next item
-        """
-        if len(self.queue) == 0:
-            # No items on queue
-            return None
-
-        return self.queue[self.popSeq].scheduleAt
+        if seq is None:
+            # Get item off queue
+            return self.queue[self.popSeq]
+        else:
+            return self.queue.get(seq)
 
     def contains(self, seq):
         """
@@ -210,33 +213,93 @@ class LocalQueue(Entity):
         else:
             return False
 
-    def ready(self, seq, minTime):
+    def ready(self, seq):
         """
-        Mark the queue item with queue sequence number seq as ready, and mark it to be
-        scheduled at least minTime from now.
+        Mark the queue item with queue sequence number seq as ready
         """
-
         try:
-            self.queue[seq].ready = True
+            queue_item = self.queue[seq]
         except KeyError:
-            # Not in queue, TODO error handling
+            logger.warning("Sequence number {} not found in local queue".format(seq))
             return
 
-    def schedule_item(self, seq, scheduleAt):
+        if queue_item.acked:
+            queue_item.ready = True
+            logger.debug("Item with seq {} is ready to be scheduled".format(seq))
+        else:
+            logger.warning("Sequence number {} is not acked and cannot be made ready yet".format(seq))
+            return
+
+    def ack(self, seq):
         """
-        Schedules the service time of an item in the queue
+        Mark the queue item with queue sequence number seq as acknowledged by remote node
+        """
+        try:
+            self.queue[seq].acked = True
+            logger.debug("Item with seq {} is acknowledged".format(seq))
+        except KeyError:
+            logger.warning("Sequence number {} not found in local queue".format(seq))
+            # Not in queue
+            return
+
+
+class EGPLocalQueue(LocalQueue):
+
+    def __init__(self, qid=None, wsize=None, maxSeq=None, timeout_callback=None, throw_events=False):
+        """
+        Local queue used by EGP. Supports timeout per MHP cycle
+        :param qid: int
+            The queue ID
+        :param wsize: int
+            Maximum number of items to hold in the queue at any one time
+        :param maxSeq: int
+            Largest possible sequence number before wraparound
+        :param timeout_callback: func
+            Function to be called upon timeout, taking an _LocalQueueItem as argument
+        :param throw_events: bool
+            Whether to throw events or not when adding and removing entries (for data collection)
+        """
+        super(EGPLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, throw_events=throw_events)
+
+        self.qid = qid
+
+        if timeout_callback is None:
+            self.timeout_callback = lambda queue_item: queue_item
+        else:
+            self.timeout_callback = timeout_callback
+
+    def set_timeout_callback(self, timeout_callback):
+        """
+        Sets the timeout callback function for timeout of queue items
+        :param timeout_callback: func
+            Function to be called upon timeout, taking an _LocalQueueItem as argument
+        :return:
+        """
+        self.timeout_callback = timeout_callback
+
+    def update_mhp_cycle_number(self, current_cycle, max_cycle):
+        """
+        Goes over the elements in the queue and checks if they are ready to be scheduled or have timed out.
+        :return: None
+        """
+        logger.debug("Updating to MHP cycle {}".format(current_cycle))
+        for q_item in list(self.queue.values()):
+            q_item.update_mhp_cycle_number(current_cycle, max_cycle)
+
+    def get_new_queue_item(self, request, seq):
+        """
+        Returns a fresh queue item instance
+        :param request: :obj:`qlinklayer.EGP.EGPRequest`
+            The request
         :param seq: int
-            Sequence number of the item
-        :param scheduleAt: float
-            Time to set the item for servicing
+            The queue item sequence number
+        :return: :obj:`qlinklayer.localQueue._EGPLocalQueueItem`
         """
-        item = self.queue[seq]
-        item.scheduleAt = scheduleAt + sim_time()
-        item.schedule()
+        return _EGPLocalQueueItem(request, seq, self.qid, self.timeout_callback)
 
 
 class TimeoutLocalQueue(LocalQueue):
-    def __init__(self, qid=None, wsize=None, maxSeq=None, scheduleAfter=0.0, throw_events=False):
+    def __init__(self, qid=None, wsize=None, maxSeq=None, throw_events=False):
         """
         Implements a local queue that supports timing out queue items asynchronously
         :param wsize: int
@@ -246,43 +309,29 @@ class TimeoutLocalQueue(LocalQueue):
         :param scheduleAfter: float
             Default schedule delay for added queue items
         """
-        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, scheduleAfter=scheduleAfter,
-                                                throw_events=throw_events)
+        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, throw_events=throw_events)
         self._EVT_PROC_TIMEOUT = EventType("QUEUE ITEM REMOVED", "Triggers when an item has successfully been removed")
         self._EVT_SCHEDULE = EventType("LOCAL QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
         self.timed_out_items = []
         self.ready_items = []
         self.qid = qid
 
-    def add_with_id(self, originID, seq, request):
+    def get_new_queue_item(self, request, seq):
         """
-        Adds an item to the queue.
-        :param originID: int
-            ID of the source that instructed the addition of this queue item
+        Returns a fresh queue item instance
+        :param request: :obj:`qlinklayer.EGP.EGPRequest`
+            The request
         :param seq: int
-            Sequence location to add this item into the queue
-        :param request: obj any
-            The item to store in the queue
+            The queue item sequence number
+        :return: :obj:`qlinklayer.localQueue._EGPLocalQueueItem`
         """
-        # Compute the minimum time at which this request can be served
-        now = sim_time()
-        sa = now + self.scheduleAfter
-
         # Check if the item specifies a max queue time
         lifetime = getattr(request, 'max_time', 0.0)
 
         if lifetime == 0:
             lifetime = None
 
-        # Store the item and attach the timeout event
-        lq = _TimeoutLocalQueueItem(request, seq, sa, lifetime=lifetime)
-        self.queue[seq] = lq
-        lq.prepare()
-
-        if self.throw_events:
-            logger.debug("Scheduling item added event now.")
-            self._schedule_now(self._EVT_ITEM_ADDED)
-            self._seqs_added.append(seq)
+        return _TimeoutLocalQueueItem(request, seq, lifetime=lifetime)
 
     def add_scheduling_event(self, qseq):
         """
@@ -313,32 +362,72 @@ class TimeoutLocalQueue(LocalQueue):
 
 
 class _LocalQueueItem:
-    def __init__(self, request, seq, scheduleAt):
-        self.request = request
-        self.seq = seq
-        self.scheduleAt = scheduleAt
+    def __init__(self, request, seq):
+        self.request = request  # The request
+        self.seq = seq          # The queue sequence number
+        self.ready = False      # Whether the request is ready to be scheduled
+        self.acked = False      # Whether the queue items has been acknowledged from remote node
 
-        # Flag whether this queue item is ready to be executed
-        self.ready = False
 
-    def prepare(self):
-        pass
+class _EGPLocalQueueItem(_LocalQueueItem, Entity):
+    def __init__(self, request, seq, qid, timeout_callback):
+        """
+        Local queue item that supports time outs based on MHP cycles
+        :param request: :obj:`qlinklayer.egp.EGPRequest`
+            The EGP request
+        :param seq: int
+            The queue sequence number
+        :param timeout_callback: func
+            Function to be called upon timeout, taking an _LocalQueueItem as argument
+        """
+        super(_EGPLocalQueueItem, self).__init__(request, seq)
+
+        self.qid = qid
+
+        self.schedule_cycle = self.request.sched_cycle
+        self.timeout_cycle = self.request.timeout_cycle
+
+        self.timeout_callback = timeout_callback
+
+    def update_mhp_cycle_number(self, current_cycle, max_cycle):
+        """
+        Updates the current MHP cycle number. Updates ready accordingly and triggers a timeout.
+        :return: None
+        :param current_cycle: int
+            The current MHP cycle
+        :param max_cycle: int
+            The max MHP cycle
+        """
+        logger.debug("Updating to MHP cycle {}".format(current_cycle))
+        if self.timeout_cycle > 0:
+            if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
+                logger.debug("Item timed out, calling callback")
+                if not self.acked:
+                    logger.warning("Item timed out before being acknowledged.")
+                self.timeout_callback(self)
+        if self.acked:
+            if not self.ready:
+                if self.schedule_cycle > 0:
+                    if check_schedule_cycle_bounds(current_cycle, max_cycle, self.schedule_cycle):
+                        self.ready = True
+                        logger.debug("Item is ready to be scheduled")
+                else:
+                    self.ready = True
+                    logger.debug("Item is ready to be scheduled")
 
 
 class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
-    def __init__(self, request, seq, scheduleAt, lifetime=0.0):
+    def __init__(self, request, seq, lifetime=0.0):
         """
         Local queue item that supports time outs
         :param request: obj any
             The request information to store with this queue item
         :param seq: int
             The sequence number of this item in the containing queue
-        :param scheduleAt: float
-            Delay time before queue item is officially scheduled
         :param lifetime: float
             The maximum amount of time this item can sit in the queue before timing out
         """
-        super(_TimeoutLocalQueueItem, self).__init__(request=request, seq=seq, scheduleAt=scheduleAt)
+        super(_TimeoutLocalQueueItem, self).__init__(request=request, seq=seq)
         self.lifetime = lifetime
         self._EVT_TIMEOUT = EventType("QUEUE ITEM TIMEOUT", "Triggers when a queue item is stale")
         self._EVT_SCHEDULE = EventType("QUEUE ITEM SCHEDULE", "Triggers when a queue item is ready to be scheduled")

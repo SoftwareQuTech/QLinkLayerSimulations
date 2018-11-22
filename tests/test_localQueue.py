@@ -15,18 +15,16 @@ class TestLocalQueue(unittest.TestCase):
         standard_queue = LocalQueue()
         assert standard_queue.maxSeq == 2 ** 8
         assert standard_queue.wsize == standard_queue.maxSeq
-        assert standard_queue.scheduleAfter == 0
         assert standard_queue.nextSeq == 0
-        assert standard_queue.popSeq == 0
+        assert standard_queue.popSeq is None
         assert len(standard_queue.queue) == 0
 
         # Test setting
-        custom_queue = LocalQueue(wsize=1, maxSeq=2, scheduleAfter=3)
+        custom_queue = LocalQueue(wsize=1, maxSeq=2)
         assert custom_queue.wsize == 1
         assert custom_queue.maxSeq == 2
-        assert custom_queue.scheduleAfter == 3
         assert custom_queue.nextSeq == 0
-        assert custom_queue.popSeq == 0
+        assert custom_queue.popSeq is None
         assert len(custom_queue.queue) == 0
 
     def test_add(self):
@@ -44,7 +42,10 @@ class TestLocalQueue(unittest.TestCase):
         assert lq2.nextSeq == 0
 
         for j in range(100):
+            seq = lq2.nextSeq
             lq2.add(0, j + 1)
+            lq2.ack(seq)
+            lq2.ready(seq)
             foo = lq2.pop()
             assert lq2.nextSeq == (j + 1) % lq2.maxSeq
 
@@ -53,7 +54,10 @@ class TestLocalQueue(unittest.TestCase):
         assert lq3.nextSeq == 0
 
         for j in range(5):
+            seq = lq3.nextSeq
             lq3.add(0, j + 1)
+            lq3.ack(seq)
+            lq3.ready(seq)
             assert lq3.nextSeq == (j + 1) % lq3.maxSeq
 
         for j in range(5):

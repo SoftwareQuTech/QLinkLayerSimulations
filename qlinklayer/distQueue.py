@@ -11,7 +11,7 @@ from functools import partial
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
 from netsquid.pydynaa import EventType, EventHandler
-from qlinklayer.localQueue import TimeoutLocalQueue
+from qlinklayer.localQueue import TimeoutLocalQueue, EGPLocalQueue
 from qlinklayer.toolbox import LinkLayerException
 from easysquid.toolbox import logger
 
@@ -94,17 +94,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.myWsize = myWsize
         self.otherWsize = otherWsize
 
-        # Queue item management
-        self.timed_out_items = []
-        self._EVT_QUEUE_TIMEOUT = EventType("DIST QUEUE TIMEOUT", "Triggers when queue item times out")
-        self.ready_items = []
-
         # Initialize queues
-        self.queueList = []
-        self.numLocalQueues = numQueues
-        for j in range(numQueues):
-            q = TimeoutLocalQueue(qid=j, maxSeq=maxSeq, throw_events=throw_local_queue_events)
-            self.queueList.append(q)
+        self._init_queues(numQueues, maxSeq=maxSeq, throw_local_queue_events=throw_local_queue_events)
 
         # Backlog of requests
         self.backlogAdd = deque()
@@ -123,6 +114,24 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # expected sequence number
         self.expectedSeq = 0
         self.add_callback = None
+
+    def _init_queues(self, numQueues=1, maxSeq=2 ** 8, throw_local_queue_events=False):
+        """
+        Initializes the local queues
+        :param numQueues: int
+            Number of queues
+        :param maxSeq: int
+            Max number of elements in the queues
+        :param throw_local_queue_events: bool
+            Whether the local queues should throw events for data collection or not
+        :return:
+        """
+        # Initialize queues
+        self.queueList = []
+        self.numLocalQueues = numQueues
+        for j in range(numQueues):
+            q = TimeoutLocalQueue(qid=j, maxSeq=maxSeq, throw_events=throw_local_queue_events)
+            self.queueList.append(q)
 
     def _establish_master(self, master):
         """
@@ -151,7 +160,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :param scheduling_offsets: dict
             Contains (nodeID, offset) information
         """
-        if not conn:
+        if conn is None:
             # Create a common connection
             conn = ClassicalFibreConnection(self.node, other_distQueue.node, length=1e-5)
 
@@ -251,6 +260,32 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             Data to be sent
         """
         self.conn.put_from(self.myID, [[cmd, data]])
+
+    def send_ADD_ACK(self, cseq, qseq, qid=0):
+        """
+        Sends an add ack to the other side.
+        Also calls post processing function
+        :param cseq: int
+            Communication sequence number
+        :param qseq: int
+            Queue item sequence number
+        :param qid: int
+            The queue ID (not part of the message but used for post_processing
+        :return: None
+        """
+        self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
+        self._post_process_send_ADD_ACK(qid, qseq)
+
+    def _post_process_send_ADD_ACK(self, qid, qseq):
+        """
+        Entry point (to be overridden) for post processing queue items that were added by the remote node
+        :param qid: int
+            Queue ID
+        :param qseq: int
+            Queue item sequence number
+        :return: None
+        """
+        pass
 
     def send_error(self, error, error_data=0):
         """
@@ -462,7 +497,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.queueList[qid].add_with_id(nodeID, qseq, request)
 
             # Send ack
-            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qid])
+            self.send_ADD_ACK(cseq, qseq, qid)
 
         self._post_process_cmd_ADD(qid, qseq)
 
@@ -586,13 +621,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         # Grab item info, ack, and schedule
         cseq, qid, qseq, request = self.addAckBacklog.popleft()
-        self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
+        self.send_ADD_ACK(cseq, qseq, qid)
         self._post_process_release(qid, qseq)
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
             cseq, qid, qseq, request = self.addAckBacklog.popleft()
-            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
+            self.send_ADD_ACK(cseq, qseq, qid)
             self._post_process_release(qid, qseq)
 
     def _post_process_release(self, qid, qseq):
@@ -605,12 +640,30 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         pass
 
+    def has_queue_id(self, qid):
+        """
+        Returns True if queue ID exists otherwise False
+        :param qid:
+        :return:
+        """
+        try:
+            self.queueList[qid]
+            return True
+        except IndexError:
+            return False
+
     # API to add to Queue
 
     def add(self, request, qid=0):
         """
         Add a request to create entanglement.
         """
+        if not self.has_queue_id(qid):
+            if self.add_callback:
+                logger.warning("Tried to add to non-existing queue ID")
+                self.add_callback(result=(self.DQ_REJECT, qid, 0, request))
+                return
+
         if self.is_full(qid):
             logger.error("Specified local queue is full, cannot add request")
             if self.add_callback:
@@ -693,7 +746,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         return self.queueList[qid].pop()
 
-    def local_peek(self, qid=0):
+    def local_peek(self, qid=0, qseq=None):
         """
         Get top item from the queue locally without removing it from the queue.
         :param qid:
@@ -703,16 +756,16 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Not a valid Queue ID
             raise LinkLayerException("Invalid Queue ID")
 
-        return self.queueList[qid].peek()
+        return self.queueList[qid].peek(seq=qseq)
 
-    def get_min_schedule(self, qid=0):
-        """
-        Returns the min_schedule for the specified local queue
-        :param qid: int
-            Queue ID of the local queue to get the min_schedule for
-        :return:
-        """
-        return self.queueList[qid].get_min_schedule()
+    # def get_min_schedule(self, qid=0):
+    #     """
+    #     Returns the min_schedule for the specified local queue
+    #     :param qid: int
+    #         Queue ID of the local queue to get the min_schedule for
+    #     :return:
+    #     """
+    #     return self.queueList[qid].get_min_schedule()
 
     # Internal helpers
 
@@ -765,7 +818,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Check if we are waiting for any acks from the slave
         if not self.waitAddAcks:
-            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, queue_seq])
+            self.send_ADD_ACK(cseq, queue_seq, qid)
 
         # Otherwise wait on a response for our ADDs we have in flight before we ack
         else:
@@ -949,7 +1002,7 @@ class FilteredDistributedQueue(DistributedQueue):
 
 class EGPDistributedQueue(FilteredDistributedQueue):
     def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 32,
-                 throw_local_queue_events=False, accept_all=False):
+                 throw_local_queue_events=False, accept_all=False, timeout_callback=None):
         """
         A distributed queue that implements EGP specific features (MHP trigger offsets, MHP cycle time, etc.)
         :param node: obj `~easysquid.qnode.QuantumNode`
@@ -970,158 +1023,69 @@ class EGPDistributedQueue(FilteredDistributedQueue):
             Enables local queue events
         :param accept_all: bool
             Specifies acceptance of all add requests
+        :param timeout_callback: func
+            Function to be called upon timeout, taking an _LocalQueueItem as argument
         """
+        # Function to be called upon timeout, taking an _LocalQueueItem as argument
+        self.timeout_callback = timeout_callback
+
         super(EGPDistributedQueue, self).__init__(node=node, connection=connection, master=master, myWsize=myWsize,
                                                   otherWsize=otherWsize, numQueues=numQueues, maxSeq=maxSeq,
                                                   throw_local_queue_events=throw_local_queue_events,
                                                   accept_all=accept_all)
 
-        # Handler for scheduling the queue item
-        self.schedule_item_handler = EventHandler(self._schedule_item_handler)
-        self._EVT_SCHEDULE = EventType("DIST QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
-
-        # Attach handler to all local queues
-        for q in self.queueList:
-            self._wait(self.schedule_item_handler, entity=q, event_type=q._EVT_SCHEDULE)
-
-        # Timing information for synchronizing requests
-        self.local_trigger = 0.0
-        self.remote_trigger = 0.0
-
-    def connect_to_peer_protocol(self, other_distQueue, conn=None, local_trigger=0.0, remote_trigger=0.0):
+    def set_timeout_callback(self, timeout_callback):
         """
-        Connects to the remote distributed queue and sets the timing information
-        :param other_distQueue: obj `~qlinklayer.distQueue.EGPDistributedQueue`
-            The remote distributed queue to connect to
-        :param conn: obj `~easysquid.easyfibre.ClassicalFibreConnection`
-            The connection to use for communication
-        :param local_trigger: float
-            Local MHP trigger offset
-        :param remote_trigger: float
-            Remote MHP trigger offset
-        :param cycle_time: float
-            MHP cycle period
-        """
-        if not conn:
-            # Create a common connection
-            conn = ClassicalFibreConnection(self.node, other_distQueue.node, length=1e-5)
-
-        # Perform setup on both protocols
-        self.establish_connection(conn, local_trigger, remote_trigger)
-        other_distQueue.establish_connection(conn, remote_trigger, local_trigger)
-
-    def establish_connection(self, connection, local_trigger=0.0, remote_trigger=0.0):
-        """
-        Establishes a connection with the remote distributed queue
-        :param connection: obj `~easysquid.easyfibre.ClassicalFibreConnection`
-            The connection communication occurs over
-        :param local_trigger: float
-            Local MHP trigger offset
-        :param remote_trigger: float
-            Remote MHP trigger offset
-        :param cycle_time: float
-            MHP cycle period
+        Sets the timeout callback function for timeout of queue items
+        :param timeout_callback: func
+            Function to be called upon timeout, taking an _LocalQueueItem as argument
         :return:
         """
-        super(EGPDistributedQueue, self).establish_connection(connection)
-        # Set the triggers for scheduling delays
-        self.set_mhp_timings(local_trigger, remote_trigger)
+        for q in self.queueList:
+            q.timeout_callback = timeout_callback
 
-    def set_mhp_timings(self, local_trigger=0.0, remote_trigger=0.0):
+    def _init_queues(self, numQueues=1, maxSeq=2 ** 8, throw_local_queue_events=False):
         """
-        Sets MHP timing information for the distributed queue
-        :param local_trigger: float
-            Local MHP trigger offset
-        :param remote_trigger: float
-            Remote MHP trigger offset
-        :param cycle_time: float
-            MHP cycle period
+        Initializes the local queues
+        :param numQueues: int
+            Number of queues
+        :param throw_local_queue_events: bool
+            Whether the local queues should throw events for data collection or not
+        :return:
         """
-        if local_trigger:
-            self.local_trigger = local_trigger
-        if remote_trigger:
-            self.remote_trigger = remote_trigger
+        # Initialize queues
+        self.queueList = []
+        self.numLocalQueues = numQueues
+        for j in range(numQueues):
+            q = EGPLocalQueue(qid=j, maxSeq=maxSeq, throw_events=throw_local_queue_events,
+                              timeout_callback=self.timeout_callback)
+            self.queueList.append(q)
 
-    def ready_and_schedule(self, qid, qseq, schedule_after):
+    def update_mhp_cycle_number(self, current_cycle, max_cycle):
         """
-        Readies an item in the queue and schedules it for retrieval
-        :param qid: int
-            Queue ID that the item belongs to
-        :param qseq: int
-            Sequence identifier within the specified queue
-        :param schedule_after: float
-            Delay before the queue item is ready to be retrieved
+        Goes over the elements in all the queue and checks if they are ready to be scheduled or have timed out.
+        :return: None
         """
-        logger.debug("Distributed queue readying item ({}, {})".format(qid, qseq))
-        self.queueList[qid].ready(qseq, 0)
+        logger.debug("Updating to MHP cycle {}".format(current_cycle))
+        for queue in self.queueList:
+            queue.update_mhp_cycle_number(current_cycle, max_cycle)
 
-        logger.debug("{} Scheduling after {}".format(self.node.nodeID, schedule_after))
-        self.queueList[qid].schedule_item(qseq, schedule_after)
-
-    def _schedule_item_handler(self, evt):
+    def _post_process_send_ADD_ACK(self, qid, qseq):
         """
-        Handler for queue items that are ready to be scheduled.  Bubbles the event up to higher layers.
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The schedule event that triggered this handler
-        """
-        logger.debug("{} Schedule handler triggered in dist queue".format(self.node.nodeID))
-        logger.debug("Scheduling schedule event now.")
-        queue = evt.source
-        qid = queue.qid
-        queue_item = queue.ready_items.pop(0)
-        self.ready_items.append((qid, queue_item))
-        self._schedule_now(self._EVT_SCHEDULE)
-
-    def _post_process_release(self, qid, qseq):
-        """
-        Post processes the add ack releases, schedules the items
+        Entry point (to be overridden) for post processing queue items that were added by the remote node
         :param qid: int
             (Local) Queue ID where the item will be added
         :param qseq: int
             Sequence number within local queue of item
         """
-        conn_delay = self.conn.channel_from_node(self.node).delay_mean
-        scheduleAfter = max(0, conn_delay + self.remote_trigger - self.local_trigger)
-        self.ready_and_schedule(qid, qseq, scheduleAfter)
-
-    def _post_process_cmd_ADD(self, qid, qseq):
-        """
-        Post processes the ADD requests from remote node
-        :param qid: int
-            (Local) Queue ID where the item will be added
-        :param qseq: int
-            Sequence number within local queue of item
-        """
-        if self.master:
-            # Only respond and allow the slave to add this item if they have responded to the add requests that come in
-            # the queue before this item
-            if not self.waitAddAcks:
-                # Schedule the item to be ready
-                conn_delay = self.conn.channel_from_node(self.node).delay_mean
-                scheduleAfter = max(0, conn_delay + self.local_trigger - self.remote_trigger)
-                self.ready_and_schedule(qid, qseq, scheduleAfter)
-
-        else:
-            # Schedule the item to be ready
-            conn_delay = self.conn.channel_from_node(self.node).delay_mean
-            scheduleAfter = max(0, conn_delay + self.local_trigger - self.remote_trigger)
-            self.ready_and_schedule(qid, qseq, scheduleAfter)
-
-        # Add a timeout on the queue item
-        self.queueList[qid].add_scheduling_event(qseq)
+        self.queueList[qid].ack(qseq)
 
     def _post_process_cmd_ADD_ACK(self, qid, qseq):
         """
-        Post processes the ADD_ACK requests from the remote node
+        Entry point (to be overridden) for post processing queue items that were acknowledged by the remote node
         :param qid: int
             (Local) Queue ID where the item will be added
         :param qseq: int
             Sequence number within local queue of item
         """
-        # Schedule the item
-        conn_delay = self.conn.channel_from_node(self.node).delay_mean
-        scheduleAfter = max(0, -(conn_delay + self.remote_trigger - self.local_trigger))
-        self.ready_and_schedule(qid, qseq, scheduleAfter)
-
-        # Add a timeout on the queue item
-        self.queueList[qid].add_scheduling_event(qseq)
+        self.queueList[qid].ack(qseq)

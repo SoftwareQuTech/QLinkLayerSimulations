@@ -2,17 +2,22 @@
 
 import unittest
 import numpy as np
+import logging
 from random import randint
 from collections import defaultdict
 from qlinklayer.egp import EGPRequest
-from qlinklayer.distQueue import DistributedQueue, FilteredDistributedQueue
+from qlinklayer.distQueue import DistributedQueue, FilteredDistributedQueue, EGPDistributedQueue
 from qlinklayer.scenario import EGPSimulationScenario
 from qlinklayer.toolbox import LinkLayerException
+from qlinklayer.localQueue import EGPLocalQueue
 from easysquid.qnode import QuantumNode
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.easyprotocol import TimedProtocol
+from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
+
+logger.setLevel(logging.CRITICAL)
 
 
 class FastTestProtocol(TimedProtocol):
@@ -312,8 +317,18 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(1000)
 
         # Check the Queue contains ordered elements from Alice and Bob
-        qA = aliceDQ.queueList[0].queue
-        qB = bobDQ.queueList[0].queue
+        queueA = aliceDQ.queueList[0]
+        queueB = bobDQ.queueList[0]
+        qA = queueA.queue
+        qB = queueB.queue
+
+        # Make all the items ready
+        for seq in qA:
+            queueA.ack(seq)
+            queueA.ready(seq)
+        for seq in qB:
+            queueB.ack(seq)
+            queueB.ready(seq)
 
         # First they should have the same length
         self.assertGreater(len(qA), 0)
@@ -522,6 +537,157 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         reported_request = self.result[-1]
         self.assertEqual(vars(reported_request), vars(request))
         self.assertEqual(self.result[:3], (aliceDQ.DQ_REJECT, expected_qid, expected_qseq))
+
+
+class TestEGPDistributedQueue(unittest.TestCase):
+    def test_init(self):
+        def callback(queue_item):
+            pass
+        node = QuantumNode("test", nodeID=1)
+        dq = EGPDistributedQueue(node)
+        self.assertIs(dq.timeout_callback, None)
+
+        dq = EGPDistributedQueue(node, timeout_callback=callback)
+        self.assertIs(dq.timeout_callback, callback)
+
+    def test_set_timeout_callback(self):
+        def callback1(queue_item):
+            pass
+
+        def callback2(queue_item):
+            pass
+
+        node = QuantumNode("test", nodeID=1)
+        dq = EGPDistributedQueue(node, timeout_callback=callback1)
+        self.assertIs(dq.timeout_callback, callback1)
+
+        dq = EGPDistributedQueue(node, timeout_callback=callback2)
+        self.assertIs(dq.timeout_callback, callback2)
+
+    def test__init_queues(self):
+        node = QuantumNode("test", nodeID=1)
+        dq = EGPDistributedQueue(node)
+        dq._init_queues(2)
+        self.assertEqual(len(dq.queueList), 2)
+        self.assertEqual(dq.numLocalQueues, 2)
+        for q in dq.queueList:
+            self.assertIsInstance(q, EGPLocalQueue)
+
+    def test_update_mhp_cycle_number(self):
+        def callback_alice(queue_item):
+            callback_called[0] = True
+
+        def callback_bob(queue_item):
+            callback_called[1] = True
+
+        sim_reset()
+        callback_called = [False, False]
+        alice = QuantumNode("alice", nodeID=0)
+        bob = QuantumNode("bob", nodeID=1)
+        conn = ClassicalFibreConnection(alice, bob, length=.0001)
+        aliceDQ = EGPDistributedQueue(alice, conn, timeout_callback=callback_alice, accept_all=True)
+        bobDQ = EGPDistributedQueue(bob, conn, timeout_callback=callback_bob, accept_all=True)
+
+        nodes = [
+            (alice, [aliceDQ]),
+            (bob, [bobDQ]),
+        ]
+        conns = [
+            (conn, "dqp_conn", [aliceDQ, bobDQ])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+        request = EGPRequest()
+        request.add_sched_cycle(1)
+        request.add_timeout_cycle(2)
+        request.is_set = True
+        aliceDQ.add(request, 0)
+        sim_run(10)
+        queue_item_alice = aliceDQ.local_peek(0)
+        queue_item_bob = bobDQ.local_peek(0)
+        self.assertFalse(queue_item_alice.ready)
+
+        aliceDQ.update_mhp_cycle_number(1, 10)
+        self.assertTrue(queue_item_alice.ready)
+        self.assertFalse(queue_item_bob.ready)
+        self.assertFalse(callback_called[0])
+        self.assertFalse(callback_called[1])
+
+        aliceDQ.update_mhp_cycle_number(2, 10)
+        self.assertTrue(callback_called[0])
+        self.assertFalse(callback_called[1])
+
+        bobDQ.update_mhp_cycle_number(1, 10)
+        self.assertTrue(queue_item_bob.ready)
+        self.assertFalse(callback_called[1])
+
+        bobDQ.update_mhp_cycle_number(2, 10)
+        self.assertTrue(queue_item_bob.ready)
+        self.assertTrue(callback_called[1])
+
+    def test_faulty_queue_ID(self):
+        def add_callback(result):
+            self.assertEqual(result[0], aliceDQ.DQ_REJECT)
+            callback_called[0] = True
+        sim_reset()
+
+        callback_called = [False]
+
+        alice = QuantumNode("alice", nodeID=0)
+        bob = QuantumNode("bob", nodeID=1)
+        conn = ClassicalFibreConnection(alice, bob, length=.0001)
+        aliceDQ = EGPDistributedQueue(alice, conn, accept_all=True, numQueues=1)
+        bobDQ = EGPDistributedQueue(bob, conn, accept_all=True, numQueues=1)
+        aliceDQ.add_callback = add_callback
+
+        nodes = [
+            (alice, [aliceDQ]),
+            (bob, [bobDQ]),
+        ]
+        conns = [
+            (conn, "dqp_conn", [aliceDQ, bobDQ])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+        request = EGPRequest()
+        request.is_set = True
+        aliceDQ.add(request, qid=1)
+        sim_run(10)
+        self.assertTrue(callback_called[0])
+
+    def test_multiple_queues(self):
+        sim_reset()
+        alice = QuantumNode("alice", nodeID=0)
+        bob = QuantumNode("bob", nodeID=1)
+        conn = ClassicalFibreConnection(alice, bob, length=.0001)
+        aliceDQ = EGPDistributedQueue(alice, conn, accept_all=True, numQueues=2)
+        bobDQ = EGPDistributedQueue(bob, conn, accept_all=True, numQueues=2)
+
+        nodes = [
+            (alice, [aliceDQ]),
+            (bob, [bobDQ]),
+        ]
+        conns = [
+            (conn, "dqp_conn", [aliceDQ, bobDQ])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+        alice_requests = [EGPRequest(), EGPRequest()]
+        bob_requests = [EGPRequest(), EGPRequest()]
+        for req in alice_requests + bob_requests:
+            req.is_set = True
+        aliceDQ.add(alice_requests[0], qid=0)
+        aliceDQ.add(alice_requests[1], qid=1)
+        bobDQ.add(bob_requests[0], qid=0)
+        bobDQ.add(bob_requests[1], qid=1)
+        sim_run(10)
+        self.assertEqual(len(aliceDQ.queueList[0].queue), 2)
+        self.assertEqual(len(aliceDQ.queueList[1].queue), 2)
+        self.assertEqual(len(bobDQ.queueList[0].queue), 2)
+        self.assertEqual(len(bobDQ.queueList[1].queue), 2)
 
 
 if __name__ == "__main__":

@@ -127,7 +127,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
     def __init__(self, *args, **kwargs):
         self.node_requests = {}
         self.mhp_seq = 0
-        self.max_seq = 2**32 - 1
+        self.max_seq = 2**16 - 1
         super(MHPHeraldedConnection, self).__init__(*args, **kwargs)
 
     def _handle_cq(self, classical, qubit, sender):

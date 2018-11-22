@@ -29,12 +29,13 @@ class EGPRequest:
                      'float:32=min_fidelity, ' \
                      'float:32=max_time, ' \
                      'uint:16=create_id, ' \
+                     'uint:16=sched_cycle, ' \
+                     'uint:16=timeout_cycle, ' \
                      'uint:8=num_pairs, ' \
                      'uint:4=priority, ' \
-                     'uint:16=sched_cycle', \
                      'uint:1=store, ' \
                      'uint:1=measure_directly'
-    HDR_LENGTH = 26
+    HDR_LENGTH = 7 * 4
 
     def __init__(self, cqc_request=None):
         """
@@ -64,6 +65,7 @@ class EGPRequest:
             self.store = bool(cqc_epr_req_header.store)
             self.measure_directly = bool(cqc_epr_req_header.measure_directly)
             self.sched_cycle = 0
+            self.timeout_cycle = 0
             self.is_set = True
 
         else:
@@ -83,6 +85,7 @@ class EGPRequest:
             self.store = True
             self.measure_directly = False
             self.sched_cycle = 0
+            self.timeout_cycle = 0
             self.is_set = False
 
     def __copy__(self):
@@ -93,6 +96,8 @@ class EGPRequest:
         :return: obj `~qlinklayer.egp.EGPRequest`
             A copy of the EGPRequest object
         """
+        if not self.is_set:
+            raise ValueError("Cannot copy a request which is not set")
         c = EGPRequest()
         c.unpack(self.pack())
         return c
@@ -128,7 +133,8 @@ class EGPRequest:
                    "priority": self.priority,
                    "store": self.store,
                    "measure_directly": self.measure_directly,
-                   "sched_cycle": self.sched_cycle}
+                   "sched_cycle": self.sched_cycle,
+                   "timeout_cycle": self.timeout_cycle}
         request_Bitstring = bitstring.pack(self.package_format, **to_pack)
         requestH = request_Bitstring.tobytes()
 
@@ -153,16 +159,20 @@ class EGPRequest:
         self.min_fidelity = request_fields[4]
         self.max_time = request_fields[5]
         self.create_id = request_fields[6]
-        self.num_pairs = request_fields[7]
-        self.priority = request_fields[8]
-        self.sched_cycle = request_fields[9]
-        self.store = bool(request_fields[10])
-        self.measure_directly = bool(request_fields[11])
+        self.sched_cycle = request_fields[7]
+        self.timeout_cycle = request_fields[8]
+        self.num_pairs = request_fields[9]
+        self.priority = request_fields[10]
+        self.store = bool(request_fields[11])
+        self.measure_directly = bool(request_fields[12])
 
         self.is_set = True
 
     def add_sched_cycle(self, cycle):
         self.sched_cycle = cycle
+
+    def add_timeout_cycle(self, cycle):
+        self.timeout_cycle = cycle
 
 
 class EGP(EasyProtocol):
@@ -433,14 +443,8 @@ class NodeCentricEGP(EGP):
         Sets up the DQP between the nodes
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
-        # Get the MHP timing offsets
-        remote_node = self.mhp_service.get_node(nodeID=other_egp.node.nodeID)
-        scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, remote_node])
-        local_trigger = scheduling_offsets[self.node.nodeID]
-        remote_trigger = scheduling_offsets[remote_node.nodeID]
-
         # Call DQP's connect to peer
-        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn, local_trigger, remote_trigger)
+        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn)
 
     def _connect_egp(self, other_egp, egp_conn=None):
         """
