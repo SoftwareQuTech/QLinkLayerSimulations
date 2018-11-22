@@ -658,17 +658,17 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         Add a request to create entanglement.
         """
-        if self.is_full(qid):
-            logger.error("Specified local queue is full, cannot add request")
-            if self.add_callback:
-                self.add_callback(result=(self.DQ_ERR, qid, request))
-            raise LinkLayerException()
-
         if not self.has_queue_id(qid):
             if self.add_callback:
                 logger.warning("Tried to add to non-existing queue ID")
                 self.add_callback(result=(self.DQ_REJECT, qid, 0, request))
                 return
+
+        if self.is_full(qid):
+            logger.error("Specified local queue is full, cannot add request")
+            if self.add_callback:
+                self.add_callback(result=(self.DQ_ERR, qid, request))
+            raise LinkLayerException()
 
         if (self.acksWaiting < self.myWsize) and (len(self.backlogAdd) == 0):
             # Still in window, and no backlog left to process, go add
@@ -1044,7 +1044,7 @@ class EGPDistributedQueue(FilteredDistributedQueue):
         for q in self.queueList:
             q.timeout_callback = timeout_callback
 
-    def _init_queues(self, numQueues=1, maxSeq= 2 ** 8, throw_local_queue_events=False):
+    def _init_queues(self, numQueues=1, maxSeq=2 ** 8, throw_local_queue_events=False):
         """
         Initializes the local queues
         :param numQueues: int
@@ -1057,7 +1057,8 @@ class EGPDistributedQueue(FilteredDistributedQueue):
         self.queueList = []
         self.numLocalQueues = numQueues
         for j in range(numQueues):
-            q = EGPLocalQueue(qid=j, maxSeq=maxSeq, throw_events=throw_local_queue_events, timeout_callback=self.timeout_callback)
+            q = EGPLocalQueue(qid=j, maxSeq=maxSeq, throw_events=throw_local_queue_events,
+                              timeout_callback=self.timeout_callback)
             self.queueList.append(q)
 
     def update_mhp_cycle_number(self, current_cycle, max_cycle):
