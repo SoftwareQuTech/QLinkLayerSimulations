@@ -4,6 +4,7 @@
 import abc
 from math import ceil
 from netsquid import pydynaa
+from netsquid.simutil import sim_time
 from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
 
@@ -140,9 +141,9 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
 
         cycle_number = (self.mhp_cycle_number + cycle_delay) % self.max_mhp_cycle_number
         if cycle_number == 0:
-            return 1
-        else:
-            return cycle_number
+            cycle_number = 1
+
+        return cycle_number
 
     def add_request(self, request):
         """
@@ -174,7 +175,23 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         # Compute how many MHP cycles this corresponds to
         if self.mhp_cycle_period == 0:
             raise ValueError("MHP cycle period cannot be zero when using timeouts")
-        mhp_cycles = (int(max_time / self.mhp_cycle_period) + 1)
+
+        # Get current time
+        now = sim_time()
+
+        # Compute time since last MHP trigger
+        t_left = (now - self.local_trigger) % self.mhp_cycle_period
+
+        # Compute time until next MHP trigger
+        t_right = self.mhp_cycle_period - t_left
+
+        # Compute how many MHP from now that this request should time out
+        if max_time < t_right:
+            # This request will timeout before the next MHP cycle
+            mhp_cycles = 1
+        else:
+            mhp_cycles = int((max_time - t_right) / self.mhp_cycle_period) + 2
+
         max_mhp_cycles_wrap_arounds = mhp_cycles // self.max_mhp_cycle_number
         timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
         if timeout_mhp_cycle == 0:
