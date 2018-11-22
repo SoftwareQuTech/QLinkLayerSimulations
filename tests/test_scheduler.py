@@ -2,6 +2,7 @@ import unittest
 from easysquid.easynetwork import EasyNetwork
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
+from easysquid.easyprotocol import TimedProtocol
 from netsquid.simutil import sim_run, sim_reset
 from netsquid.pydynaa import EventHandler, Entity
 from qlinklayer.distQueue import EGPDistributedQueue
@@ -9,6 +10,15 @@ from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.egp import EGPRequest
 from qlinklayer.scenario import EGPSimulationScenario
+
+
+class IncreasMHPCycleProtocol(TimedProtocol):
+    def __init__(self, timeStep=1, t0=10, scheduler=None):
+        super().__init__(timeStep=timeStep, t0=t0)
+        self.scheduler = scheduler
+
+    def run_protocol(self):
+        self.scheduler.inc_cycle()
 
 
 class TestRequestScheduler(unittest.TestCase, Entity):
@@ -39,48 +49,47 @@ class TestRequestScheduler(unittest.TestCase, Entity):
         self.assertEqual(test_scheduler.my_free_memory, qmm.get_free_mem_ad())
         self.assertEqual(test_scheduler.other_mem, (0, 0))
 
-    # def test_timeout(self):
-    #     def timeout_handler(evt):
-    #         print("tmp handler")
-    #         timeout_handler_called[0] = True
-    #     sim_reset()
-    #
-    #     timeout_handler_called = [False]
-    #
-    #     memA = NVCommunicationDevice(name="AMem", num_positions=2)
-    #     memB = NVCommunicationDevice(name="BMem", num_positions=2)
-    #     nodeA = QuantumNode(name="TestA", nodeID=1, memDevice=memA)
-    #     nodeB = QuantumNode(name="TestB", nodeID=2, memDevice=memB)
-    #
-    #     dqpA = EGPDistributedQueue(node=nodeA, accept_all=True)
-    #     dqpB = EGPDistributedQueue(node=nodeB, accept_all=True)
-    #     dqpA.connect_to_peer_protocol(dqpB)
-    #     qmm = QuantumMemoryManagement(node=nodeA)
-    #     test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmm)
-    #     test_scheduler.configure_mhp_timings(1, 2, 0, 0)
-    #     request = EGPRequest()
-    #     request.max_time = 2
-    #     request.is_set = True
-    #
-    #     conn = dqpA.conn
-    #     network = EasyNetwork(name="DQPNetwork",
-    #                                nodes=[(nodeA, [dqpA]), (nodeB, [dqpB])],
-    #                                connections=[(conn, "dqp_conn", [dqpA, dqpB])])
-    #     network.start()
-    #     test_scheduler.add_request(request)
-    #
-    #     handler = EventHandler(timeout_handler)
-    #     self._wait(handler, entity=test_scheduler, event_type=test_scheduler._EVT_REQ_TIMEOUT)
-    #     sim_run(10)
-    #     test_scheduler.inc_cycle()
-    #     self.assertFalse(timeout_handler_called[0])
-    #
-    #     for _ in range(20):
-    #         sim_run(1)
-    #         test_scheduler.inc_cycle()
-    #
-    #     self.assertTrue(timeout_handler_called[0])
+    def test_timeout(self):
+        def timeout_handler(evt):
+            timeout_handler_called[0] = True
+        sim_reset()
 
+        timeout_handler_called = [False]
+
+        memA = NVCommunicationDevice(name="AMem", num_positions=2)
+        memB = NVCommunicationDevice(name="BMem", num_positions=2)
+        nodeA = QuantumNode(name="TestA", nodeID=1, memDevice=memA)
+        nodeB = QuantumNode(name="TestB", nodeID=2, memDevice=memB)
+
+        dqpA = EGPDistributedQueue(node=nodeA, accept_all=True)
+        dqpB = EGPDistributedQueue(node=nodeB, accept_all=True)
+        dqpA.connect_to_peer_protocol(dqpB)
+        qmm = QuantumMemoryManagement(node=nodeA)
+        test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmm)
+        test_scheduler.configure_mhp_timings(1, 2, 0, 0)
+        request = EGPRequest()
+        request.max_time = 2
+        request.is_set = True
+
+        increase_mhp_cycle_protocol = IncreasMHPCycleProtocol(timeStep=1, t0=10, scheduler=test_scheduler)
+        increase_mhp_cycle_protocol.start()
+
+        conn = dqpA.conn
+        network = EasyNetwork(name="DQPNetwork",
+                                   nodes=[(nodeA, [dqpA]), (nodeB, [dqpB])],
+                                   connections=[(conn, "dqp_conn", [dqpA, dqpB])])
+        network.start()
+        test_scheduler.add_request(request)
+
+        handler = EventHandler(timeout_handler)
+        self._wait(handler, entity=test_scheduler, event_type=test_scheduler._EVT_REQ_TIMEOUT)
+        sim_run(10)
+        test_scheduler.inc_cycle()
+        self.assertFalse(timeout_handler_called[0])
+
+        sim_run(20)
+
+        self.assertTrue(timeout_handler_called[0])
 
     def test_next_pop(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)

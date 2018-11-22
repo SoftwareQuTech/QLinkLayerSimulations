@@ -2,6 +2,7 @@
 
 import unittest
 import numpy as np
+import logging
 from random import randint
 from collections import defaultdict
 from qlinklayer.egp import EGPRequest
@@ -13,7 +14,10 @@ from easysquid.qnode import QuantumNode
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.easyprotocol import TimedProtocol
+from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
+
+logger.setLevel(logging.CRITICAL)
 
 
 class FastTestProtocol(TimedProtocol):
@@ -312,7 +316,6 @@ class TestDistributedQueue(unittest.TestCase):
 
         sim_run(1000)
 
-
         # Check the Queue contains ordered elements from Alice and Bob
         queueA = aliceDQ.queueList[0]
         queueB = bobDQ.queueList[0]
@@ -321,8 +324,10 @@ class TestDistributedQueue(unittest.TestCase):
 
         # Make all the items ready
         for seq in qA:
+            queueA.ack(seq)
             queueA.ready(seq)
         for seq in qB:
+            queueB.ack(seq)
             queueB.ready(seq)
 
         # First they should have the same length
@@ -548,8 +553,10 @@ class TestEGPDistributedQueue(unittest.TestCase):
     def test_set_timeout_callback(self):
         def callback1(queue_item):
             pass
+
         def callback2(queue_item):
             pass
+
         node = QuantumNode("test", nodeID=1)
         dq = EGPDistributedQueue(node, timeout_callback=callback1)
         self.assertIs(dq.timeout_callback, callback1)
@@ -569,8 +576,10 @@ class TestEGPDistributedQueue(unittest.TestCase):
     def test_update_mhp_cycle_number(self):
         def callback_alice(queue_item):
             callback_called[0] = True
+
         def callback_bob(queue_item):
             callback_called[1] = True
+
         sim_reset()
         callback_called = [False, False]
         alice = QuantumNode("alice", nodeID=0)
@@ -682,6 +691,4 @@ class TestEGPDistributedQueue(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # unittest.main()
-    t = TestEGPDistributedQueue()
-    t.test_update_mhp_cycle_number()
+    unittest.main()

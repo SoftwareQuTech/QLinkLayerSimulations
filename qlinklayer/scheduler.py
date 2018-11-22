@@ -6,7 +6,6 @@ from math import ceil
 from netsquid import pydynaa
 from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
-from qlinklayer.toolbox import check_schedule_cycle_bounds
 
 
 class Scheduler(metaclass=abc.ABCMeta):
@@ -118,14 +117,6 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         if self.num_suspended_cycles > 0:
             self.num_suspended_cycles -= 1
 
-        # # Comb through the backlog for requests to schedule
-        # backlog = list(self.schedule_backlog.items())
-        # for key, request in backlog:
-        #     if check_schedule_cycle_bounds(self.mhp_cycle_number, self.max_mhp_cycle_number, request.sched_cycle):
-        #         aid = self.outstanding_items[key]
-        #         self.requests[aid] = request
-        #         self.schedule_backlog.pop(key)
-
     def get_schedule_cycle(self, request):
         """
         Estimates a reasonable MHP cycle number when the request can begin processing
@@ -179,7 +170,8 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         # Compute how many MHP cycles this corresponds to
         if self.mhp_cycle_period == 0:
             raise ValueError("MHP cycle period cannot be zero when using timeouts")
-        mhp_cycles = int(max_time / self.mhp_cycle_period) + 1
+        # TODO we should add a roll over here!!!
+        mhp_cycles = (int(max_time / self.mhp_cycle_period) + 1) % self.max_mhp_cycle_number
 
         return self.mhp_cycle_number + mhp_cycles
 
@@ -536,7 +528,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         logger.debug("Removing local queue item from pydynaa")
         aid = queue_item.qid, queue_item.seq
         self.clear_request(aid)
-        self._schedule_now(self._EVT_REQ_TIMEOUT)
+        self._schedule_after(1, self._EVT_REQ_TIMEOUT)
 
     def _reset_outstanding_req_data(self):
         """

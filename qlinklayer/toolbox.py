@@ -7,6 +7,7 @@ class LinkLayerException(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
+
 def check_schedule_cycle_bounds(current_cycle, max_cycle, check_cycle):
     """
     Checks whether the provided schedule cycle slot falls within our accepting window

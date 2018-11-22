@@ -443,12 +443,6 @@ class NodeCentricEGP(EGP):
         Sets up the DQP between the nodes
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
         """
-        # Get the MHP timing offsets
-        remote_node = self.mhp_service.get_node(nodeID=other_egp.node.nodeID)
-        scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, remote_node])
-        local_trigger = scheduling_offsets[self.node.nodeID]
-        remote_trigger = scheduling_offsets[remote_node.nodeID]
-
         # Call DQP's connect to peer
         self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn)
 

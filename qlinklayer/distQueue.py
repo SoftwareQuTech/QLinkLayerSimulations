@@ -1088,4 +1088,3 @@ class EGPDistributedQueue(FilteredDistributedQueue):
             Sequence number within local queue of item
         """
         self.queueList[qid].ack(qseq)
-

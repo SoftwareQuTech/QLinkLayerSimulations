@@ -45,7 +45,7 @@ class LocalQueue(Entity):
         self.queue = {}
 
         # Current sequence number that can be consumed
-        self.popSeq = 0
+        self.popSeq = None
 
         self.throw_events = throw_events
         if self.throw_events:
@@ -101,13 +101,27 @@ class LocalQueue(Entity):
         :return: None
         """
 
-        lq = _LocalQueueItem(request, seq)
+        lq = self.get_new_queue_item(request, seq)
         self.queue[seq] = lq
+
+        if self.popSeq is None:
+            self.popSeq = seq
 
         if self.throw_events:
             logger.debug("Scheduling item added event now.")
             self._schedule_now(self._EVT_ITEM_ADDED)
             self._seqs_added.append(seq)
+
+    def get_new_queue_item(self, request, seq):
+        """
+        Returns a fresh queue item instance
+        :param request: :obj:`qlinklayer.EGP.EGPRequest`
+            The request
+        :param seq: int
+            The queue item sequence number
+        :return: :obj:`qlinklayer.localQueue._EGPLocalQueueItem`
+        """
+        return _LocalQueueItem(request, seq)
 
     def remove_item(self, seq):
         """
@@ -168,8 +182,9 @@ class LocalQueue(Entity):
 
     def _get_next_pop_seq(self):
         # Return the next item if available otherwise increment
-        inc_seq = (self.popSeq + 1) % self.maxSeq
-        return inc_seq if not self.queue.keys() else min(self.queue.keys())
+        if len(self.queue) == 0:
+            return None
+        return min(self.queue.keys())
 
     def peek(self, seq=None):
         """
@@ -185,16 +200,6 @@ class LocalQueue(Entity):
             return self.queue[self.popSeq]
         else:
             return self.queue.get(seq)
-
-    # def get_min_schedule(self):
-    #     """
-    #     Get the smallest time at which we may schedule the next item
-    #     """
-    #     if len(self.queue) == 0:
-    #         # No items on queue
-    #         return None
-    #
-    #     return self.queue[self.popSeq].scheduleAt
 
     def contains(self, seq):
         """
@@ -212,7 +217,6 @@ class LocalQueue(Entity):
         """
         Mark the queue item with queue sequence number seq as ready
         """
-
         try:
             queue_item = self.queue[seq]
         except KeyError:
@@ -238,20 +242,9 @@ class LocalQueue(Entity):
             # Not in queue
             return
 
-    # def schedule_item(self, seq, scheduleAt):
-    #     """
-    #     Schedules the service time of an item in the queue
-    #     :param seq: int
-    #         Sequence number of the item
-    #     :param scheduleAt: float
-    #         Time to set the item for servicing
-    #     """
-    #     item = self.queue[seq]
-    #     item.scheduleAt = scheduleAt + sim_time()
-    #     item.schedule()
-
 
 class EGPLocalQueue(LocalQueue):
+
     def __init__(self, qid=None, wsize=None, maxSeq=None, timeout_callback=None, throw_events=False):
         """
         Local queue used by EGP. Supports timeout per MHP cycle
@@ -293,30 +286,16 @@ class EGPLocalQueue(LocalQueue):
         for q_item in list(self.queue.values()):
             q_item.update_mhp_cycle_number(current_cycle, max_cycle)
 
-    def add_with_id(self, originID, seq, request):
+    def get_new_queue_item(self, request, seq):
         """
-        Stores the request within the queue at the specified sequence number along with the information specifying the
-        origin of the request
-        :param originID: int
-            The ID of the node that placed the request in the queue
+        Returns a fresh queue item instance
+        :param request: :obj:`qlinklayer.EGP.EGPRequest`
+            The request
         :param seq: int
-            The sequence number in the queue of the request item
-        :param request: obj
-            The request item that we are storing within the queue
-        :return: None
+            The queue item sequence number
+        :return: :obj:`qlinklayer.localQueue._EGPLocalQueueItem`
         """
-
-        lq = _EGPLocalQueueItem(request, seq, self.qid, self.timeout_callback)
-        self.queue[seq] = lq
-
-        if self.throw_events:
-            logger.debug("Scheduling item added event now.")
-            self._schedule_now(self._EVT_ITEM_ADDED)
-            self._seqs_added.append(seq)
-
-
-# class MHPCycleLocalQueue(LocalQueue):
-#     def __init__(self, qid=None, wsize=None, maxSeq=None, scheduleAfter=0.0, ):
+        return _EGPLocalQueueItem(request, seq, self.qid, self.timeout_callback)
 
 
 class TimeoutLocalQueue(LocalQueue):
@@ -337,35 +316,22 @@ class TimeoutLocalQueue(LocalQueue):
         self.ready_items = []
         self.qid = qid
 
-    def add_with_id(self, originID, seq, request):
+    def get_new_queue_item(self, request, seq):
         """
-        Adds an item to the queue.
-        :param originID: int
-            ID of the source that instructed the addition of this queue item
+        Returns a fresh queue item instance
+        :param request: :obj:`qlinklayer.EGP.EGPRequest`
+            The request
         :param seq: int
-            Sequence location to add this item into the queue
-        :param request: obj any
-            The item to store in the queue
+            The queue item sequence number
+        :return: :obj:`qlinklayer.localQueue._EGPLocalQueueItem`
         """
-        # # Compute the minimum time at which this request can be served
-        # now = sim_time()
-        # sa = now + self.scheduleAfter
-
         # Check if the item specifies a max queue time
         lifetime = getattr(request, 'max_time', 0.0)
 
         if lifetime == 0:
             lifetime = None
 
-        # Store the item and attach the timeout event
-        lq = _TimeoutLocalQueueItem(request, seq, lifetime=lifetime)
-        self.queue[seq] = lq
-        lq.prepare()
-
-        if self.throw_events:
-            logger.debug("Scheduling item added event now.")
-            self._schedule_now(self._EVT_ITEM_ADDED)
-            self._seqs_added.append(seq)
+        return _TimeoutLocalQueueItem(request, seq, lifetime=lifetime)
 
     def add_scheduling_event(self, qseq):
         """
@@ -448,6 +414,7 @@ class _EGPLocalQueueItem(_LocalQueueItem, Entity):
                 else:
                     self.ready = True
                     logger.debug("Item is ready to be scheduled")
+
 
 class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
     def __init__(self, request, seq, lifetime=0.0):

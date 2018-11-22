@@ -3,6 +3,7 @@ import netsquid as ns
 from collections import defaultdict
 from functools import partial
 from math import ceil
+import logging
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.entanglementGenerator import NV_PairPreparation
@@ -15,6 +16,8 @@ from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
+
+logger.setLevel(logging.CRITICAL)
 
 
 def store_result(storage, result):
@@ -1079,12 +1082,12 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         alice_pairs = 4
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
-                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        min_fidelity=0.5, max_time=0,
                                                                         purpose_id=1, priority=10)
 
         bob_pairs = 4
         bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
-                                                                      min_fidelity=0.5, max_time=1000,
+                                                                      min_fidelity=0.5, max_time=0,
                                                                       purpose_id=1, priority=10)
 
         alice_create_id, create_time = egpA.create(alice_request)
@@ -1177,7 +1180,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.mhp.conn._get_next_mhp_seq = bad_inc
         alice_pairs = 3
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
-                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        min_fidelity=0.5, max_time=0,
                                                                         purpose_id=1, priority=10)
 
         egpA.create(cqc_request=alice_request)
@@ -1274,12 +1277,12 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         alice_purpose_id = 1
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
-                                                                        min_fidelity=0.5, max_time=10000,
+                                                                        min_fidelity=0.5, max_time=0,
                                                                         purpose_id=alice_purpose_id, priority=10)
 
         bob_purpose_id = 2
         bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=1,
-                                                                      min_fidelity=0.5, max_time=20000,
+                                                                      min_fidelity=0.5, max_time=0,
                                                                       purpose_id=bob_purpose_id, priority=2)
 
         # Construct a network for the simulation
@@ -1375,10 +1378,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         alice_pairs = 1
         bob_pairs = 2
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
-                                                                        min_fidelity=0.5, max_time=1000,
+                                                                        min_fidelity=0.5, max_time=0,
                                                                         purpose_id=1, priority=10)
         bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
-                                                                      min_fidelity=0.5, max_time=2000,
+                                                                      min_fidelity=0.5, max_time=0,
                                                                       purpose_id=2, priority=2)
 
         alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
