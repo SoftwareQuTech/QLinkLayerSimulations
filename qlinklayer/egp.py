@@ -2,9 +2,9 @@ import abc
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
 from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_MEASURE
+from netsquid.components.qprogram import QuantumProgram
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
-from easysquid.quantumProgram import QuantumProgram
 from easysquid import qProgramLibrary as qprgms
 from qlinklayer.toolbox import LinkLayerException
 from qlinklayer.scheduler import RequestScheduler
