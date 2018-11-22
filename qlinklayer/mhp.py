@@ -611,7 +611,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
         pass
 
     @abc.abstractmethod
-    def _construct_error_result(self, err_data, **kwargs):
+    def _construct_error_result(self, err_code, err_data, **kwargs):
         """
         Constructs a result message that can be interpretted by the callback
         :param err_data: obj any
@@ -635,7 +635,7 @@ class MHPServiceProtocol(TimedServiceProtocol):
 
         except Exception as err_data:
             logger.exception("Exception occurred processing data")
-            result = self._construct_error_result(err_data)
+            result = self._construct_error_result(err_code=self.ERR_LOCAL, err_data=err_data)
             self.callback(result=result)
 
     @abc.abstractmethod
