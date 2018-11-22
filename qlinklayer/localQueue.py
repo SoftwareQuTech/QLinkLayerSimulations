@@ -386,6 +386,7 @@ class _EGPLocalQueueItem(_LocalQueueItem, Entity):
 
         self.schedule_cycle = self.request.sched_cycle
         self.timeout_cycle = self.request.timeout_cycle
+        self.timeout_wrap_arounds = self.request.timeout_wrap_arounds
 
         self.timeout_callback = timeout_callback
 
@@ -399,12 +400,24 @@ class _EGPLocalQueueItem(_LocalQueueItem, Entity):
             The max MHP cycle
         """
         logger.debug("Updating to MHP cycle {}".format(current_cycle))
-        if self.timeout_cycle > 0:
-            if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
+        if current_cycle == self.timeout_cycle:
+            if self.timeout_wrap_arounds > 0:
+                self.timeout_wrap_arounds -= 1
+            else:
                 logger.debug("Item timed out, calling callback")
                 if not self.acked:
                     logger.warning("Item timed out before being acknowledged.")
                 self.timeout_callback(self)
+        # if self.timeout_cycle > 0:
+        #     if self.timeout_wrap_arounds > 0:
+        #         if current_cycle == self.timeout_cycle:
+        #             self.timeout_wrap_arounds -= 1
+        #     else:
+        #         if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
+        #             logger.debug("Item timed out, calling callback")
+        #             if not self.acked:
+        #                 logger.warning("Item timed out before being acknowledged.")
+        #             self.timeout_callback(self)
         if self.acked:
             if not self.ready:
                 if self.schedule_cycle > 0:

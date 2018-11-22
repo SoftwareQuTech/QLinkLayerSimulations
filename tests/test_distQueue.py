@@ -600,7 +600,7 @@ class TestEGPDistributedQueue(unittest.TestCase):
         network.start()
         request = EGPRequest()
         request.add_sched_cycle(1)
-        request.add_timeout_cycle(2)
+        request.add_timeout_cycle((2, 0))
         request.is_set = True
         aliceDQ.add(request, 0)
         sim_run(10)

@@ -157,7 +157,7 @@ class TestRequestHeader(unittest.TestCase):
         request.assign_create_id(self.create_id, self.create_time)
         request.add_sched_cycle(self.sched_cycle)
         requestH = request.pack()
-        self.assertEqual(len(requestH), 28)
+        self.assertEqual(len(requestH), EGPRequest.HDR_LENGTH)
         request_copy = EGPRequest()
         request_copy.unpack(requestH)
         self.assertEqual(request.other_ip, request_copy.other_ip)
