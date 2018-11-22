@@ -7,6 +7,7 @@ from collections import defaultdict
 from qlinklayer.egp import EGPRequest
 from qlinklayer.distQueue import DistributedQueue, FilteredDistributedQueue
 from qlinklayer.scenario import EGPSimulationScenario
+from qlinklayer.toolbox import LinkLayerException
 from easysquid.qnode import QuantumNode
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
@@ -36,26 +37,30 @@ class FastTestProtocol(TimedProtocol):
         self.maxNum = maxNum
 
     def run_protocol(self):
-
-        if self.count >= self.maxNum:
-            return
-
         for j in range(self.num):
+            if self.count >= self.maxNum:
+                return
+
             if np.random.uniform(0, 1) < self.p:
-                self.dq.add([self.node.name, self.count])
-                self.count += 1
+                try:
+                    self.dq.add([self.node.name, self.count])
+                    self.count += 1
+
+                    if self.count >= self.maxNum:
+                        return
+                except Exception:
+                    return
 
     def process_data(self):
         self.dq.process_data()
 
 
 class TestProtocol(FastTestProtocol):
-    def __init__(self, node, dq, timeStep, p=0.7):
-        super().__init__(node, dq, timeStep, p, 1)
+    def __init__(self, node, dq, timeStep, p=0.7, num=1, maxNum=1200):
+        super().__init__(node, dq, timeStep, p, num, maxNum)
 
 
 class TestDistributedQueue(unittest.TestCase):
-
     def test_init(self):
 
         node = QuantumNode("TestNode 1", 1)
@@ -70,7 +75,7 @@ class TestDistributedQueue(unittest.TestCase):
         assert dq.master is True
         assert dq.otherWsize == 100
         assert len(dq.queueList) == 1
-        assert dq.maxSeq == 2 ** 32
+        assert dq.maxSeq == 2 ** 8
         assert dq.status == dq.STAT_IDLE
         assert dq.comms_seq == 0
         assert dq.acksWaiting == 0
@@ -85,7 +90,7 @@ class TestDistributedQueue(unittest.TestCase):
         assert dq.master is False
         assert dq.otherWsize == 100
         assert len(dq.queueList) == 1
-        assert dq.maxSeq == 2 ** 32
+        assert dq.maxSeq == 2 ** 8
         assert dq.status == dq.STAT_IDLE
         assert dq.comms_seq == 0
         assert dq.acksWaiting == 0
@@ -120,8 +125,8 @@ class TestDistributedQueue(unittest.TestCase):
         aliceDQ = DistributedQueue(alice, conn)
         bobDQ = DistributedQueue(bob, conn)
 
-        aliceProto = TestProtocol(alice, aliceDQ, 1)
-        bobProto = TestProtocol(bob, bobDQ, 1)
+        aliceProto = TestProtocol(alice, aliceDQ, 1, maxNum=aliceDQ.maxSeq // 2)
+        bobProto = TestProtocol(bob, bobDQ, 1, maxNum=bobDQ.maxSeq // 2)
 
         nodes = [
             (alice, [aliceProto]),
@@ -159,9 +164,9 @@ class TestDistributedQueue(unittest.TestCase):
         sim_reset()
         alice = QuantumNode("Alice", 1)
         bob = QuantumNode("Bob", 2)
-        conn = ClassicalFibreConnection(alice, bob, length=0.01)
-        aliceDQ = DistributedQueue(alice, conn)
-        bobDQ = DistributedQueue(bob, conn)
+        conn = ClassicalFibreConnection(alice, bob, length=0.001)
+        aliceDQ = DistributedQueue(alice, conn, maxSeq=128)
+        bobDQ = DistributedQueue(bob, conn, maxSeq=128)
 
         aliceProto = FastTestProtocol(alice, aliceDQ, 1)
         bobProto = TestProtocol(bob, bobDQ, 1)
@@ -174,7 +179,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(50000)
+        sim_run(1000)
 
         # Check the Queue contains ordered elements from Alice and Bob
         qA = aliceDQ.queueList[0].queue
@@ -204,8 +209,8 @@ class TestDistributedQueue(unittest.TestCase):
         aliceDQ = DistributedQueue(alice, conn)
         bobDQ = DistributedQueue(bob, conn)
 
-        aliceProto = TestProtocol(alice, aliceDQ, 1)
-        bobProto = FastTestProtocol(bob, bobDQ, 1)
+        aliceProto = TestProtocol(alice, aliceDQ, 1, maxNum=aliceDQ.maxSeq // 2)
+        bobProto = FastTestProtocol(bob, bobDQ, 1, maxNum=bobDQ.maxSeq // 2)
 
         nodes = [alice, bob]
 
@@ -304,7 +309,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(50000)
+        sim_run(1000)
 
         # Check the Queue contains ordered elements from Alice and Bob
         qA = aliceDQ.queueList[0].queue
@@ -337,6 +342,65 @@ class TestDistributedQueue(unittest.TestCase):
             q_item = aliceDQ.local_pop(rqid)
             self.assertIsNotNone(q_item)
 
+    def test_full_queue(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=0.0001)
+
+        dq = DistributedQueue(node, conn, numQueues=3)
+        dq2 = DistributedQueue(node2, conn, numQueues=3)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        storage = []
+
+        def callback(result):
+            storage.append(result)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        for j in range(dq.maxSeq):
+            dq.add(request=j + 1, qid=0)
+
+        sim_run(1000)
+
+        with self.assertRaises(LinkLayerException):
+            dq.add(request=0, qid=0)
+
+        dq2.add_callback = callback
+        for j in range(dq2.maxSeq + 1):
+            dq2.add(request=j + 1, qid=1)
+
+        sim_run(2000)
+
+        self.assertEqual(len(storage), 257)
+        self.assertEqual(storage[-1], (dq2.DQ_REJECT, 1, 0, dq2.maxSeq + 1))
+        storage = []
+
+        for j in range(dq.maxSeq):
+            if j % 2:
+                dq.add(request=j + 1, qid=2)
+            else:
+                dq2.add(request=j + 1, qid=2)
+
+        dq2.add(request=dq.maxSeq + 1, qid=2)
+        sim_run(3000)
+
+        with self.assertRaises(LinkLayerException):
+            dq.add(request=0, qid=2)
+
+        self.assertEqual(len(storage), 257)
+        self.assertEqual(storage[-1], (dq2.DQ_REJECT, 2, 0, dq2.maxSeq + 1))
+
 
 class TestFilteredDistributedQueue(unittest.TestCase):
     def setUp(self):
@@ -350,7 +414,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         conn = ClassicalFibreConnection(alice, bob, length=.0001)
         aliceDQ = FilteredDistributedQueue(alice, conn)
 
-        ruleset = [(randint(0, 255), randint(0, 255)) for _ in range(1000)]
+        ruleset = [(randint(0, 255), randint(0, 255)) for _ in range(255)]
         for nodeID, purpose_id in ruleset:
             aliceDQ.add_accept_rule(nodeID, purpose_id)
             self.assertTrue(purpose_id in aliceDQ.accept_rules[nodeID])
@@ -363,7 +427,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         conn = ClassicalFibreConnection(alice, bob, length=.0001)
         aliceDQ = FilteredDistributedQueue(alice, conn)
 
-        ruleset = set([(randint(0, 255), randint(0, 255)) for _ in range(1000)])
+        ruleset = set([(randint(0, 255), randint(0, 255)) for _ in range(255)])
         for nodeID, purpose_id in ruleset:
             aliceDQ.add_accept_rule(nodeID, purpose_id)
             self.assertTrue(purpose_id in aliceDQ.accept_rules[nodeID])
@@ -384,7 +448,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         aliceDQ = FilteredDistributedQueue(alice, conn)
 
         rule_config = defaultdict(list)
-        ruleset = [(randint(0, 255), randint(0, 255)) for _ in range(1000)]
+        ruleset = [(randint(0, 255), randint(0, 255)) for _ in range(255)]
         for nodeID, purpose_id in ruleset:
             rule_config[nodeID].append(purpose_id)
 

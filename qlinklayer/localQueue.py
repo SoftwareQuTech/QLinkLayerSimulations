@@ -20,7 +20,7 @@ class LocalQueue(Entity):
 
         # Largest possible sequence number before wraparound
         if maxSeq is None:
-            self.maxSeq = 2 ** 32
+            self.maxSeq = 2 ** 8
         else:
             self.maxSeq = maxSeq
 
@@ -53,13 +53,24 @@ class LocalQueue(Entity):
             self._seqs_added = []
             self._seqs_removed = []
 
+    def is_full(self):
+        """
+        Checks whether the local queue is full
+        :return: bool
+            True/False
+        """
+        return self.num_items() >= self.maxSeq
+
+    def num_items(self):
+        return len(self.queue)
+
     def add(self, originID, request):
         """
         Add item to the Queue with a new sequence number, used by master node only.
         """
 
         # Check how many items are on the queue right now
-        if len(self.queue) > self.wsize:
+        if self.is_full():
             raise LinkLayerException("Local queue full: {}".format(len))
 
         # There is space, create a new queue item

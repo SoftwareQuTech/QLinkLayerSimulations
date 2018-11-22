@@ -691,7 +691,6 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                     use_time_window=True, measure_directly=True)
         egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
 
-        sim_scheduler = SimulationScheduler()
         alice_pairs = 2
         bob_pairs = 2
 
@@ -736,7 +735,6 @@ class TestNodeCentricEGP(unittest.TestCase):
             self.assertTrue(qA.qstate.compare(qB.qstate))
             self.assertIn(qB, qA.qstate._qubits)
             self.assertIn(qA, qB.qstate._qubits)
-
 
     def test_one_node_expires(self):
         alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)

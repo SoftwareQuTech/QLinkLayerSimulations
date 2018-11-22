@@ -2,6 +2,7 @@
 
 import unittest
 from qlinklayer.localQueue import LocalQueue
+from qlinklayer.toolbox import LinkLayerException
 
 
 class TestLocalQueue(unittest.TestCase):
@@ -12,7 +13,7 @@ class TestLocalQueue(unittest.TestCase):
     def test_init(self):
         # Test empty case
         standard_queue = LocalQueue()
-        assert standard_queue.maxSeq == 2 ** 32
+        assert standard_queue.maxSeq == 2 ** 8
         assert standard_queue.wsize == standard_queue.maxSeq
         assert standard_queue.scheduleAfter == 0
         assert standard_queue.nextSeq == 0
@@ -58,6 +59,17 @@ class TestLocalQueue(unittest.TestCase):
         for j in range(5):
             foo = lq3.pop()
             assert foo.seq == j
+
+    def test_full_queue(self):
+        lq = LocalQueue()
+
+        for j in range(lq.maxSeq):
+            lq.add(0, j + 1)
+            assert lq.nextSeq == (j + 1) % lq.maxSeq
+
+        # Verify that a full queue raises an exception
+        with self.assertRaises(LinkLayerException):
+            lq.add(0, 0)
 
 
 if __name__ == "__main__":

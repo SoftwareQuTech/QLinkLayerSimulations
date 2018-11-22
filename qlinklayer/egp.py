@@ -438,10 +438,9 @@ class NodeCentricEGP(EGP):
         scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, remote_node])
         local_trigger = scheduling_offsets[self.node.nodeID]
         remote_trigger = scheduling_offsets[remote_node.nodeID]
-        cycle_time = self.mhp_service.get_cycle_time(self.node)
 
         # Call DQP's connect to peer
-        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn, local_trigger, remote_trigger, cycle_time)
+        self.dqp.connect_to_peer_protocol(other_egp.dqp, dqp_conn, local_trigger, remote_trigger)
 
     def _connect_egp(self, other_egp, egp_conn=None):
         """

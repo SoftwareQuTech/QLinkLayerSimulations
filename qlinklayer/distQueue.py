@@ -46,7 +46,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
     DQ_REJECT = 2  # Operation REJECT
     DQ_ERR = 3  # Operation ERROR
 
-    def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 32,
+    def __init__(self, node, connection=None, master=None, myWsize=100, otherWsize=100, numQueues=1, maxSeq=2 ** 8,
                  throw_local_queue_events=False):
 
         super(DistributedQueue, self).__init__(node, connection)
@@ -74,7 +74,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.CMD_ERR_DUPLICATE_SEQ: self.cmd_ERR,
             self.CMD_ERR_NOSUCH_Q: self.cmd_ERR,
             self.CMD_ERR_DUPLICATE_QSEQ: self.cmd_ERR,
-            self.CMD_ERR_NOREQ: self.cmd_ERR
+            self.CMD_ERR_NOREQ: self.cmd_ERR,
+            self.CMD_ERR_REJ: self.cmd_ERR_REJ
         }
 
         # Set up add validators
@@ -102,7 +103,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.queueList = []
         self.numLocalQueues = numQueues
         for j in range(numQueues):
-            q = TimeoutLocalQueue(qid=j, throw_events=throw_local_queue_events)
+            q = TimeoutLocalQueue(qid=j, maxSeq=maxSeq, throw_events=throw_local_queue_events)
             self.queueList.append(q)
 
         # Backlog of requests
@@ -202,7 +203,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # If our peer failed to add our item we should remove any Acks we should provide for
             # subsequent items they attempted to add
             if self.has_subsequent_acks(qid=qid, qseq=queue_seq):
-                self.delete_outstanding_acks()
+                self.reject_outstanding_acks()
 
             # Pass error information upwards
             if self.add_callback:
@@ -305,6 +306,24 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         logger.debug("Error Received, Data: {}".format(data))
         self.status = self.STAT_IDLE
 
+    def cmd_ERR_REJ(self, data):
+        """
+        Handle rejected add requests.
+        :param data: tuple of (ack_id, qid, qseq, request)
+            The data that was rejected by the other node
+        """
+        [ack_id, qid, qseq, request] = data
+        logger.warning("ADD ERROR REJECT from {} comms seq {} queue ID {} queue seq {}"
+                       .format(self.otherID, ack_id, qid, qseq))
+
+        if self.queueList[qid].contains(qseq) and self.master:
+            self.remove_item(qid, qseq)
+
+        self.waitAddAcks.pop(ack_id)
+        self.acksWaiting -= 1
+        if self.add_callback:
+            self.add_callback(result=(self.DQ_REJECT, qid, qseq, request))
+
     def validate_ADD(self, data):
         """
         Applies all validation filters on incoming ADD request for queue item
@@ -377,6 +396,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
                          .format(nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_NOSUCH_Q)
             return False
+
+        elif self.is_full(qid):
+            logger.debug("ADD ERROR from {} comms seq {} queue ID {} is full!".format(nodeID, cseq, qid))
+            self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
+            return False
+
         return True
 
     def _validate_aid(self, data):
@@ -426,7 +451,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             return
 
         # Received valid ADD: Process add request
-
         logger.debug("ADD from {} comms seq {} queue ID {} queue seq {}".format(nodeID, cseq, qid, qseq))
 
         if self.master:
@@ -438,7 +462,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.queueList[qid].add_with_id(nodeID, qseq, request)
 
             # Send ack
-            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, 0])
+            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qid])
 
         self._post_process_cmd_ADD(qid, qseq)
 
@@ -537,35 +561,37 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             Whether the addAckBacklog contains queue items that are subsequent to the specified info
         """
         if self.addAckBacklog:
-            cseq, next_qid, next_qseq = self.addAckBacklog[0]
+            cseq, next_qid, next_qseq, request = self.addAckBacklog[0]
             return next_qid == qid and next_qseq == qseq + 1
         else:
             return False
 
-    def delete_outstanding_acks(self):
+    def reject_outstanding_acks(self):
         """
         Deletes an ACK we should provide and any subsequent ACKs
         """
         # Grab item info, ack, and schedule
-        cseq, qid, qseq = self.addAckBacklog.popleft()
+        cseq, qid, qseq, request = self.addAckBacklog.popleft()
+        self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
             # Check if this item is a subsequent item in the same queue
-            cseq, qid, qseq = self.addAckBacklog.popleft()
+            cseq, qid, qseq, request = self.addAckBacklog.popleft()
+            self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
 
     def release_acks(self):
         """
         Releases a stored ack and any stored items that are subsequent queue items
         """
         # Grab item info, ack, and schedule
-        cseq, qid, qseq = self.addAckBacklog.popleft()
+        cseq, qid, qseq, request = self.addAckBacklog.popleft()
         self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
         self._post_process_release(qid, qseq)
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
-            cseq, qid, qseq = self.addAckBacklog.popleft()
+            cseq, qid, qseq, request = self.addAckBacklog.popleft()
             self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
             self._post_process_release(qid, qseq)
 
@@ -585,6 +611,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         Add a request to create entanglement.
         """
+        if self.is_full(qid):
+            logger.error("Specified local queue is full, cannot add request")
+            if self.add_callback:
+                self.add_callback(result=(self.DQ_ERR, qid, request))
+            raise LinkLayerException()
+
         if (self.acksWaiting < self.myWsize) and (len(self.backlogAdd) == 0):
             # Still in window, and no backlog left to process, go add
             self._general_do_add(request, qid)
@@ -592,7 +624,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         else:
             # Add to backlog for later processing
             logger.debug("ADD to backlog")
-            self.backlogAdd.append(request)
+            self.backlogAdd.append((request, qid))
 
     def contains_item(self, qid, qseq):
         """
@@ -607,6 +639,17 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if qid < len(self.queueList):
             return self.queueList[qid].contains(qseq)
         return False
+
+    def is_full(self, qid):
+        """
+        Checks whether the specified qid is full
+        :param qid: int
+            The local queue ID to check
+        :return: bool
+            True/False
+        """
+
+        return self.queueList[qid].is_full()
 
     def remove_item(self, qid, qseq):
         """
@@ -687,8 +730,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             for j in range(canAdd):
                 logger.debug("Processing backlog")
-                oldRequest = self.backlogAdd.popleft()
-                self._general_do_add(oldRequest)
+                oldRequest, qid = self.backlogAdd.popleft()
+                self._general_do_add(oldRequest, qid)
 
         # If there are no outstanding acks, we can go back to being idle
         if self.acksWaiting == 0:
@@ -726,7 +769,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Otherwise wait on a response for our ADDs we have in flight before we ack
         else:
-            self.addAckBacklog.append((cseq, qid, queue_seq))
+            self.addAckBacklog.append((cseq, qid, queue_seq, request))
 
         return queue_seq
 
@@ -734,6 +777,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Check if we are the master node in control of the queue
         # and perform the appropriate actions to add the item
+        # Check if the queue is full
+        if self.is_full(qid):
+            logger.error("Specified local queue is full, cannot add request")
+            if self.add_callback:
+                self.add_callback(result=(self.DQ_ERR, qid, request))
+            return
 
         logger.debug("{} Adding new item to queue".format(self.node.nodeID))
         if self.master:
@@ -846,11 +895,6 @@ class FilteredDistributedQueue(DistributedQueue):
         self.accept_all = accept_all
         self.accept_rules = defaultdict(set)
 
-        # Add error handler for rejected requests
-        self.commandHandlers.update({
-            self.CMD_ERR_REJ: self.cmd_ERR_REJ
-        })
-
         # Add rule validator
         self.add_validators.append(self._validate_acceptance)
 
@@ -884,21 +928,6 @@ class FilteredDistributedQueue(DistributedQueue):
             A dictionary of nodeID to list of accepted purpose ids for queue items originating from the nodeIDs
         """
         self.accept_rules.update(accept_rules)
-
-    def cmd_ERR_REJ(self, data):
-        """
-        Handle rejected add requests.
-        :param data:
-        :return:
-        """
-        [ack_id, qid, qseq, request] = data
-        if self.queueList[qid].contains(qseq):
-            self.remove_item(qid, qseq)
-
-        self.waitAddAcks.pop(ack_id)
-        self.acksWaiting -= 1
-        if self.add_callback:
-            self.add_callback(result=(self.DQ_REJECT, qid, qseq, request))
 
     def _validate_acceptance(self, data):
         """
@@ -958,10 +987,8 @@ class EGPDistributedQueue(FilteredDistributedQueue):
         # Timing information for synchronizing requests
         self.local_trigger = 0.0
         self.remote_trigger = 0.0
-        self.cycle_time = 0.0
 
-    def connect_to_peer_protocol(self, other_distQueue, conn=None, local_trigger=0.0, remote_trigger=0.0,
-                                 cycle_time=0.0):
+    def connect_to_peer_protocol(self, other_distQueue, conn=None, local_trigger=0.0, remote_trigger=0.0):
         """
         Connects to the remote distributed queue and sets the timing information
         :param other_distQueue: obj `~qlinklayer.distQueue.EGPDistributedQueue`
@@ -980,10 +1007,10 @@ class EGPDistributedQueue(FilteredDistributedQueue):
             conn = ClassicalFibreConnection(self.node, other_distQueue.node, length=1e-5)
 
         # Perform setup on both protocols
-        self.establish_connection(conn, local_trigger, remote_trigger, cycle_time)
-        other_distQueue.establish_connection(conn, remote_trigger, local_trigger, cycle_time)
+        self.establish_connection(conn, local_trigger, remote_trigger)
+        other_distQueue.establish_connection(conn, remote_trigger, local_trigger)
 
-    def establish_connection(self, connection, local_trigger=0.0, remote_trigger=0.0, cycle_time=0.0):
+    def establish_connection(self, connection, local_trigger=0.0, remote_trigger=0.0):
         """
         Establishes a connection with the remote distributed queue
         :param connection: obj `~easysquid.easyfibre.ClassicalFibreConnection`
@@ -998,9 +1025,9 @@ class EGPDistributedQueue(FilteredDistributedQueue):
         """
         super(EGPDistributedQueue, self).establish_connection(connection)
         # Set the triggers for scheduling delays
-        self.set_mhp_timings(local_trigger, remote_trigger, cycle_time)
+        self.set_mhp_timings(local_trigger, remote_trigger)
 
-    def set_mhp_timings(self, local_trigger=0.0, remote_trigger=0.0, cycle_time=0.0):
+    def set_mhp_timings(self, local_trigger=0.0, remote_trigger=0.0):
         """
         Sets MHP timing information for the distributed queue
         :param local_trigger: float
@@ -1014,8 +1041,6 @@ class EGPDistributedQueue(FilteredDistributedQueue):
             self.local_trigger = local_trigger
         if remote_trigger:
             self.remote_trigger = remote_trigger
-        if cycle_time:
-            self.cycle_time = cycle_time
 
     def ready_and_schedule(self, qid, qseq, schedule_after):
         """
