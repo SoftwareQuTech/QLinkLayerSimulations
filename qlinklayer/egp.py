@@ -31,6 +31,7 @@ class EGPRequest:
                      'uint:16=create_id, ' \
                      'uint:16=sched_cycle, ' \
                      'uint:16=timeout_cycle, ' \
+                     'uint:16=timeout_wrap_arounds, ' \
                      'uint:8=num_pairs, ' \
                      'uint:4=priority, ' \
                      'uint:1=store, ' \
@@ -66,6 +67,7 @@ class EGPRequest:
             self.measure_directly = bool(cqc_epr_req_header.measure_directly)
             self.sched_cycle = 0
             self.timeout_cycle = 0
+            self.timeout_wrap_arounds = 0
             self.is_set = True
 
         else:
@@ -86,6 +88,7 @@ class EGPRequest:
             self.measure_directly = False
             self.sched_cycle = 0
             self.timeout_cycle = 0
+            self.timeout_wrap_arounds = 0
             self.is_set = False
 
     def __copy__(self):
@@ -134,7 +137,8 @@ class EGPRequest:
                    "store": self.store,
                    "measure_directly": self.measure_directly,
                    "sched_cycle": self.sched_cycle,
-                   "timeout_cycle": self.timeout_cycle}
+                   "timeout_cycle": self.timeout_cycle,
+                   "timeout_wrap_arounds": self.timeout_wrap_arounds}
         request_Bitstring = bitstring.pack(self.package_format, **to_pack)
         requestH = request_Bitstring.tobytes()
 
@@ -161,18 +165,20 @@ class EGPRequest:
         self.create_id = request_fields[6]
         self.sched_cycle = request_fields[7]
         self.timeout_cycle = request_fields[8]
-        self.num_pairs = request_fields[9]
-        self.priority = request_fields[10]
-        self.store = bool(request_fields[11])
-        self.measure_directly = bool(request_fields[12])
+        self.timeout_wrap_arounds = request_Bitstring[9]
+        self.num_pairs = request_fields[10]
+        self.priority = request_fields[11]
+        self.store = bool(request_fields[12])
+        self.measure_directly = bool(request_fields[13])
 
         self.is_set = True
 
     def add_sched_cycle(self, cycle):
         self.sched_cycle = cycle
 
-    def add_timeout_cycle(self, cycle):
-        self.timeout_cycle = cycle
+    def add_timeout_cycle(self, timeout_cycle_info):
+        self.timeout_cycle = timeout_cycle_info[0]
+        self.timeout_wrap_arounds = timeout_cycle_info[1]
 
 
 class EGP(EasyProtocol):

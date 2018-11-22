@@ -138,7 +138,11 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             cycle_delay += ceil(bottleneck / self.mhp_cycle_period)
             cycle_delay += ceil(max(0.0, self.remote_trigger - self.local_trigger) / self.mhp_cycle_period)
 
-        return (self.mhp_cycle_number + cycle_delay) % self.max_mhp_cycle_number
+        cycle_number = (self.mhp_cycle_number + cycle_delay) % self.max_mhp_cycle_number
+        if cycle_number == 0:
+            return 1
+        else:
+            return cycle_number
 
     def add_request(self, request):
         """
@@ -152,8 +156,8 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         # Store the request into the queue
         qid = self.get_queue(request)
         request.add_sched_cycle(schedule_cycle)
-        timeout_cycle = self.get_timeout_cycle(request)
-        request.add_timeout_cycle(timeout_cycle)
+        timeout_cycle_info = self.get_timeout_cycle(request)
+        request.add_timeout_cycle(timeout_cycle_info)
         self.distQueue.add(request, qid)
 
     def get_timeout_cycle(self, request):
@@ -170,10 +174,13 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         # Compute how many MHP cycles this corresponds to
         if self.mhp_cycle_period == 0:
             raise ValueError("MHP cycle period cannot be zero when using timeouts")
-        # TODO we should add a roll over here!!!
-        mhp_cycles = (int(max_time / self.mhp_cycle_period) + 1) % self.max_mhp_cycle_number
+        mhp_cycles = (int(max_time / self.mhp_cycle_period) + 1)
+        max_mhp_cycles_wrap_arounds = mhp_cycles // self.mhp_cycle_period
+        timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
+        if timeout_mhp_cycle == 0:
+            timeout_mhp_cycle = 1
 
-        return self.mhp_cycle_number + mhp_cycles
+        return timeout_mhp_cycle, max_mhp_cycles_wrap_arounds
 
     def suspend_generation(self, t):
         """
