@@ -48,7 +48,7 @@ class FastTestProtocol(TimedProtocol):
 
                     if self.count >= self.maxNum:
                         return
-                except:
+                except Exception:
                     return
 
     def process_data(self):
@@ -61,7 +61,6 @@ class TestProtocol(FastTestProtocol):
 
 
 class TestDistributedQueue(unittest.TestCase):
-
     def test_init(self):
 
         node = QuantumNode("TestNode 1", 1)
@@ -165,9 +164,9 @@ class TestDistributedQueue(unittest.TestCase):
         sim_reset()
         alice = QuantumNode("Alice", 1)
         bob = QuantumNode("Bob", 2)
-        conn = ClassicalFibreConnection(alice, bob, length=0.01)
-        aliceDQ = DistributedQueue(alice, conn)
-        bobDQ = DistributedQueue(bob, conn)
+        conn = ClassicalFibreConnection(alice, bob, length=0.001)
+        aliceDQ = DistributedQueue(alice, conn, maxSeq=128)
+        bobDQ = DistributedQueue(bob, conn, maxSeq=128)
 
         aliceProto = FastTestProtocol(alice, aliceDQ, 1)
         bobProto = TestProtocol(bob, bobDQ, 1)
@@ -180,7 +179,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(50000)
+        sim_run(1000)
 
         # Check the Queue contains ordered elements from Alice and Bob
         qA = aliceDQ.queueList[0].queue
@@ -310,7 +309,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        sim_run(50000)
+        sim_run(1000)
 
         # Check the Queue contains ordered elements from Alice and Bob
         qA = aliceDQ.queueList[0].queue
@@ -344,14 +343,19 @@ class TestDistributedQueue(unittest.TestCase):
             self.assertIsNotNone(q_item)
 
     def test_full_queue(self):
+        sim_reset()
         node = QuantumNode("TestNode 1", 1)
         node2 = QuantumNode("TestNode 2", 2)
-        conn = ClassicalFibreConnection(node, node2, length=0.001)
+        conn = ClassicalFibreConnection(node, node2, length=0.0001)
 
-        # No arguments
-        dq = DistributedQueue(node, numQueues=3)
-        dq2 = DistributedQueue(node2, numQueues=3)
+        dq = DistributedQueue(node, conn, numQueues=3)
+        dq2 = DistributedQueue(node2, conn, numQueues=3)
         dq.connect_to_peer_protocol(dq2, conn)
+
+        storage = []
+
+        def callback(result):
+            storage.append(result)
 
         nodes = [
             (node, [dq]),
@@ -365,36 +369,37 @@ class TestDistributedQueue(unittest.TestCase):
         network.start()
 
         for j in range(dq.maxSeq):
-            dq.add(request=j+1, qid=0)
+            dq.add(request=j + 1, qid=0)
 
         sim_run(1000)
-        import pdb
-        pdb.set_trace()
 
         with self.assertRaises(LinkLayerException):
             dq.add(request=0, qid=0)
 
-        for j in range(dq2.maxSeq-1):
-            dq2.add(request=j+1, qid=1)
+        dq2.add_callback = callback
+        for j in range(dq2.maxSeq + 1):
+            dq2.add(request=j + 1, qid=1)
 
-        sim_run(1000)
+        sim_run(2000)
 
-        with self.assertRaises(LinkLayerException):
-            dq2.add(request=0, qid=1)
+        self.assertEqual(len(storage), 257)
+        self.assertEqual(storage[-1], (dq2.DQ_REJECT, 1, 0, dq2.maxSeq + 1))
+        storage = []
 
         for j in range(dq.maxSeq):
             if j % 2:
-                dq.add(request=j+1, qid=2)
+                dq.add(request=j + 1, qid=2)
             else:
-                dq2.add(request=j+1, qid=2)
+                dq2.add(request=j + 1, qid=2)
 
-        sim_run(30)
+        dq2.add(request=dq.maxSeq + 1, qid=2)
+        sim_run(3000)
 
         with self.assertRaises(LinkLayerException):
             dq.add(request=0, qid=2)
 
-        with self.assertRaises(LinkLayerException):
-            dq2.add(request=0, qid=2)
+        self.assertEqual(len(storage), 257)
+        self.assertEqual(storage[-1], (dq2.DQ_REJECT, 2, 0, dq2.maxSeq + 1))
 
 
 class TestFilteredDistributedQueue(unittest.TestCase):

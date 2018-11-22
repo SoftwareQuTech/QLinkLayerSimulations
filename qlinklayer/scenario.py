@@ -6,7 +6,6 @@ from easysquid.easyprotocol import TimedProtocol
 from netsquid.pydynaa import EventType
 from netsquid.simutil import sim_time
 from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FORMALISM
-from qlinklayer.egp import EGPRequest
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCCmdHeader, CQCEPRRequestHeader, CQC_TP_COMMAND, \
     CQC_CMD_EPR, CQC_VERSION, CQC_CMD_HDR_LENGTH, CQC_EPR_REQ_LENGTH, CQC_HDR_LENGTH, CQCNotifyHeader, \
     CQC_NOTIFY_LENGTH

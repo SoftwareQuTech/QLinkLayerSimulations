@@ -103,7 +103,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.queueList = []
         self.numLocalQueues = numQueues
         for j in range(numQueues):
-            q = TimeoutLocalQueue(qid=j, throw_events=throw_local_queue_events)
+            q = TimeoutLocalQueue(qid=j, maxSeq=maxSeq, throw_events=throw_local_queue_events)
             self.queueList.append(q)
 
         # Backlog of requests
@@ -203,7 +203,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # If our peer failed to add our item we should remove any Acks we should provide for
             # subsequent items they attempted to add
             if self.has_subsequent_acks(qid=qid, qseq=queue_seq):
-                self.delete_outstanding_acks()
+                self.reject_outstanding_acks()
 
             # Pass error information upwards
             if self.add_callback:
@@ -313,7 +313,10 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             The data that was rejected by the other node
         """
         [ack_id, qid, qseq, request] = data
-        if self.queueList[qid].contains(qseq):
+        logger.warning("ADD ERROR REJECT from {} comms seq {} queue ID {} queue seq {}"
+                       .format(self.otherID, ack_id, qid, qseq))
+
+        if self.queueList[qid].contains(qseq) and self.master:
             self.remove_item(qid, qseq)
 
         self.waitAddAcks.pop(ack_id)
@@ -459,7 +462,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.queueList[qid].add_with_id(nodeID, qseq, request)
 
             # Send ack
-            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, 0])
+            self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qid])
 
         self._post_process_cmd_ADD(qid, qseq)
 
@@ -558,35 +561,37 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             Whether the addAckBacklog contains queue items that are subsequent to the specified info
         """
         if self.addAckBacklog:
-            cseq, next_qid, next_qseq = self.addAckBacklog[0]
+            cseq, next_qid, next_qseq, request = self.addAckBacklog[0]
             return next_qid == qid and next_qseq == qseq + 1
         else:
             return False
 
-    def delete_outstanding_acks(self):
+    def reject_outstanding_acks(self):
         """
         Deletes an ACK we should provide and any subsequent ACKs
         """
         # Grab item info, ack, and schedule
-        cseq, qid, qseq = self.addAckBacklog.popleft()
+        cseq, qid, qseq, request = self.addAckBacklog.popleft()
+        self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
             # Check if this item is a subsequent item in the same queue
-            cseq, qid, qseq = self.addAckBacklog.popleft()
+            cseq, qid, qseq, request = self.addAckBacklog.popleft()
+            self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
 
     def release_acks(self):
         """
         Releases a stored ack and any stored items that are subsequent queue items
         """
         # Grab item info, ack, and schedule
-        cseq, qid, qseq = self.addAckBacklog.popleft()
+        cseq, qid, qseq, request = self.addAckBacklog.popleft()
         self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
         self._post_process_release(qid, qseq)
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
-            cseq, qid, qseq = self.addAckBacklog.popleft()
+            cseq, qid, qseq, request = self.addAckBacklog.popleft()
             self.send_msg(self.CMD_ADD_ACK, [self.myID, cseq, qseq])
             self._post_process_release(qid, qseq)
 
@@ -606,6 +611,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         Add a request to create entanglement.
         """
+        if self.is_full(qid):
+            logger.error("Specified local queue is full, cannot add request")
+            if self.add_callback:
+                self.add_callback(result=(self.DQ_ERR, qid, request))
+            raise LinkLayerException()
+
         if (self.acksWaiting < self.myWsize) and (len(self.backlogAdd) == 0):
             # Still in window, and no backlog left to process, go add
             self._general_do_add(request, qid)
@@ -758,7 +769,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Otherwise wait on a response for our ADDs we have in flight before we ack
         else:
-            self.addAckBacklog.append((cseq, qid, queue_seq))
+            self.addAckBacklog.append((cseq, qid, queue_seq, request))
 
         return queue_seq
 
@@ -771,6 +782,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             logger.error("Specified local queue is full, cannot add request")
             if self.add_callback:
                 self.add_callback(result=(self.DQ_ERR, qid, request))
+            return
 
         logger.debug("{} Adding new item to queue".format(self.node.nodeID))
         if self.master:

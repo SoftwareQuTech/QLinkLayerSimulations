@@ -59,7 +59,7 @@ class LocalQueue(Entity):
         :return: bool
             True/False
         """
-        return self.num_items() >= self.wsize - 1
+        return self.num_items() >= self.maxSeq
 
     def num_items(self):
         return len(self.queue)

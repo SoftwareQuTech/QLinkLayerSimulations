@@ -71,5 +71,6 @@ class TestLocalQueue(unittest.TestCase):
         with self.assertRaises(LinkLayerException):
             lq.add(0, 0)
 
+
 if __name__ == "__main__":
     unittest.main()
