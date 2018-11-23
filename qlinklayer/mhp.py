@@ -8,6 +8,7 @@ from easysquid.toolbox import EasySquidException, logger
 from netsquid.qubits.qubitapi import create_qubits
 from netsquid.pydynaa import EventType
 from netsquid.simutil import sim_time
+from qlinklayer.toolbox import LinkLayerException
 
 
 class MHPMessage:
@@ -663,6 +664,11 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.set_allowed_bright_state_populations(alpha=alpha)
 
     def set_allowed_bright_state_populations(self, alpha=None):
+        """
+        Sets the allowed bright state populations in the MHP
+        :param alpha: list of float
+            List of the allowed bright state configurations
+        """
         if alpha is None:
             self.allowed_bright_states = [0.1, 0.3]
         else:
@@ -670,7 +676,24 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         self.set_bright_state_population(alpha=self.allowed_bright_states[0])
 
+    def set_bright_state_population(self, alpha):
+        """
+        Sets the bright state population to use for photon emission
+        :param alpha: float
+            The value to set the bright state population to
+        """
+        if alpha not in self.get_allowed_bright_state_populations():
+            raise LinkLayerException("Specified bright state {} not available in predefined: {}"
+                                     .format(alpha,self.allowed_bright_states))
+        else:
+            super(NodeCentricMHPServiceProtocol, self).set_bright_state_population(alpha=alpha)
+
     def get_allowed_bright_state_populations(self):
+        """
+        Retrieves the allowed bright state populations
+        :return: list of float
+            The bright state populations
+        """
         return self.allowed_bright_states
 
     def reset_protocol(self):
@@ -1029,6 +1052,20 @@ class SimulatedNodeCentricMHPService(Service):
         mhpB = self.get_node_proto(node=conn.nodeB)
 
         return mhpA.alpha, mhpB.alpha
+
+    def get_allowed_bright_state_populations(self, node):
+        """
+        Retrieves the allowed bright state configurations for both nodes that are participating in the MHP
+        :param node: obj `~easysquid.qnode.QuantumNode`
+            Node used to find peer and retrieve bright state populations
+        :return: lists of floats
+            The allowed bright state configurations at both nodes
+        """
+        conn = self.get_mhp_conn(node)
+        mhpA = self.get_node_proto(node=conn.nodeA)
+        mhpB = self.get_node_proto(node=conn.nodeB)
+
+        return mhpA.get_allowed_bright_state_populations(), mhpB.get_allowed_bright_state_populations()
 
     def calculate_dark_count_probability(self, node):
         """

@@ -377,7 +377,7 @@ class NodeCentricEGP(EGP):
         self.corrected_measurements = []
 
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
-                                 alphaA=0.1, alphaB=0.1):
+                                 alphaA=None, alphaB=None):
         """
         Sets up underlying protocols and connections between EGP's
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`
@@ -666,7 +666,7 @@ class NodeCentricEGP(EGP):
             return self.ERR_CREATE
 
         # Check if we can achieve the minimum fidelity
-        if self.feu.estimated_fidelity < creq.min_fidelity:
+        if self.feu.get_max_fidelity() < creq.min_fidelity:
             logger.error("Requested fidelity is too high to be satisfied")
             return self.ERR_UNSUPP
 

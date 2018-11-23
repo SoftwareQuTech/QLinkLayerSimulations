@@ -1,12 +1,27 @@
 import unittest
 from easysquid.toolbox import EasySquidException
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
+from qlinklayer.mhp import SimulatedNodeCentricMHPService
+from qlinklayer.toolbox import LinkLayerException
+from easysquid.qnode import QuantumNode
+from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from netsquid.qubits import dm_fidelity
 from netsquid.qubits.ketstates import b00, b01, b10, b11
 from numpy import kron, isclose
 
 
 class TestSingleClickFidelityEstimationUnit(unittest.TestCase):
+    def create_nodes(self, alice_device_positions, bob_device_positions):
+        # Set up Alice
+        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=alice_device_positions)
+        alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
+
+        # Set up Bob
+        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=bob_device_positions)
+        bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
+
+        return alice, bob
+
     def test_dm_fidelity(self):
         # Basic test cases using bell states
         dm00 = kron(b00.H, b00)
@@ -90,6 +105,37 @@ class TestSingleClickFidelityEstimationUnit(unittest.TestCase):
         with self.assertRaises(EasySquidException):
             SingleClickFidelityEstimationUnit._calculate_estimated_state(etaA=1, etaB=1, alphaA=1, alphaB=1, pdark=1,
                                                                          dp_photon=0)
+
+    def test_minimum_fidelities(self):
+        nodeA, nodeB = self.create_nodes(1, 1)
+        mhp_service = SimulatedNodeCentricMHPService("mhp_service", nodeA, nodeB)
+        feuA = SingleClickFidelityEstimationUnit(nodeA, mhp_service)
+        feuB = SingleClickFidelityEstimationUnit(nodeB, mhp_service)
+
+        self.assertTrue(isclose(feuA.estimated_fidelity, 0.9473684210526312))
+        self.assertTrue(isclose(feuB.estimated_fidelity, 0.9473684210526312))
+        self.assertEqual(feuA.achievable_fidelities, feuB.achievable_fidelities)
+        self.assertEqual(feuA.achievable_fidelities[0][0], 0.1)
+        self.assertTrue(isclose(feuA.achievable_fidelities[0][1], 0.9473684210526312))
+        self.assertEqual(feuA.achievable_fidelities[1][0], 0.3)
+        self.assertTrue(isclose(feuA.achievable_fidelities[1][1], 0.8235294278458571))
+
+        self.assertTrue(isclose(feuA.get_max_fidelity(), 0.9473684210526312))
+
+        protoA = mhp_service.get_node_proto(nodeA)
+        protoA.set_allowed_bright_state_populations([0.1, 0.2])
+
+        with self.assertRaises(LinkLayerException):
+            feuA._calculate_achievable_fidelities()
+
+    def test_get_bright_state(self):
+        nodeA, nodeB = self.create_nodes(1, 1)
+        mhp_service = SimulatedNodeCentricMHPService("mhp_service", nodeA, nodeB)
+        feuA = SingleClickFidelityEstimationUnit(nodeA, mhp_service)
+
+        self.assertEqual(feuA.select_bright_state(0.9), 0.1)
+        self.assertEqual(feuA.select_bright_state(0.8), 0.3)
+        self.assertEqual(feuA.select_bright_state(0.95), None)
 
 
 if __name__ == '__main__':
