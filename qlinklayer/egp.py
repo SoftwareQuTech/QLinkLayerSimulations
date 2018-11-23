@@ -395,7 +395,7 @@ class NodeCentricEGP(EGP):
         else:
             logger.warning("Attempted to configure EGP with new connection while already connected")
 
-    def _connect_mhp(self, other_egp, mhp_service=None, mhp_conn=None, alphaA=0.1, alphaB=0.1):
+    def _connect_mhp(self, other_egp, mhp_service=None, mhp_conn=None, alphaA=None, alphaB=None):
         """
         Creates the MHP Service and sets up the MHP protocols running at each of the nodes
         :param other_egp: obj `~qlinklayer.egp.NodeCentricEGP`

@@ -658,7 +658,20 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
     def __init__(self, timeStep, t0, node, connection, alpha):
         self._EVT_ENTANGLE_ATTEMPT = EventType("ENTANGLE ATTEMPT", "Triggered when the MHP attempts entanglement")
         super(NodeCentricMHPServiceProtocol, self).__init__(timeStep=timeStep, t0=t0, node=node, connection=connection)
-        self.set_bright_state_population(alpha=alpha)
+
+        self.allowed_bright_states = None
+        self.set_allowed_bright_state_populations(alpha=alpha)
+
+    def set_allowed_bright_state_populations(self, alpha=None):
+        if alpha is None:
+            self.allowed_bright_states = [0.1, 0.3]
+        else:
+            self.allowed_bright_states = alpha
+
+        self.set_bright_state_population(alpha=self.allowed_bright_states[0])
+
+    def get_allowed_bright_state_populations(self):
+        return self.allowed_bright_states
 
     def reset_protocol(self):
         """
@@ -825,7 +838,7 @@ class SimulatedNodeCentricMHPService(Service):
     protocol_class = NodeCentricMHPServiceProtocol
     conn_class = NodeCentricMHPHeraldedConnection
 
-    def __init__(self, name, nodeA, nodeB, conn=None, lengthA=1e-5, lengthB=1e-5, alphaA=0.1, alphaB=0.1):
+    def __init__(self, name, nodeA, nodeB, conn=None, lengthA=1e-5, lengthB=1e-5, alphaA=None, alphaB=None):
         """
         Node Centric MHP Service that creates the desired protocol for nodes.  Passes request information down to the
         protocols for retrieval and execution
@@ -852,6 +865,7 @@ class SimulatedNodeCentricMHPService(Service):
         # Create the MHP node protocols
         nodeAProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeA, connection=conn, t0=conn.trigA,
                                          alpha=alphaA)
+
         nodeBProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeB, connection=conn, t0=conn.trigB,
                                          alpha=alphaB)
 
