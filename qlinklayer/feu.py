@@ -1,7 +1,8 @@
 import abc
 from numpy import kron, zeros
 from netsquid.qubits import dm_fidelity
-from easysquid.toolbox import EasySquidException
+from easysquid.toolbox import logger, EasySquidException
+from qlinklayer.toolbox import LinkLayerException
 from netsquid.qubits.ketstates import s00, s01, s10, s11, b01, b11
 
 # Density matrices
@@ -45,6 +46,7 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         self.node = node
         self.mhp_service = mhp_service
         self.estimated_fidelity = self._estimate_fidelity()
+        self.achievable_fidelities = self._calculate_achievable_fidelities()
 
     def update_components(self, node=None, mhp_service=None):
         """
@@ -59,6 +61,61 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
             self.node = node
         if mhp_service:
             self.mhp_service = mhp_service
+
+    def _calculate_achievable_fidelities(self):
+        """
+        Computes the estimated fidelity for all bright state populations in underlying MHPs
+        :return: list of tuples
+            A list of (alpha, estimated_fidelity)
+        """
+        # Return None if we have no resources
+        if not self.node or not self.mhp_service:
+            return []
+
+        # Get bright state populations from nodes
+        bright_statesA, bright_statesB = self.mhp_service.get_allowed_bright_state_populations(self.node)
+        bright_statesA = sorted(bright_statesA)
+        bright_statesB = sorted(bright_statesB)
+
+        # Currently we do not handle the case where different configurations used
+        if bright_statesA != bright_statesB:
+            raise LinkLayerException("A and B have different bright state sets!  Fidelity calculation unsupported")
+
+        achievable = []
+        params = self._extract_params()
+        for alphaA, alphaB in zip(bright_statesA, bright_statesB):
+            params = (params[0], params[1], alphaA, alphaB, params[4], params[5])
+            ideal_state = kron(b01.H, b01)  # (|01> + |10>)(<01| + <10|)
+            estimated_state = self._calculate_estimated_state(*params)
+            fidelity = float(dm_fidelity(estimated_state, ideal_state, squared=True))
+            achievable.append((alphaA, fidelity))
+
+        return achievable
+
+    def get_max_fidelity(self):
+        """
+        Returns the maximum estimated fidelity based on all MHP configurations
+        :return: float
+            The best possible estimated fidelity
+        """
+        if not self.achievable_fidelities:
+            self.achievable_fidelities = self._calculate_achievable_fidelities()
+
+        return max([f[1] for f in self.achievable_fidelities])
+
+    def select_bright_state(self, min_fidelity):
+        """
+        Given a minimum desired fidelity returns the largest bright state population that achieves this fidelity
+        :param min_fidelity: float
+            The minimum fidelity to be achieved
+        :return: float
+            The bright state population that achieves this
+        """
+        for bright_state, fidelity in reversed(self.achievable_fidelities):
+            if fidelity >= min_fidelity:
+                return bright_state
+
+        return None
 
     def recalculate_estimate(self):
         """
