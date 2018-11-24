@@ -25,7 +25,6 @@ EGPRequest = namedtuple("EGP_request",
                          "measure_directly", "atomic"])
 EGPRequest.__new__.__defaults__ = (0, 0, 0, 0, 0, 0, True, False, False)
 
-
 class EGP(EasyProtocol):
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None):
         """
@@ -499,6 +498,8 @@ class NodeCentricEGP(EGP):
             The create ID
         """
         try:
+            import pdb
+            pdb.set_trace()
             # Unpack the request
             egp_request = self._get_egp_request(cqc_request_raw)
             logger.debug("EGP at node {} processing request: {}".format(self.node.nodeID, egp_request))

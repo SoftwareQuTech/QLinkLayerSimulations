@@ -640,6 +640,10 @@ class RequestScheduler(Scheduler):
         """
         # Simply process the requests in FIFO order (for now...)
         self.remove_unfulfillable_requests()
+
+        if self.curr_request and self.curr_request.atomic:
+            return self.curr_aid, self.curr_request
+
         for local_queue in self.distQueue.queueList:
             queue_item = local_queue.peek()
             if queue_item and queue_item.ready:
