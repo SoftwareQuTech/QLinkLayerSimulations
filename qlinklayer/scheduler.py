@@ -341,10 +341,6 @@ class RequestScheduler(Scheduler):
         elif self.suspended():
             logger.debug("Generation is currently suspended")
 
-        elif self.curr_gen:
-            next_gen = self.curr_gen
-            logger.debug("Scheduler has next gen {}".format(next_gen))
-
         else:
             next_gen = self.get_next_gen_template()
             logger.debug("Scheduler has next gen {}".format(next_gen))

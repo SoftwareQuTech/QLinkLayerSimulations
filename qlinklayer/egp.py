@@ -20,6 +20,7 @@ from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC
     CQC_VERSION, CQC_TP_EPR_OK, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH, CQCXtraQubitHeader, CQC_XTRA_QUBIT_HDR_LENGTH
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader, ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
 
+
 EGPRequest = namedtuple("EGP_request",
                         ["purpose_id", "other_id", "num_pairs", "min_fidelity", "max_time", "priority", "store",
                          "measure_directly", "atomic"])
@@ -498,8 +499,6 @@ class NodeCentricEGP(EGP):
             The create ID
         """
         try:
-            import pdb
-            pdb.set_trace()
             # Unpack the request
             egp_request = self._get_egp_request(cqc_request_raw)
             logger.debug("EGP at node {} processing request: {}".format(self.node.nodeID, egp_request))
