@@ -1,7 +1,7 @@
 import abc
 from numpy import kron, zeros
 from netsquid.qubits import dm_fidelity
-from easysquid.toolbox import logger, EasySquidException
+from easysquid.toolbox import EasySquidException
 from qlinklayer.toolbox import LinkLayerException
 from netsquid.qubits.ketstates import s00, s01, s10, s11, b01, b11
 
