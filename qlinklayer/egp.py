@@ -529,14 +529,14 @@ class NodeCentricEGP(EGP):
         my_free_mem = self.qmm.get_free_mem_ad()
         self.conn.put_from(self.node.nodeID, [[self.CMD_REQ_E, my_free_mem]])
 
-    def send_expire_notification(self, aid, old_seq, new_seq):
+    def send_expire_notification(self, aid, createID, originID, new_seq):
         """
         Sends and expiration notification to our peer if MHP Sequence ordering becomes inconsistent
         :param aid: tuple (int, int)
             Absolute queue ID corresponding to the request we were handling when sequence numbers became inconsistent
         """
         logger.error("Sending EXPIRE notification to peer")
-        self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE, (aid, old_seq, new_seq)]])
+        self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE, (aid, createID, originID, new_seq)]])
 
     def cmd_EXPIRE(self, data):
         """
@@ -548,7 +548,7 @@ class NodeCentricEGP(EGP):
         :return:
         """
         logger.error("Got EXPIRE command from peer for request {}".format(data))
-        aid, old_seq, new_seq = data
+        aid, createID, originID, new_seq = data
 
         # If our peer is ahead of us we should update
         if new_seq > self.expected_seq:
@@ -562,7 +562,7 @@ class NodeCentricEGP(EGP):
         self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE_ACK, self.expected_seq]])
 
         # Alert higher layer protocols
-        self.issue_err(err=self.ERR_EXPIRE, err_data=(old_seq, new_seq))
+        self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
 
     def cmd_EXPIRE_ACK(self, data):
         """
@@ -989,7 +989,9 @@ class NodeCentricEGP(EGP):
             logger.error("MHP_SEQ {} greater than expected SEQ {}".format(mhp_seq, self.expected_seq))
             # Collect expiration information to send to our peer
             new_mhp_seq = (mhp_seq + 1) % self.mhp_service.get_max_mhp_seq(self.node)
-            self.send_expire_notification(aid=aid, old_seq=self.expected_seq, new_seq=new_mhp_seq)
+            request = self.scheduler.get_request(aid)
+            originID = self.node.nodeID if self.get_otherID() == request.otherID else self.get_otherID()
+            self.send_expire_notification(aid=aid, createID=request.create_id, originID=originID, new_seq=new_mhp_seq)
 
             # Clear the request
             self.scheduler.clear_request(aid=aid)

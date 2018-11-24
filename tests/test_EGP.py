@@ -809,13 +809,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         [expiry_message] = expiry_messages
 
         invalid_oks = set(bob_oks) - set(alice_oks)
-        uncovered_ids = [ok_message[2] for ok_message in invalid_oks]
-        seq_start, seq_end = expiry_message[1]
-        expired_seq_range = list(range(seq_start, seq_end))
+        uncovered_ids = [ok_message[1:3] for ok_message in invalid_oks]
+
+        expired_create_id, expired_origin_id = expiry_message[1]
 
         # Verify that all entanglement identifiers bob has that alice does not have are covered within the expiry
-        for ent_id in uncovered_ids:
-            self.assertIn(ent_id[2], expired_seq_range)
+        for create_id, ent_id in uncovered_ids:
+            self.assertEqual(create_id, expired_create_id)
+            self.assertEqual(ent_id[0], expired_origin_id)
 
         # Check that we were able to resynchronize for bob's request
         # Get the gen ok's corresponding to bob's request after the error
@@ -866,7 +867,7 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                         min_fidelity=0.5, max_time=0,
                                                                         purpose_id=1, priority=10)
 
-        egpA.create(cqc_request=alice_request)
+        create_id, _ = egpA.create(cqc_request=alice_request)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
@@ -891,12 +892,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Verify we have ERR_EXPIRE messages for individual generation requests
         expiry_message = self.alice_results[1]
         error_code, (seq_start, seq_end) = expiry_message
-        expired_seq_range = list(range(seq_start, seq_end))
+        expired_create_id, expired_origin_id = expiry_message[1]
+        self.assertEqual(expired_create_id, create_id)
+        self.assertEqual(expired_origin_id, alice.nodeID)
         self.assertEqual(error_code, egpA.ERR_EXPIRE)
-        expected_ids = [(alice.nodeID, bob.nodeID, 1), (alice.nodeID, bob.nodeID, 2)]
-        self.assertEqual(len(expected_ids), seq_end - seq_start)
-        for expired_id in expected_ids:
-            self.assertIn(expired_id[2], expired_seq_range)
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
