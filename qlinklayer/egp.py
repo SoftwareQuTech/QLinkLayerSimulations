@@ -534,6 +534,12 @@ class NodeCentricEGP(EGP):
         Sends and expiration notification to our peer if MHP Sequence ordering becomes inconsistent
         :param aid: tuple (int, int)
             Absolute queue ID corresponding to the request we were handling when sequence numbers became inconsistent
+        :param createID: int
+            The createID of the request to be expired
+        :param originID: int
+            ID of the node that the request originates from
+        :param new_seq: int
+            The new sequence number of the local node to be informed to peer
         """
         logger.error("Sending EXPIRE notification to peer")
         self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE, (aid, createID, originID, new_seq)]])
@@ -543,8 +549,11 @@ class NodeCentricEGP(EGP):
         MHP Sequence numbers became inconsistent with our peer, halt execution of the specified request if we are still
         handling it.  Let our peer know what our expected MHP Sequence number is so that we may both agree on the
         largest
-        :param data: tuple (tuple(int, int), int)
-            The absolute queue id of the request in which the error occurred and expected mhp sequence number of peer
+        :param data: tuple (tuple(int, int), int, int, int)
+            The absolute queue id of the request in which the error occurred,
+             the createID of the request to be expired,
+             the originID of the node that created the request,
+             and expected mhp sequence number of peer
         :return:
         """
         logger.error("Got EXPIRE command from peer for request {}".format(data))

@@ -684,7 +684,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         if alpha not in self.get_allowed_bright_state_populations():
             raise LinkLayerException("Specified bright state {} not available in predefined: {}"
-                                     .format(alpha,self.allowed_bright_states))
+                                     .format(alpha, self.allowed_bright_states))
         else:
             super(NodeCentricMHPServiceProtocol, self).set_bright_state_population(alpha=alpha)
 
