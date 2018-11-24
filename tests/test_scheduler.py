@@ -123,7 +123,7 @@ class TestRequestScheduler(unittest.TestCase, Entity):
 
         # Verify that the next request is the one we submitted
         gen = test_scheduler.next()
-        self.assertEqual(gen, (True, (0, 0), 0, 1, None))
+        self.assertEqual(gen, (True, (0, 0), 0, 1, {}))
 
 
 class TestTimings(unittest.TestCase, Entity):
