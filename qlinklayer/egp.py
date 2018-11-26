@@ -1,4 +1,8 @@
 import abc
+from collections import namedtuple
+import random
+import bitstring
+
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
 from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_MEASURE
@@ -6,7 +10,7 @@ from netsquid.components.qprogram import QuantumProgram
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid import qProgramLibrary as qprgms
-from qlinklayer.toolbox import LinkLayerException
+from qlinklayer.toolbox import LinkLayerException, unpack_raw_cqc_request, CQC_EPR_request_tuple
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.distQueue import EGPDistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement
@@ -14,82 +18,73 @@ from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH,\
-    CQC_VERSION, CQC_TP_EPR_OK, CQCNotifyHeader
+    CQC_VERSION, CQC_TP_EPR_OK, CQCNotifyHeader, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH
 from SimulaQron.cqc.backend.entInfoHeader import ENT_INFO_LENGTH, EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
-import random
-import bitstring
 
 
 class EGPRequest:
 
-    package_format = 'uint:32=other_ip, ' \
-                     'uint:16=other_port, ' \
-                     'uint:16=purpose_id, ' \
-                     'float:32=create_time, ' \
+    package_format = 'uint:64=sched_cycle, ' \
+                     'uint:64=timeout_cycle, ' \
                      'float:32=min_fidelity, ' \
-                     'float:32=max_time, ' \
+                     'uint:16=purpose_id, ' \
                      'uint:16=create_id, ' \
-                     'uint:16=sched_cycle, ' \
-                     'uint:16=timeout_cycle, ' \
-                     'uint:16=timeout_wrap_arounds, ' \
                      'uint:8=num_pairs, ' \
                      'uint:4=priority, ' \
                      'uint:1=store, ' \
-                     'uint:1=measure_directly'
-    HDR_LENGTH = 30
+                     'uint:1=atomic, ' \
+                     'uint:1=measure_directly, ' \
+                     'uint:1=master_request, ' \
+                     'uint:9=0'
+    HDR_LENGTH = 28
 
-    def __init__(self, cqc_request=None):
+    def __init__(self, cqc_request=None, master_request=True):
         """
         Stores required parameters of Entanglement Generation Protocol Request
-        :param: bytes
-            The cqc request consisting of CQCHeader, CQCCmdHeader, CQCEPRRequestHeader
+        :param cqc_request_raw: None, bytes, `qlinklayer.toolbox.CQC_EPR_request_tuple` or EGPRequest
+            * If None,  default values are used.
+            * If bytes, This is assumed to be a cqc request consisting of CQCHeader, CQCCmdHeader, CQCEPRRequestHeader
+            * If CQC_EPR_request_tuple, unpacks the relevant fields
+            * If EGPRequest, just makes a copy
+        :param master_request:
+            Whether this request is submitted by the master of the queue or not. (For keeping track of creatorID)
         """
-        if cqc_request:
-            cqc_header = CQCHeader(cqc_request[:CQC_HDR_LENGTH])
-            cqc_request = cqc_request[CQC_HDR_LENGTH:]
-            cqc_request = cqc_request[CQC_CMD_HDR_LENGTH:]
-            cqc_epr_req_header = CQCEPRRequestHeader(cqc_request)
+        if cqc_request is None:
+            self.sched_cycle = 0             # The MHP cycle in which this request can earliest be processed.
+            self.timeout_cycle = 0           # The MHP cycle in which this request will timeout
+            self.min_fidelity = 0.0          # The minimum request fidelity
+            self.purpose_id = 0              # The purpose (app) ID of this request
+            self.create_id = 0               # The assigned create ID
+            self.num_pairs = 0               # The number of entangled pairs requested
+            self.priority = 0                # The priority of this request
+            self.store = True                # Whether the generated entangled state should be moved to memory qubit
+            self.atomic = False              # Whether this is an atomic request or not (i.e. cannot be split up)
+            self.measure_directly = False    # Whether communication qubit should be measured after emission
+            self.master_request = True       # Whether this request originated from the master or not.
 
-            self.other_ip = cqc_epr_req_header.remote_ip
-            self.other_port = cqc_epr_req_header.remote_port
-
-            # For now let the ID be just the IP to be consistent with EasySquid notion of nodeIDs
-            self.otherID = self.other_ip
-
-            self.num_pairs = cqc_epr_req_header.num_pairs
-            self.min_fidelity = cqc_epr_req_header.min_fidelity
-            self.max_time = cqc_epr_req_header.max_time
-            self.purpose_id = cqc_header.app_id
-            self.priority = cqc_epr_req_header.priority
-            self.create_id = 0
-            self.create_time = 0
-            self.store = bool(cqc_epr_req_header.store)
-            self.measure_directly = bool(cqc_epr_req_header.measure_directly)
-            self.sched_cycle = 0
-            self.timeout_cycle = 0
-            self.timeout_wrap_arounds = 0
-            self.is_set = True
-
-        else:
-            self.other_ip = 0
-            self.other_port = 0
-
-            # For now let the ID be just the IP to be consistent with EasySquid notion of nodeIDs
-            self.otherID = self.other_ip
-
-            self.num_pairs = 0
-            self.min_fidelity = 0
-            self.max_time = 0
-            self.purpose_id = 0
-            self.priority = 0
-            self.create_id = 0
-            self.create_time = 0
-            self.store = True
-            self.measure_directly = False
-            self.sched_cycle = 0
-            self.timeout_cycle = 0
-            self.timeout_wrap_arounds = 0
             self.is_set = False
+        elif isinstance(cqc_request, bytes):
+            cqc_request = unpack_raw_cqc_request(cqc_request)
+        elif isinstance(cqc_request, CQC_EPR_request_tuple):
+            pass
+        elif isinstance(cqc_request, EGPRequest):
+            pass
+        else:
+            raise LinkLayerException("Unknown argument type for cqc_request")
+
+        self.sched_cycle = cqc_request.sched_cycle
+        self.timeout_cycle = cqc_request.timeout_cycle
+        self.min_fidelity = cqc_request.min_fidelity
+        self.purpose_id = cqc_request.purpose_id
+        self.create_id = 0
+        self.num_pairs = cqc_request.num_pairs
+        self.priority = cqc_request.priority
+        self.store = cqc_request.store
+        self.atomic = cqc_request.atomic
+        self.measure_directly = cqc_request.measure_directly
+        self.master_request = master_request
+
+        self.is_set = True
 
     def __copy__(self):
         """
@@ -101,21 +96,9 @@ class EGPRequest:
         """
         if not self.is_set:
             raise ValueError("Cannot copy a request which is not set")
-        c = EGPRequest()
-        c.unpack(self.pack())
+        c = type(self)()
+        c.__dict__.update(self.__dict__)
         return c
-
-    def assign_create_id(self, create_id, create_time):
-        """
-        Sets the sequence number of this request
-        :param seq_id: int
-            The sequence number associated with this request
-        """
-        self.create_id = create_id
-        self.create_time = create_time
-
-    def get_create_info(self):
-        return self.create_id, self.create_time
 
     def pack(self):
         """
@@ -123,22 +106,18 @@ class EGPRequest:
         :return: str
         """
         if not self.is_set:
-            return 0
+            raise ValueError("Cannot pack a request which is not set")
 
-        to_pack = {"other_ip": self.other_ip,
-                   "other_port": self.other_port,
-                   "purpose_id": self.purpose_id,
-                   "create_time": self.create_time,
+        to_pack = {"sched_cycle": self.sched_cycle,
+                   "timeout_cycle": self.timeout_cycle,
                    "min_fidelity": self.min_fidelity,
-                   "max_time": self.max_time,
+                   "purpose_id": self.purpose_id,
                    "create_id": self.create_id,
                    "num_pairs": self.num_pairs,
                    "priority": self.priority,
                    "store": self.store,
-                   "measure_directly": self.measure_directly,
-                   "sched_cycle": self.sched_cycle,
-                   "timeout_cycle": self.timeout_cycle,
-                   "timeout_wrap_arounds": self.timeout_wrap_arounds}
+                   "atomic": self.atomic,
+                   "measure_directly": self.measure_directly}
         request_Bitstring = bitstring.pack(self.package_format, **to_pack)
         requestH = request_Bitstring.tobytes()
 
@@ -152,33 +131,19 @@ class EGPRequest:
         """
         request_Bitstring = bitstring.BitString(headerBytes)
         request_fields = request_Bitstring.unpack(self.package_format)
-        self.other_ip = request_fields[0]
-        self.other_port = request_fields[1]
 
-        # For now let the ID be just the IP to be consistent with EasySquid notion of nodeIDs
-        self.otherID = self.other_ip
-
-        self.purpose_id = request_fields[2]
-        self.create_time = request_fields[3]
-        self.min_fidelity = request_fields[4]
-        self.max_time = request_fields[5]
-        self.create_id = request_fields[6]
-        self.sched_cycle = request_fields[7]
-        self.timeout_cycle = request_fields[8]
-        self.timeout_wrap_arounds = request_Bitstring[9]
-        self.num_pairs = request_fields[10]
-        self.priority = request_fields[11]
-        self.store = bool(request_fields[12])
-        self.measure_directly = bool(request_fields[13])
+        self.sched_cycle = request_fields[0]
+        self.timeout_cycle = request_fields[1]
+        self.min_fidelity = request_fields[2]
+        self.purpose_id = request_fields[3]
+        self.create_id = request_fields[4]
+        self.num_pairs = request_fields[5]
+        self.priority = request_fields[6]
+        self.store = request_fields[7]
+        self.atomic = request_fields[8]
+        self.measure_directly = request_fields[9]
 
         self.is_set = True
-
-    def add_sched_cycle(self, cycle):
-        self.sched_cycle = cycle
-
-    def add_timeout_cycle(self, timeout_cycle_info):
-        self.timeout_cycle = timeout_cycle_info[0]
-        self.timeout_wrap_arounds = timeout_cycle_info[1]
 
 
 class EGP(EasyProtocol):
@@ -612,35 +577,43 @@ class NodeCentricEGP(EGP):
         self.scheduler.update_other_mem_size(data)
 
     # Primary EGP Protocol Methods
-    def create(self, cqc_request):
+    def create(self, cqc_request_raw):
         """
         Main user interface when requesting entanglement.  Adds the request to our queue.
-        :param creq: bytes
-            Should be unpacked with EGPRequest
+        :param cqc_request_raw: bytes
+            The raw CQC request for generating entanglement
+        ":return: int
+            The create ID
         """
         try:
             # Unpack the request
-            creq = EGPRequest(cqc_request)
+            cqc_request_tuple = unpack_raw_cqc_request(cqc_request_raw)
 
             # Check if we can support this request
-            err = self.check_supported_request(creq)
+            err = self.check_supported_request(cqc_request_tuple)
             if err:
                 logger.error("Create request failed {}".format(err))
                 self.issue_err(err=err)
                 return None
 
-            self._assign_creation_information(creq)
+            egp_request = EGPRequest(cqc_request_tuple, master_request=self.dqp.master)
+            self._assign_creation_information(egp_request)
 
             # Track our peer's available memory
-            logger.debug("EGP at node {} processing request: {}".format(self.node.nodeID, creq.__dict__))
+            logger.debug("EGP at node {} processing request: {}".format(self.node.nodeID, cqc_request_tuple))
             if not self.scheduler.other_has_resources():
                 self.request_other_free_memory()
 
             # Add the request to the DQP
-            self._add_to_queue(creq)
-            logger.debug("Scheduling create event now.")
-            self._schedule_now(self._EVT_CREATE)
-            return creq.create_id, creq.create_time
+            success = self._add_to_queue(egp_request)
+            if success:
+                logger.debug("Scheduling create event now.")
+                self._schedule_now(self._EVT_CREATE)
+                return egp_request.create_id
+            else:
+                logger.warning("Request was rejected by scheduler.")
+                self.issue_err(err=self.ERR_REJECTED)
+                return None
 
         except Exception:
             logger.exception("Failed to issue create")
@@ -653,24 +626,24 @@ class NodeCentricEGP(EGP):
         :param creq: obj `~qlinklayer.egp.EGPRequest`
             The request that we are updating with creation information
         """
-        create_time = self.get_current_time()
         create_id = self.next_creation_id
-        creq.assign_create_id(create_id=create_id, create_time=create_time)
+        creq.create_id = create_id
         self.next_creation_id = self.next_creation_id + 1
-        logger.debug("Assigned creation id {} creation time {} to request".format(creq.create_id, creq.create_time))
+        logger.debug("Assigned creation id {} to request".format(creq.create_id))
 
     def check_supported_request(self, creq):
         """
         Performs resource and fulfillment checks to see if the provided request can be satisfied by the EGP.
-        :param creq: obj `~qlinklayer.egp.EGPRequest`
+        :param creq: obj `~qlinklayer.toolbox.CQC_EPR_request_tuple
             The EGP Request that we want to check
         :return: Error code if request fails a check, otherwise 0
         """
-        if creq.otherID == self.node.nodeID:
+        # TODO other ID should be checked before the request is handed to the EGP
+        if creq.other_id == self.node.nodeID:
             logger.error("Attempted to submit request for entanglement with self!")
             return self.ERR_CREATE
 
-        if creq.otherID != self.get_otherID():
+        if creq.other_id != self.get_otherID():
             logger.error("Attempted to submit request for entanglement with unknown ID!")
             return self.ERR_CREATE
 
@@ -698,16 +671,17 @@ class NodeCentricEGP(EGP):
         return 0
 
     # Queues a request
-    def _add_to_queue(self, creq):
+    def _add_to_queue(self, egp_request):
         """
         Stores the request in the distributed queue
-        :param creq: `~qlinklayer.egp.EGPRequest`
+        :param egp_request: `~qlinklayer.egp.EGPRequest`
             The request we want to store in the distributed queue
-        :return: tuple(int, int)
-            Tuple containing the qid where requests was stored and the request identifier within that
-            queue
+        :return: bool
+            Whether the add was successful.
         """
-        self.scheduler.add_request(creq)
+        success = self.scheduler.add_request(egp_request)
+
+        return success
 
     def _add_to_queue_callback(self, result):
         """
@@ -871,7 +845,8 @@ class NodeCentricEGP(EGP):
             m, basis = self.measurement_results.pop(0)
 
             # Flip this outcome in the case we need to apply a correction
-            if self.node.nodeID != creq.otherID:
+            creator = not (self.dqp.master ^ creq.master_request)
+            if creator:  # True if we're master and request was from master etc.
                 # Measurements in computational basis are always anti-correlated for the entangled state
                 if basis == 0:
                     m ^= 1
@@ -894,7 +869,8 @@ class NodeCentricEGP(EGP):
             # Check if we need to correct the qubit
             if r == 2:
                 logger.debug("Applying correction, suspending generation")
-                if self.node.nodeID != creq.otherID:
+                creator = not (self.dqp.master ^ creq.master_request)
+                if creator:  # True if we're master and request was from master etc.
                     # Suspend for an estimated amount of time until our peer is ready to continue generation
                     suspend_time += self.this_corr_delay
                     self.scheduler.suspend_generation(t=suspend_time)
@@ -1116,7 +1092,12 @@ class NodeCentricEGP(EGP):
 
         # Create entanglement identifier
         logical_id = self.scheduler.curr_storage_id()
-        creatorID = self.node.nodeID if self.get_otherID() == creq.otherID else self.get_otherID()
+        if self.dqp.master ^ creq.master_request:
+            creatorID = self.get_otherID()
+            otherID = self.node.nodeID
+        else:
+            creatorID = self.node.nodeID
+            otherID = self.get_otherID()
 
         # Construct result information
         now = self.get_current_time()
@@ -1124,7 +1105,7 @@ class NodeCentricEGP(EGP):
 
         # Craft okay based on the request type
         if self.scheduler.handling_measure_directly():
-            ent_id = (creatorID, creq.otherID, mhp_seq)
+            ent_id = (creatorID, otherID, mhp_seq)
             m, basis = self.get_measurement_outcome(creq)
             result = self.construct_cqc_ok_message(EntInfoMeasDirectHeader.type, creq.create_id, ent_id,
                                                    fidelity_estimate, t_create, m=m, basis=basis)

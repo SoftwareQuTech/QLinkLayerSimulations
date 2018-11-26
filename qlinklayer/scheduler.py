@@ -7,6 +7,7 @@ from netsquid import pydynaa
 from netsquid.simutil import sim_time
 from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
+from qlinklayer.toolbox import LinkLayerException
 
 
 class Scheduler(metaclass=abc.ABCMeta):
@@ -59,7 +60,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         self.num_suspended_cycles = 0
 
         # Timing information
-        self.max_mhp_cycle_number = 2**16       # Max cycle number for scheduling
+        self.max_mhp_cycle_number = 2**64       # Max cycle number for scheduling
         self.mhp_cycle_number = 0               # Current cycle number
         self.mhp_cycle_period = 0.0             # Cycle period
         self.mhp_cycle_offset = 10              # Offset to accompany for communication variance
@@ -145,21 +146,36 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
 
         return cycle_number
 
-    def add_request(self, request):
+    def add_request(self, egp_request):
         """
         Adds a request to the distributed queue
         :param request: obj `~qlinklayer.egp.EGPRequest`
             The request to be added
         """
         # Decide which cycle the request should begin processing
-        schedule_cycle = self.get_schedule_cycle(request)
+        schedule_cycle = self.get_schedule_cycle(egp_request)
 
         # Store the request into the queue
-        qid = self.get_queue(request)
-        request.add_sched_cycle(schedule_cycle)
-        timeout_cycle_info = self.get_timeout_cycle(request)
-        request.add_timeout_cycle(timeout_cycle_info)
-        self.distQueue.add(request, qid)
+        try:
+            qid = self.get_queue(egp_request)
+        except LinkLayerException:
+            logger.warning("Scheduler could not get a valid queue ID for request.")
+            return False
+
+        egp_request.add_sched_cycle(schedule_cycle)
+        try:
+            timeout_cycle_info = self.get_timeout_cycle(egp_request)
+        except LinkLayerException:
+            logger.warning("Specified timeout ({}) is longer then the mhp_cycle_period * max_mhp_cycle_number = {}".format(egp_request.max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
+            return False
+        egp_request.add_timeout_cycle(timeout_cycle_info)
+        try:
+            self.distQueue.add(egp_request, qid)
+        except LinkLayerException:
+            logger.warning("Could not add request to queue.")
+            return False
+
+        return True
 
     def get_timeout_cycle(self, request):
         """
@@ -191,6 +207,9 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             mhp_cycles = 1
         else:
             mhp_cycles = int((max_time - t_right) / self.mhp_cycle_period) + 2
+
+        if mhp_cycles >= self.max_mhp_cycle_number:
+            raise LinkLayerException("Specified timeout ({}) is longer then the mhp_cycle_period * max_mhp_cycle_number = {}".format(max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
 
         max_mhp_cycles_wrap_arounds = mhp_cycles // self.max_mhp_cycle_number
         timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
