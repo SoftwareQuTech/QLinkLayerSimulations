@@ -36,9 +36,10 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
     Stub for a scheduler to decide how we assign and consume elements of the queue.
     """
 
-    def __init__(self, distQueue, qmm):
+    def __init__(self, distQueue, qmm, feu=None):
         # Distributed Queue to schedule from
         self.distQueue = distQueue
+        self.feu = feu
 
         # Queue service timeout handler
         self._EVT_REQ_TIMEOUT = pydynaa.EventType("REQ TIMEOUT", "Triggers when request was not completed in time")
@@ -101,6 +102,9 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             self.mhp_cycle_number = mhp_cycle_number
         if mhp_cycle_offset is not None:
             self.mhp_cycle_offset = mhp_cycle_offset
+
+    def add_feu(self, feu):
+        self.feu = feu
 
     def inc_cycle(self):
         """
@@ -328,10 +332,9 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         :return: tuple
             Represents the information to be used for the next entanglement generation attempts
         """
-
         if self.curr_gen:
             logger.debug("Currently processing generation")
-            return self.get_default_gen()
+            return self.curr_gen
 
         aid, request = self._get_next_request()
         if aid is None and request is None:
@@ -346,7 +349,8 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             self.my_free_memory = self.qmm.get_free_mem_ad()
 
             # Convert to a tuple
-            next_gen = (True, aid, comm_q, storage_q, None)
+            params = self.get_request_params(request)
+            next_gen = (True, aid, comm_q, storage_q, params)
 
             logger.debug("Created gen request {}".format(next_gen))
             self.curr_gen = next_gen
@@ -355,6 +359,19 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
 
         else:
             return self.get_default_gen()
+
+    def get_request_params(self, request):
+        """
+        Constructs parameters to be used for the generation
+        :param request: obj `~qlinklayer.egp.EGPRequest`
+            The request containing requirements
+        :return: dict
+            Dictionary of parameters to be used
+        """
+        params = {}
+        if self.feu:
+            params["alpha"] = self.feu.select_bright_state(request.min_fidelity)
+        return params
 
     def mark_gen_completed(self, aid):
         """
@@ -498,32 +515,6 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             storage_q = comm_q
         return comm_q, storage_q
 
-    def _schedule_request(self, evt):
-        """
-        Event handler for scheduling queue items from the distributed queue that are ready to be serviced.  Crafts
-        generation templates to be filled in the future and stores request information for tracking.
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The event that triggered this handler
-        """
-        # Get the queue that has an item ready
-        queue = evt.source
-        qid, queue_item = queue.ready_items.pop(0)
-        qseq = queue_item.seq
-
-        # Store the request under the absolute queue id
-        aid = (qid, qseq)
-        request = queue_item.request
-
-        # Store the absolute queue id under a unique request key
-        logger.debug("Scheduling request {}".format(aid))
-
-        key = (request.create_id, request.otherID)
-        self.outstanding_items[key] = aid
-        self.schedule_backlog[key] = request
-
-        if queue_item.lifetime:
-            self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
-
     def _get_next_request(self):
         """
         Gets the next request for processing
@@ -531,14 +522,56 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             The absolute queue ID and request (if any)
         """
         # Simply process the requests in FIFO order (for now...)
+        self.remove_unfulfillable_requests()
         queue_item = self.distQueue.queueList[0].peek()
-        if queue_item is None:
-            return None, None
-        if queue_item.ready:
+        if queue_item and queue_item.ready:
             aid = queue_item.qid, queue_item.seq
             return aid, queue_item.request
-        else:
-            return None, None
+
+        return None, None
+
+    def remove_unfulfillable_requests(self):
+        """
+        Checks the head items of the queue to see if there are any that can be removed
+        :return:
+        """
+        while self.distQueue.queueList[0].peek():
+            queue_item = self.distQueue.queueList[0].peek()
+            # Check if the queue item is too close to timeout to service
+            if self.near_timeout(queue_item):
+                self._handle_item_timeout(queue_item)
+
+            # Otherwise we have a valid item
+            else:
+                break
+
+    def near_timeout(self, queue_item):
+        """
+        Checks if an item in the queue is nearing timeout and it is not possible to service
+        :param queue_item: obj `~qlinklayer.localQueue._EGPLocalQueueItem'
+            The item in the queue to check
+        :return: bool
+            True/False whether item is near timeout
+        """
+        min_cycles = ceil(self.mhp_full_cycle / self.mhp_cycle_period)
+        if queue_item.timeout_cycle != 0 and queue_item.timeout_cycle - self.mhp_cycle_number < min_cycles:
+            return True
+
+        return False
+
+    def _check_request(self, request):
+        """
+        Checks if a given request can be serviced at this time
+        :param request: obj `~qlinklayer.egp.EGPRequest`
+            The request to check
+        :return: bool
+            Whether the request can be serviced or not
+        """
+        if self.feu:
+            if request.min_fidelity > self.feu.get_max_fidelity():
+                return False
+
+        return True
 
     def _handle_item_timeout(self, queue_item):
         """

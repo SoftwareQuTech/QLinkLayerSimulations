@@ -723,7 +723,10 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         logger.debug("MHP_NC Protocol at node {} got request data: {}".format(self.node.nodeID, request_data))
 
         # Extract request information
-        flag, aid, comm_q, storage_q, param = request_data
+        flag, aid, comm_q, storage_q, params = request_data
+        alpha = params.get("alpha")
+        if alpha:
+            self.set_bright_state_population(alpha)
         self.aid = aid
 
         # If the flag is true then we attempt entanglement generation
