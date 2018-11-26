@@ -408,16 +408,6 @@ class _EGPLocalQueueItem(_LocalQueueItem, Entity):
                 if not self.acked:
                     logger.warning("Item timed out before being acknowledged.")
                 self.timeout_callback(self)
-        # if self.timeout_cycle > 0:
-        #     if self.timeout_wrap_arounds > 0:
-        #         if current_cycle == self.timeout_cycle:
-        #             self.timeout_wrap_arounds -= 1
-        #     else:
-        #         if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
-        #             logger.debug("Item timed out, calling callback")
-        #             if not self.acked:
-        #                 logger.warning("Item timed out before being acknowledged.")
-        #             self.timeout_callback(self)
         if self.acked:
             if not self.ready:
                 if self.schedule_cycle > 0:

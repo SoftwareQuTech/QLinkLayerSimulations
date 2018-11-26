@@ -522,14 +522,42 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             The absolute queue ID and request (if any)
         """
         # Simply process the requests in FIFO order (for now...)
+        self.remove_unfulfillable_requests()
         queue_item = self.distQueue.queueList[0].peek()
-        if queue_item is None:
-            return None, None
-        if queue_item.ready:
+        if queue_item and queue_item.ready:
             aid = queue_item.qid, queue_item.seq
             return aid, queue_item.request
-        else:
-            return None, None
+
+        return None, None
+
+    def remove_unfulfillable_requests(self):
+        """
+        Checks the head items of the queue to see if there are any that can be removed
+        :return:
+        """
+        while self.distQueue.queueList[0].peek():
+            queue_item = self.distQueue.queueList[0].peek()
+            # Check if the queue item is too close to timeout to service
+            if self.near_timeout(queue_item):
+                self._handle_item_timeout(queue_item)
+
+            # Otherwise we have a valid item
+            else:
+                break
+
+    def near_timeout(self, queue_item):
+        """
+        Checks if an item in the queue is nearing timeout and it is not possible to service
+        :param queue_item: obj `~qlinklayer.localQueue._EGPLocalQueueItem'
+            The item in the queue to check
+        :return: bool
+            True/False whether item is near timeout
+        """
+        min_cycles = ceil(self.mhp_full_cycle / self.mhp_cycle_period)
+        if queue_item.timeout_cycle != 0 and queue_item.timeout_cycle - self.mhp_cycle_number < min_cycles:
+            return True
+
+        return False
 
     def _check_request(self, request):
         """
