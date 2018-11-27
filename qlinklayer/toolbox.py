@@ -2,6 +2,7 @@
 # General functionality
 #
 
+
 class LinkLayerException(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
@@ -25,4 +26,3 @@ def check_schedule_cycle_bounds(current_cycle, max_cycle, check_cycle):
         return left_boundary <= check_cycle <= right_boundary
     else:
         return check_cycle <= right_boundary or check_cycle >= left_boundary
-

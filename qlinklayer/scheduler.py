@@ -10,16 +10,20 @@ from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
 from qlinklayer.toolbox import LinkLayerException
 
+SchedulerRequest = namedtuple("Scheduler_request",
+                              ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
+                               "priority", "store", "atomic", "measure_directly", "master_request"],
+                              defaults=(0,) * 7 + (True, False, False, True))
 
-SchedulerRequest = namedtuple("Scheduler_request", ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs", "priority", "store", "atomic", "measure_directly", "master_request"], defaults=(0,)*7 + (True, False, False, True))
-
-SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"], defaults=(False,) + (None,)*4)
+SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"],
+                          defaults=(False,) + (None,) * 4)
 
 
 class Scheduler(metaclass=abc.ABCMeta):
     """
     Stub for a scheduler to decide how we assign and consume requests.
     """
+
     @abc.abstractmethod
     def add_request(self, request):
         """
@@ -57,23 +61,23 @@ class RequestScheduler(Scheduler, Entity):
         self.other_mem = (0, 0)
 
         # Generation tracking
-        self.curr_aid = None                        # The absolute queue ID of the current request being handled
-        self.curr_gen = None                        # The current generation being handled
-        self.timed_out_requests = []                # List of requests that have timed out
-        self.prev_requests = []                     # Previous requests (for filtering delayed communications)
-        self.max_prev_requests = 5                  # Number of previous requests to store
+        self.curr_aid = None  # The absolute queue ID of the current request being handled
+        self.curr_gen = None  # The current generation being handled
+        self.timed_out_requests = []  # List of requests that have timed out
+        self.prev_requests = []  # Previous requests (for filtering delayed communications)
+        self.max_prev_requests = 5  # Number of previous requests to store
 
         # Suspended generation tracking
         self.num_suspended_cycles = 0
 
         # Timing information
-        self.max_mhp_cycle_number = 2**64       # Max cycle number for scheduling
-        self.mhp_cycle_number = 0               # Current cycle number
-        self.mhp_cycle_period = 0.0             # Cycle period
-        self.mhp_cycle_offset = 10              # Offset to accompany for communication variance
-        self.mhp_full_cycle = 0.0               # Full MHP generation + communication RTT period
-        self.local_trigger = 0.0                # Trigger for local MHP
-        self.remote_trigger = 0.0               # Trigger for remote MHP
+        self.max_mhp_cycle_number = 2 ** 64  # Max cycle number for scheduling
+        self.mhp_cycle_number = 0  # Current cycle number
+        self.mhp_cycle_period = 0.0  # Cycle period
+        self.mhp_cycle_offset = 10  # Offset to accompany for communication variance
+        self.mhp_full_cycle = 0.0  # Full MHP generation + communication RTT period
+        self.local_trigger = 0.0  # Trigger for local MHP
+        self.remote_trigger = 0.0  # Trigger for remote MHP
 
         if isinstance(distQueue, EGPDistributedQueue):
             distQueue.set_timeout_callback(self._handle_item_timeout)
@@ -168,7 +172,12 @@ class RequestScheduler(Scheduler, Entity):
         :param master_request: bool
         :return: :obj:`~qlinklayer.scheduler.SchedulerRequest`
         """
-        scheduler_request = SchedulerRequest(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle, min_fidelity=egp_request.min_fidelity, purpose_id=egp_request.purpose_id, create_id=create_id, num_pairs=egp_request.num_pairs, priority=egp_request.priority, store=egp_request.store, atomic=egp_request.atomic, measure_directly=egp_request.measure_directly, master_request=master_request)
+        scheduler_request = SchedulerRequest(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle,
+                                             min_fidelity=egp_request.min_fidelity, purpose_id=egp_request.purpose_id,
+                                             create_id=create_id, num_pairs=egp_request.num_pairs,
+                                             priority=egp_request.priority, store=egp_request.store,
+                                             atomic=egp_request.atomic, measure_directly=egp_request.measure_directly,
+                                             master_request=master_request)
 
         return scheduler_request
 
@@ -193,10 +202,13 @@ class RequestScheduler(Scheduler, Entity):
         try:
             timeout_cycle = self.get_timeout_cycle(egp_request)
         except LinkLayerException:
-            logger.warning("Specified timeout ({}) is longer then the mhp_cycle_period * max_mhp_cycle_number = {}".format(egp_request.max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
+            logger.warning(
+                "Specified timeout ({}) is longer then the mhp_cycle_period * max_mhp_cycle_number = {}".format(
+                    egp_request.max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
             return False
 
-        scheduler_request = self._get_scheduler_request(egp_request, create_id, schedule_cycle, timeout_cycle, master_request=self.distQueue.master)
+        scheduler_request = self._get_scheduler_request(egp_request, create_id, schedule_cycle, timeout_cycle,
+                                                        master_request=self.distQueue.master)
 
         try:
             self.distQueue.add(scheduler_request, qid)
@@ -238,7 +250,9 @@ class RequestScheduler(Scheduler, Entity):
             mhp_cycles = int((max_time - t_right) / self.mhp_cycle_period) + 2
 
         if mhp_cycles >= self.max_mhp_cycle_number:
-            raise LinkLayerException("Specified timeout ({}) is longer then the mhp_cycle_period * max_mhp_cycle_number = {}".format(max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
+            raise LinkLayerException(
+                "Specified timeout ({}) is longer then the mhp_cycle_period * max_mhp_cycle_number = {}".format(
+                    max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
 
         timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
         if timeout_mhp_cycle == 0:
@@ -488,7 +502,9 @@ class RequestScheduler(Scheduler, Entity):
         try:
             queue_item = self.distQueue.local_peek(aid)
         except LinkLayerException as err:
-            logger.warning("Could not find queue item with aid = {}, when trying to decrement number of remaining pairs.".format(aid))
+            logger.warning(
+                "Could not find queue item with aid = {}, when trying to decrement number of remaining pairs.".format(
+                    aid))
             raise err
 
         if queue_item.num_pairs_left > 1:

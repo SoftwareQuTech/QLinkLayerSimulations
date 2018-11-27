@@ -763,10 +763,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
 
         alice_pairs = 4
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=0, purpose_id=1, priority=10)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=0, purpose_id=1,
+                                                                        priority=10)
 
         bob_pairs = 4
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=0, purpose_id=1, priority=10)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=0, purpose_id=1,
+                                                                      priority=10)
 
         alice_create_id = egpA.create(alice_request)
         egpB.create(bob_request)

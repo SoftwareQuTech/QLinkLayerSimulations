@@ -7,7 +7,6 @@ from random import randint
 from collections import defaultdict
 from qlinklayer.scheduler import SchedulerRequest
 from qlinklayer.distQueue import DistributedQueue, FilteredDistributedQueue, EGPDistributedQueue
-from qlinklayer.scenario import EGPSimulationScenario
 from qlinklayer.toolbox import LinkLayerException
 from qlinklayer.localQueue import EGPLocalQueue
 from easysquid.qnode import QuantumNode
@@ -541,6 +540,7 @@ class TestEGPDistributedQueue(unittest.TestCase):
     def test_init(self):
         def callback(queue_item):
             pass
+
         node = QuantumNode("test", nodeID=1)
         dq = EGPDistributedQueue(node)
         self.assertIs(dq.timeout_callback, None)
@@ -625,6 +625,7 @@ class TestEGPDistributedQueue(unittest.TestCase):
         def add_callback(result):
             self.assertEqual(result[0], aliceDQ.DQ_REJECT)
             callback_called[0] = True
+
         sim_reset()
 
         callback_called = [False]

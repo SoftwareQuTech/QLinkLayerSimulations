@@ -82,7 +82,8 @@ class TestRequestScheduler(unittest.TestCase, Entity):
         test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
         test_scheduler.configure_mhp_timings(1, 2, 0, 0)
 
-        request = EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0, priority=0)
+        request = EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0,
+                             priority=0)
 
         conn = dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",

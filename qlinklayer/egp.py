@@ -17,12 +17,13 @@ from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
-from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH,\
+from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, \
     CQC_VERSION, CQC_TP_EPR_OK, CQCNotifyHeader, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH
 from SimulaQron.cqc.backend.entInfoHeader import ENT_INFO_LENGTH, EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-
-EGPRequest = namedtuple("EGP_request", ["purpose_id", "other_id", "num_pairs", "min_fidelity", "max_time", "priority", "store", "measure_directly", "atomic"], defaults=(0, 0, 0, 0, 0, 0, True, False, False))
+EGPRequest = namedtuple("EGP_request",
+                        ["purpose_id", "other_id", "num_pairs", "min_fidelity", "max_time", "priority", "store",
+                         "measure_directly", "atomic"], defaults=(0, 0, 0, 0, 0, 0, True, False, False))
 
 
 class EGP(EasyProtocol):
@@ -88,12 +89,12 @@ class EGP(EasyProtocol):
         except IndexError:
             raise LinkLayerException("Could not unpack raw CQC request")
         egp_request = EGPRequest(purpose_id=cqc_header.app_id, other_id=cqc_epr_req_header.remote_ip,
-                                       num_pairs=cqc_epr_req_header.num_pairs,
-                                       min_fidelity=cqc_epr_req_header.min_fidelity,
-                                       max_time=cqc_epr_req_header.max_time,
-                                       priority=cqc_epr_req_header.priority, store=cqc_epr_req_header.store,
-                                       measure_directly=cqc_epr_req_header.measure_directly,
-                                       atomic=cqc_epr_req_header.atomic)
+                                 num_pairs=cqc_epr_req_header.num_pairs,
+                                 min_fidelity=cqc_epr_req_header.min_fidelity,
+                                 max_time=cqc_epr_req_header.max_time,
+                                 priority=cqc_epr_req_header.priority, store=cqc_epr_req_header.store,
+                                 measure_directly=cqc_epr_req_header.measure_directly,
+                                 atomic=cqc_epr_req_header.atomic)
 
         return egp_request
 
