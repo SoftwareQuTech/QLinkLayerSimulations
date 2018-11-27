@@ -17,136 +17,13 @@ from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
-from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH,\
+from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, \
     CQC_VERSION, CQC_TP_EPR_OK, CQCNotifyHeader, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH
 from SimulaQron.cqc.backend.entInfoHeader import ENT_INFO_LENGTH, EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-
-EGPRequest = namedtuple("EGP_request", ["purpose_id", "other_id", "num_pairs", "min_fidelity", "max_time", "priority", "store", "measure_directly", "atomic"], defaults=(0, 0, 0, 0, 0, 0, True, False, False))
-
-# class EGPRequest:
-#
-#     package_format = 'uint:64=sched_cycle, ' \
-#                      'uint:64=timeout_cycle, ' \
-#                      'float:32=min_fidelity, ' \
-#                      'uint:16=purpose_id, ' \
-#                      'uint:16=create_id, ' \
-#                      'uint:8=num_pairs, ' \
-#                      'uint:4=priority, ' \
-#                      'uint:1=store, ' \
-#                      'uint:1=atomic, ' \
-#                      'uint:1=measure_directly, ' \
-#                      'uint:1=master_request, ' \
-#                      'uint:9=0'
-#     HDR_LENGTH = 28
-#
-#     def __init__(self, cqc_request=None, master_request=True):
-#         """
-#         Stores required parameters of Entanglement Generation Protocol Request
-#         :param cqc_request_raw: None, bytes, `qlinklayer.toolbox.CQC_EPR_request_tuple` or EGPRequest
-#             * If None,  default values are used.
-#             * If bytes, This is assumed to be a cqc request consisting of CQCHeader, CQCCmdHeader, CQCEPRRequestHeader
-#             * If CQC_EPR_request_tuple, unpacks the relevant fields
-#             * If EGPRequest, just makes a copy
-#         :param master_request:
-#             Whether this request is submitted by the master of the queue or not. (For keeping track of creatorID)
-#         """
-#         if cqc_request is None:
-#             self.sched_cycle = 0             # The MHP cycle in which this request can earliest be processed.
-#             self.timeout_cycle = 0           # The MHP cycle in which this request will timeout
-#             self.min_fidelity = 0.0          # The minimum request fidelity
-#             self.purpose_id = 0              # The purpose (app) ID of this request
-#             self.create_id = 0               # The assigned create ID
-#             self.num_pairs = 0               # The number of entangled pairs requested
-#             self.priority = 0                # The priority of this request
-#             self.store = True                # Whether the generated entangled state should be moved to memory qubit
-#             self.atomic = False              # Whether this is an atomic request or not (i.e. cannot be split up)
-#             self.measure_directly = False    # Whether communication qubit should be measured after emission
-#             self.master_request = True       # Whether this request originated from the master or not.
-#
-#             self.is_set = False
-#
-#             return
-#         elif isinstance(cqc_request, bytes):
-#             cqc_request = unpack_raw_cqc_request(cqc_request)
-#         elif isinstance(cqc_request, CQC_EPR_request_tuple):
-#             pass
-#         elif isinstance(cqc_request, EGPRequest):
-#             self.sched_cycle = cqc_request.sched_cycle
-#             self.timeout_cycle = cqc_request.timeout_cycle
-#             self.create_id = cqc_request.create_id
-#             self.master_request = master_request
-#         else:
-#             raise LinkLayerException("Unknown argument type for cqc_request")
-#
-#         self.min_fidelity = cqc_request.min_fidelity
-#         self.purpose_id = cqc_request.purpose_id
-#         self.num_pairs = cqc_request.num_pairs
-#         self.priority = cqc_request.priority
-#         self.store = cqc_request.store
-#         self.atomic = cqc_request.atomic
-#         self.measure_directly = cqc_request.measure_directly
-#
-#         self.is_set = True
-#
-#     def __copy__(self):
-#         """
-#         Allows the copy of a request, specifically for adding to the distributed queue so that
-#         both nodes are not operating on the same object instance when tracking entanglement
-#         progress.
-#         :return: obj `~qlinklayer.egp.EGPRequest`
-#             A copy of the EGPRequest object
-#         """
-#         if not self.is_set:
-#             raise ValueError("Cannot copy a request which is not set")
-#         c = type(self)()
-#         c.__dict__.update(self.__dict__)
-#         return c
-#
-#     def pack(self):
-#         """
-#         Pack the data in packet form.
-#         :return: str
-#         """
-#         if not self.is_set:
-#             raise ValueError("Cannot pack a request which is not set")
-#
-#         to_pack = {"sched_cycle": self.sched_cycle,
-#                    "timeout_cycle": self.timeout_cycle,
-#                    "min_fidelity": self.min_fidelity,
-#                    "purpose_id": self.purpose_id,
-#                    "create_id": self.create_id,
-#                    "num_pairs": self.num_pairs,
-#                    "priority": self.priority,
-#                    "store": self.store,
-#                    "atomic": self.atomic,
-#                    "measure_directly": self.measure_directly}
-#         request_Bitstring = bitstring.pack(self.package_format, **to_pack)
-#         requestH = request_Bitstring.tobytes()
-#
-#         return requestH
-#
-#     def unpack(self, headerBytes):
-#         """
-#         Unpack data.
-#         :param headerBytes: str
-#         :return:
-#         """
-#         request_Bitstring = bitstring.BitString(headerBytes)
-#         request_fields = request_Bitstring.unpack(self.package_format)
-#
-#         self.sched_cycle = request_fields[0]
-#         self.timeout_cycle = request_fields[1]
-#         self.min_fidelity = request_fields[2]
-#         self.purpose_id = request_fields[3]
-#         self.create_id = request_fields[4]
-#         self.num_pairs = request_fields[5]
-#         self.priority = request_fields[6]
-#         self.store = request_fields[7]
-#         self.atomic = request_fields[8]
-#         self.measure_directly = request_fields[9]
-#
-#         self.is_set = True
+EGPRequest = namedtuple("EGP_request",
+                        ["purpose_id", "other_id", "num_pairs", "min_fidelity", "max_time", "priority", "store",
+                         "measure_directly", "atomic"], defaults=(0, 0, 0, 0, 0, 0, True, False, False))
 
 
 class EGP(EasyProtocol):
@@ -212,12 +89,12 @@ class EGP(EasyProtocol):
         except IndexError:
             raise LinkLayerException("Could not unpack raw CQC request")
         egp_request = EGPRequest(purpose_id=cqc_header.app_id, other_id=cqc_epr_req_header.remote_ip,
-                                       num_pairs=cqc_epr_req_header.num_pairs,
-                                       min_fidelity=cqc_epr_req_header.min_fidelity,
-                                       max_time=cqc_epr_req_header.max_time,
-                                       priority=cqc_epr_req_header.priority, store=cqc_epr_req_header.store,
-                                       measure_directly=cqc_epr_req_header.measure_directly,
-                                       atomic=cqc_epr_req_header.atomic)
+                                 num_pairs=cqc_epr_req_header.num_pairs,
+                                 min_fidelity=cqc_epr_req_header.min_fidelity,
+                                 max_time=cqc_epr_req_header.max_time,
+                                 priority=cqc_epr_req_header.priority, store=cqc_epr_req_header.store,
+                                 measure_directly=cqc_epr_req_header.measure_directly,
+                                 atomic=cqc_epr_req_header.atomic)
 
         return egp_request
 

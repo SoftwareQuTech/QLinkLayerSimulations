@@ -107,9 +107,9 @@ class EGPSimulationScenario(TimedProtocol):
 
             # Create a request
             cqc_request_raw = self.construct_cqc_epr_request(otherID=self.otherID, num_pairs=num_pairs,
-                                                         min_fidelity=self.min_fidelity, max_time=max_time,
-                                                         purpose_id=self.purpose_id, priority=self.priority,
-                                                         store=self.store, measure_directly=self.measure_directly)
+                                                             min_fidelity=self.min_fidelity, max_time=max_time,
+                                                             purpose_id=self.purpose_id, priority=self.priority,
+                                                             store=self.store, measure_directly=self.measure_directly)
 
             # Give the request to the egp
             self._create(cqc_request_raw)

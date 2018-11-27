@@ -766,17 +766,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         return self.queueList[qid].peek(seq=qseq)
 
-    # def get_min_schedule(self, qid=0):
-    #     """
-    #     Returns the min_schedule for the specified local queue
-    #     :param qid: int
-    #         Queue ID of the local queue to get the min_schedule for
-    #     :return:
-    #     """
-    #     return self.queueList[qid].get_min_schedule()
-
-    # Internal helpers
-
     def _try_go_idle(self):
         """
         Go back to idle state, processing backlog if appropriate.
