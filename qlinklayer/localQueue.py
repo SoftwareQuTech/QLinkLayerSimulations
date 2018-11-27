@@ -369,7 +369,7 @@ class _LocalQueueItem:
         self.acked = False      # Whether the queue items has been acknowledged from remote node
 
 
-class _EGPLocalQueueItem(_LocalQueueItem, Entity):
+class _EGPLocalQueueItem(_LocalQueueItem):
     def __init__(self, request, seq, qid, timeout_callback):
         """
         Local queue item that supports time outs based on MHP cycles
@@ -384,9 +384,14 @@ class _EGPLocalQueueItem(_LocalQueueItem, Entity):
 
         self.qid = qid
 
+        # Schedule and timeout MHP cycle
         self.schedule_cycle = self.request.sched_cycle
         self.timeout_cycle = self.request.timeout_cycle
 
+        # Keep track of number of pairs left
+        self.num_pairs_left = self.request.num_pairs
+
+        # Function to be called when request times out
         self.timeout_callback = timeout_callback
 
     def update_mhp_cycle_number(self, current_cycle, max_cycle):

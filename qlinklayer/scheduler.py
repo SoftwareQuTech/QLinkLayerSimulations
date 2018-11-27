@@ -3,11 +3,17 @@
 #
 import abc
 from math import ceil
-from netsquid import pydynaa
+from collections import namedtuple
+from netsquid.pydynaa import Entity, EventType
 from netsquid.simutil import sim_time
 from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
 from qlinklayer.toolbox import LinkLayerException
+
+
+SchedulerRequest = namedtuple("Scheduler_request", ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs", "priority", "store", "atomic", "measure_directly", "master_request"], defaults=(0,)*7 + (True, False, False, True))
+
+SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"], defaults=(False,) + (None,)*4)
 
 
 class Scheduler(metaclass=abc.ABCMeta):
@@ -32,7 +38,7 @@ class Scheduler(metaclass=abc.ABCMeta):
         pass
 
 
-class RequestScheduler(Scheduler, pydynaa.Entity):
+class RequestScheduler(Scheduler, Entity):
     """
     Stub for a scheduler to decide how we assign and consume elements of the queue.
     """
@@ -42,7 +48,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         self.distQueue = distQueue
 
         # Queue service timeout handler
-        self._EVT_REQ_TIMEOUT = pydynaa.EventType("REQ TIMEOUT", "Triggers when request was not completed in time")
+        self._EVT_REQ_TIMEOUT = EventType("REQ TIMEOUT", "Triggers when request was not completed in time")
 
         # Quantum memory management
         self.qmm = qmm
@@ -50,7 +56,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         self.other_mem = (0, 0)
 
         # Generation tracking
-        self.curr_request = None                    # The current request being handled
+        self.curr_aid = None                        # The absolute queue ID of the current request being handled
         self.curr_gen = None                        # The current generation being handled
         self.timed_out_requests = []                # List of requests that have timed out
         self.prev_requests = []                     # Previous requests (for filtering delayed communications)
@@ -146,11 +152,29 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
 
         return cycle_number
 
-    def add_request(self, egp_request):
+    @staticmethod
+    def _get_scheduler_request(egp_request, create_id, sched_cycle, timeout_cycle, master_request):
+        """
+        Creates a Scheduler request from a EGP request plus additional arguments.
+
+        :param egp_request: :obj:`~qlinklayer.egp.EGPRequest`
+        :param create_id: int
+        :param sched_cycle: int
+        :param timeout_cycle: int
+        :param master_request: bool
+        :return: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        """
+        scheduler_request = SchedulerRequest(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle, min_fidelity=egp_request.min_fidelity, purpose_id=egp_request.purpose_id, create_id=create_id, num_pairs=egp_request.num_pairs, priority=egp_request.priority, store=egp_request.store, atomic=egp_request.atomic, measure_directly=egp_request.measure_directly, master_request=master_request)
+
+        return scheduler_request
+
+    def add_request(self, egp_request, create_id=0):
         """
         Adds a request to the distributed queue
         :param request: obj `~qlinklayer.egp.EGPRequest`
             The request to be added
+        :param create_id: int
+            The assigned create ID of this request
         """
         # Decide which cycle the request should begin processing
         schedule_cycle = self.get_schedule_cycle(egp_request)
@@ -162,15 +186,16 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             logger.warning("Scheduler could not get a valid queue ID for request.")
             return False
 
-        egp_request.add_sched_cycle(schedule_cycle)
         try:
-            timeout_cycle_info = self.get_timeout_cycle(egp_request)
+            timeout_cycle = self.get_timeout_cycle(egp_request)
         except LinkLayerException:
             logger.warning("Specified timeout ({}) is longer then the mhp_cycle_period * max_mhp_cycle_number = {}".format(egp_request.max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
             return False
-        egp_request.add_timeout_cycle(timeout_cycle_info)
+
+        scheduler_request = self._get_scheduler_request(egp_request, create_id, schedule_cycle, timeout_cycle, master_request=self.distQueue.master)
+
         try:
-            self.distQueue.add(egp_request, qid)
+            self.distQueue.add(scheduler_request, qid)
         except LinkLayerException:
             logger.warning("Could not add request to queue.")
             return False
@@ -186,7 +211,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         max_time = request.max_time
 
         if max_time == 0:
-            return 0, 0
+            return 0
 
         # Compute how many MHP cycles this corresponds to
         if self.mhp_cycle_period == 0:
@@ -211,12 +236,11 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         if mhp_cycles >= self.max_mhp_cycle_number:
             raise LinkLayerException("Specified timeout ({}) is longer then the mhp_cycle_period * max_mhp_cycle_number = {}".format(max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
 
-        max_mhp_cycles_wrap_arounds = mhp_cycles // self.max_mhp_cycle_number
         timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
         if timeout_mhp_cycle == 0:
             timeout_mhp_cycle = 1
 
-        return timeout_mhp_cycle, max_mhp_cycles_wrap_arounds
+        return timeout_mhp_cycle
 
     def suspend_generation(self, t):
         """
@@ -300,7 +324,7 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             logger.debug("Scheduler has next gen {}".format(next_gen))
 
         # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
-        if not self.handling_measure_directly() and next_gen[0]:
+        if not self.is_handling_measure_directly() and next_gen.flag:
             suspend_time = self.mhp_full_cycle
             logger.debug("Next generation attempt after {}".format(suspend_time))
             self.suspend_generation(suspend_time)
@@ -313,24 +337,30 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         :return: tuple
             Represents a gen template for an info request
         """
-        return False, None, None, None, None
+        return SchedulerGen(flag=False, aid=None, comm_q=None, storage_q=None, param=None)
 
-    def generating(self):
+    def is_generating(self):
         """
         Tells if the scheduler is currently handling a generation
         :return: bool
             True/False
         """
         # Check the current generation to see if the flag is True
-        return self.curr_gen[0] if self.curr_gen else None
+        return self.curr_gen.flag if self.curr_gen else None
 
-    def curr_aid(self):
+    def is_generating_aid(self, aid):
         """
-        Returns the aid for the current generation request if any else none
-        :return: tuple of (int, int)
-            Specifies the (QID, QSEQ) corresponding to the current request if any
+        Returns True if the aid is currently being processed, otherwise False.
+        :param aid: tuple(int, int)
+            The absolute queue ID
+        :return: bool
         """
-        return self.curr_gen[1] if self.curr_gen else None
+        if self.curr_gen is None:
+            return False
+        if self.curr_aid == aid:
+            return True
+        else:
+            return False
 
     def curr_storage_id(self):
         """
@@ -338,7 +368,41 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         :return: int
             Storage id in qmem
         """
-        return self.curr_gen[3] if self.curr_gen else None
+        return self.curr_gen.storage_q if self.curr_gen else None
+
+    def has_request(self, aid):
+        """
+        Checks if the provided aid corresponds to a request which still needs to be processed.
+        :param aid: tuple(int, int)
+            The absolute queue ID
+        :return: bool
+            True: If the aid exists in the dist queue
+            False: Otherwise
+        """
+        try:
+            queue_item = self.distQueue.local_peek(aid)
+            if queue_item is None:
+                return False
+            else:
+                return True
+        except LinkLayerException:
+            return False
+
+    def get_request(self, aid):
+        """
+        Returns the request corresponding to this absolute queue ID, if exists, otherwise None.
+        :param aid: tuple(int, int)
+            The absolute queue ID
+        :return: :obj:`~qlinklayer.egp.EGPRequest` or None
+        """
+        try:
+            queue_item = self.distQueue.local_peek(aid)
+            if queue_item is None:
+                return None
+            else:
+                return queue_item.request
+        except LinkLayerException:
+            return None
 
     def get_next_gen_template(self):
         """
@@ -365,11 +429,11 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             self.my_free_memory = self.qmm.get_free_mem_ad()
 
             # Convert to a tuple
-            next_gen = (True, aid, comm_q, storage_q, None)
+            next_gen = SchedulerGen(flag=True, aid=aid, comm_q=comm_q, storage_q=storage_q, param=None)
 
             logger.debug("Created gen request {}".format(next_gen))
             self.curr_gen = next_gen
-            self.curr_request = request
+            self.curr_aid = aid
             return next_gen
 
         else:
@@ -383,41 +447,42 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         :return:
         """
         logger.debug("Marking aid {} as completed".format(aid))
-        if self.curr_gen and self.curr_gen[1] == aid:
+        if self.is_generating_aid(aid):
             # Get the used qubit info and free unused resources
-            comm_q, storage_q = self.curr_gen[2:4]
+            comm_q = self.curr_gen.comm_q
+            storage_q = self.curr_gen.storage_q
             if comm_q != storage_q:
                 self.qmm.free_qubit(comm_q)
 
             self.curr_gen = None
             # Update number of remaining pairs on request, remove if completed
-            if self.curr_request.num_pairs > 1:
-                logger.debug("Decrementing number of remaining pairs")
-                self.curr_request.num_pairs -= 1
-
-            elif self.curr_request.num_pairs == 1:
-                logger.debug("Generated final pair, removing request")
-                self.clear_request(aid=aid)
-
-            else:
-                raise Exception("Current request has invalid number of remaining pairs")
-
+            self.decrement_num_pairs(aid)
         else:
             logger.warning("Marking gen completed for inactive request")
-            req = self.get_request(aid)
-            req.num_pairs -= 1
+            self.decrement_num_pairs(aid)
 
-    def get_request(self, aid):
+    def decrement_num_pairs(self, aid):
         """
-        Retrieves the stored request if the scheduler still contains it
-        :param aid: tuple of (int, int)
-            The absolute queue id corresponding to the request
-        :return: obj `~qlinklayer.egp.EGPRequest`
-            The request corresponding to this absolute queue id
+        Decrements the remaining number of pairs of the request with the given absolute queue ID
+        :param aid: tuple(int, int)
+            The absolute queue ID
+        :return: bool
         """
-        queue_item = self.distQueue.local_peek(aid[0], aid[1])
-        if queue_item is not None:
-            return queue_item.request
+        try:
+            queue_item = self.distQueue.local_peek(aid)
+        except LinkLayerException as err:
+            logger.warning("Could not find queue item with aid = {}, when trying to decrement number of remaining pairs.".format(aid))
+            raise err
+
+        if queue_item.num_pairs_left > 1:
+            logger.debug("Decrementing number of remaining pairs")
+            queue_item.num_pairs_left -= 1
+
+        elif queue_item.num_pairs_left == 1:
+            logger.debug("Generated final pair, removing request")
+            self.clear_request(aid=aid)
+        else:
+            raise LinkLayerException("Current request with aid = {} has invalid number of remaining pairs.".format(aid))
 
     def previous_request(self, aid):
         """
@@ -444,12 +509,12 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             self.prev_requests.pop(0)
 
         # Check if this is a request currently being processed
-        if self.curr_aid() == aid:
+        if self.is_generating_aid(aid):
             logger.debug("Cleared current gen")
 
             # Vacate the reserved locations within the QMM
-            self.qmm.vacate_qubit(self.curr_gen[2])
-            self.qmm.vacate_qubit(self.curr_gen[3])
+            self.qmm.vacate_qubit(self.curr_gen.comm_q)
+            self.qmm.vacate_qubit(self.curr_gen.storage_q)
             self.curr_gen = None
 
         # If this item timed out need to remove from the queue
@@ -459,11 +524,13 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             if queue_item is None:
                 logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
             else:
+                if self.curr_aid == aid:
+                    self.curr_aid = None
+
                 # Remove queue item from pydynaa
-                request = queue_item.request
-                if self.curr_request == request:
-                    self.curr_request = None
-                queue_item.remove()
+                if isinstance(queue_item, Entity):
+                    logger.debug("Removing local queue item from pydynaa")
+                    queue_item.remove()
 
     def _has_resources_for_gen(self, request):
         """
@@ -495,12 +562,19 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
 
         return True
 
-    def handling_measure_directly(self):
+    def is_handling_measure_directly(self):
         """
         Checks if the scheduler is managing a measure_directly request
         :return: bool
         """
-        return self.curr_request and self.curr_request.measure_directly
+        if self.curr_aid is None:
+            return False
+
+        # Check if current request is measure directly
+        if self.distQueue.local_peek(self.curr_aid).request.measure_directly:
+            return True
+        else:
+            return False
 
     def reserve_resources_for_gen(self, request):
         """
@@ -516,32 +590,6 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
             comm_q = self.qmm.reserve_communication_qubit()
             storage_q = comm_q
         return comm_q, storage_q
-
-    def _schedule_request(self, evt):
-        """
-        Event handler for scheduling queue items from the distributed queue that are ready to be serviced.  Crafts
-        generation templates to be filled in the future and stores request information for tracking.
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The event that triggered this handler
-        """
-        # Get the queue that has an item ready
-        queue = evt.source
-        qid, queue_item = queue.ready_items.pop(0)
-        qseq = queue_item.seq
-
-        # Store the request under the absolute queue id
-        aid = (qid, qseq)
-        request = queue_item.request
-
-        # Store the absolute queue id under a unique request key
-        logger.debug("Scheduling request {}".format(aid))
-
-        key = (request.create_id, request.otherID)
-        self.outstanding_items[key] = aid
-        self.schedule_backlog[key] = request
-
-        if queue_item.lifetime:
-            self._wait_once(self.service_timeout_handler, entity=queue_item, event_type=queue_item._EVT_TIMEOUT)
 
     def _get_next_request(self):
         """
@@ -568,7 +616,6 @@ class RequestScheduler(Scheduler, pydynaa.Entity):
         """
         request = queue_item.request
         self.timed_out_requests.append(request)
-        logger.debug("Removing local queue item from pydynaa")
         aid = queue_item.qid, queue_item.seq
         self.clear_request(aid)
         self._schedule_now(self._EVT_REQ_TIMEOUT)

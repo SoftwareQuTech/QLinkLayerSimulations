@@ -749,9 +749,17 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
     def local_peek(self, qid=0, qseq=None):
         """
         Get top item from the queue locally without removing it from the queue.
-        :param qid:
-        :return:
+        :param qid: int or tuple(int, int)
+            The queue ID or aid
+        :param qseq: int
+            The queue sequence number
+        :return: :obj:`~_LocalQueueItem`
+            The corresponding queue item
         """
+        # Check if first argument is actually the full aid
+        if isinstance(qid, tuple):
+            return self.local_peek(qid[0], qid[1])
+
         if not (self._valid_qid(qid)):
             # Not a valid Queue ID
             raise LinkLayerException("Invalid Queue ID")
