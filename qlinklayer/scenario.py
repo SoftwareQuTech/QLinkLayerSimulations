@@ -7,8 +7,8 @@ from netsquid.pydynaa import EventType
 from netsquid.simutil import sim_time
 from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FORMALISM
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCCmdHeader, CQCEPRRequestHeader, CQC_TP_COMMAND, \
-    CQC_CMD_EPR, CQC_VERSION, CQC_CMD_HDR_LENGTH, CQC_EPR_REQ_LENGTH, CQC_HDR_LENGTH, CQCNotifyHeader, \
-    CQC_NOTIFY_LENGTH
+    CQC_CMD_EPR, CQC_VERSION, CQC_CMD_HDR_LENGTH, CQC_EPR_REQ_LENGTH, CQC_HDR_LENGTH, CQCXtraQubitHeader, \
+    CQC_XTRA_QUBIT_HDR_LENGTH
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
 
@@ -304,8 +304,8 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         :return: tuple (create_id, ent_id, logical_id, f_goodness, t_create, t_goodness)
         """
         result = result[CQC_HDR_LENGTH:]
-        cqc_notify_header = CQCNotifyHeader(result[:CQC_NOTIFY_LENGTH])
-        result = result[CQC_NOTIFY_LENGTH:]
+        cqc_xtra_qubit_header = CQCXtraQubitHeader(result[:CQC_XTRA_QUBIT_HDR_LENGTH])
+        result = result[CQC_XTRA_QUBIT_HDR_LENGTH:]
         cqc_ent_info_header = EntInfoCreateKeepHeader(result)
 
         create_id = cqc_ent_info_header.create_id
@@ -313,7 +313,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         peer_id = cqc_ent_info_header.ip_B
         mhp_seq = cqc_ent_info_header.mhp_seq
         ent_id = (creator_id, peer_id, mhp_seq)
-        logical_id = cqc_notify_header.qubit_id
+        logical_id = cqc_xtra_qubit_header.qubit_id
         f_goodness = cqc_ent_info_header.goodness
         t_create = cqc_ent_info_header.t_create
         t_goodness = cqc_ent_info_header.t_goodness
@@ -467,7 +467,7 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         :return: tuple (create_id, ent_id, meas_out, basis, f_goodness, t_create)
         """
         result = result[CQC_HDR_LENGTH:]
-        result = result[CQC_NOTIFY_LENGTH:]
+        result = result[CQC_XTRA_QUBIT_HDR_LENGTH:]
         cqc_ent_info_header = EntInfoMeasDirectHeader(result)
 
         create_id = cqc_ent_info_header.create_id
