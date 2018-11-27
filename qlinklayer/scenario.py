@@ -106,13 +106,13 @@ class EGPSimulationScenario(TimedProtocol):
             max_time = num_pairs * self.tmax_pair
 
             # Create a request
-            cqc_request = self.construct_cqc_epr_request(otherID=self.otherID, num_pairs=num_pairs,
+            cqc_request_raw = self.construct_cqc_epr_request(otherID=self.otherID, num_pairs=num_pairs,
                                                          min_fidelity=self.min_fidelity, max_time=max_time,
                                                          purpose_id=self.purpose_id, priority=self.priority,
                                                          store=self.store, measure_directly=self.measure_directly)
 
             # Give the request to the egp
-            self._create(cqc_request)
+            self._create(cqc_request_raw)
 
             self.created_requests += 1
 
@@ -131,7 +131,7 @@ class EGPSimulationScenario(TimedProtocol):
 
     @staticmethod
     def construct_cqc_epr_request(otherID, num_pairs=1, min_fidelity=0.5, max_time=0, purpose_id=0, priority=0,
-                                  store=True, measure_directly=False):
+                                  store=True, atomic=False, measure_directly=False):
         """
         Construct a CQC message for creating an EPR pair, to be passed to the create method of EGP.
         :return: bytes
@@ -145,24 +145,23 @@ class EGPSimulationScenario(TimedProtocol):
 
         cqc_epr_request_header = CQCEPRRequestHeader()
         cqc_epr_request_header.setVals(remote_ip=otherID, remote_port=0, num_pairs=num_pairs, min_fidelity=min_fidelity,
-                                       max_time=max_time, priority=priority, store=store,
+                                       max_time=max_time, priority=priority, store=store, atomic=atomic,
                                        measure_directly=measure_directly)
 
         cqc_message = cqc_header.pack() + cqc_cmd_header.pack() + cqc_epr_request_header.pack()
         return cqc_message
 
-    def _create(self, cqc_request):
+    def _create(self, cqc_request_raw):
         """
         Internal method for calling the EGP's create method and storing the creation id and timestamp info for
         data collection
-        :param request: obj `~qlinklayer.egp.EGPRequest`
-            The request we are creating
+        :param cqc_request_raw: bytes
+            The raw CQC request consisting of a CQCHeader + CQCCmdHeader and CQCEPRRequestHeader
         """
         # Only extract result information if the create was successfully submitted
-        result = self.egp.create(cqc_request=cqc_request)
-        if result is not None:
-            create_id, create_time = result
-            self.create_storage.append((self.egp.node.nodeID, cqc_request, create_id, create_time))
+        create_id = self.egp.create(cqc_request_raw=cqc_request_raw)
+        if create_id is not None:
+            self.create_storage.append((self.egp.node.nodeID, cqc_request_raw, create_id))
             logger.debug("Scheduling create event now.")
             self._schedule_now(self._EVT_CREATE)
 

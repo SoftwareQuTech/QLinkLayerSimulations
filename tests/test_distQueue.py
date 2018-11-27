@@ -5,7 +5,7 @@ import numpy as np
 import logging
 from random import randint
 from collections import defaultdict
-from qlinklayer.egp import EGPRequest
+from qlinklayer.scheduler import SchedulerRequest
 from qlinklayer.distQueue import DistributedQueue, FilteredDistributedQueue, EGPDistributedQueue
 from qlinklayer.scenario import EGPSimulationScenario
 from qlinklayer.toolbox import LinkLayerException
@@ -498,9 +498,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         network.start()
 
         # Test that we cannot add a request
-        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
-                                                                             min_fidelity=0.5, max_time=10000,
-                                                                             purpose_id=0, priority=10))
+        request = SchedulerRequest(num_pairs=1, min_fidelity=0.5, timeout_cycle=10, purpose_id=0, priority=10)
 
         # Test that no rule results in rejection of request
         aliceDQ.add(request)
@@ -509,7 +507,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         sim_run(2)
         self.assertIsNotNone(self.result)
         reported_request = self.result[-1]
-        self.assertEqual(vars(reported_request), vars(request))
+        self.assertEqual(reported_request, request)
         self.assertEqual(self.result[:3], (aliceDQ.DQ_REJECT, expected_qid, expected_qseq))
 
         # Reset result
@@ -522,7 +520,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         sim_run(4)
         self.assertIsNotNone(self.result)
         reported_request = self.result[-1]
-        self.assertEqual(vars(reported_request), vars(request))
+        self.assertEqual(reported_request, request)
         self.assertEqual(self.result[:3], (aliceDQ.DQ_OK, expected_qid, expected_qseq))
 
         # Reset result
@@ -535,7 +533,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         sim_run(6)
         self.assertIsNotNone(self.result)
         reported_request = self.result[-1]
-        self.assertEqual(vars(reported_request), vars(request))
+        self.assertEqual(reported_request, request)
         self.assertEqual(self.result[:3], (aliceDQ.DQ_REJECT, expected_qid, expected_qseq))
 
 
@@ -598,10 +596,7 @@ class TestEGPDistributedQueue(unittest.TestCase):
 
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
-        request = EGPRequest()
-        request.add_sched_cycle(1)
-        request.add_timeout_cycle((2, 0))
-        request.is_set = True
+        request = SchedulerRequest(sched_cycle=1, timeout_cycle=2)
         aliceDQ.add(request, 0)
         sim_run(10)
         queue_item_alice = aliceDQ.local_peek(0)
@@ -651,8 +646,7 @@ class TestEGPDistributedQueue(unittest.TestCase):
 
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
-        request = EGPRequest()
-        request.is_set = True
+        request = SchedulerRequest()
         aliceDQ.add(request, qid=1)
         sim_run(10)
         self.assertTrue(callback_called[0])
@@ -675,10 +669,8 @@ class TestEGPDistributedQueue(unittest.TestCase):
 
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
-        alice_requests = [EGPRequest(), EGPRequest()]
-        bob_requests = [EGPRequest(), EGPRequest()]
-        for req in alice_requests + bob_requests:
-            req.is_set = True
+        alice_requests = [SchedulerRequest(), SchedulerRequest()]
+        bob_requests = [SchedulerRequest(), SchedulerRequest()]
         aliceDQ.add(alice_requests[0], qid=0)
         aliceDQ.add(alice_requests[1], qid=1)
         bobDQ.add(bob_requests[0], qid=0)

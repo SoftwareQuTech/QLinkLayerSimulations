@@ -82,9 +82,7 @@ class TestRequestScheduler(unittest.TestCase, Entity):
         test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
         test_scheduler.configure_mhp_timings(1, 2, 0, 0)
 
-        request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1,
-                                                                             min_fidelity=1, max_time=0, purpose_id=0,
-                                                                             priority=0))
+        request = EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0, priority=0)
 
         conn = dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",
@@ -160,9 +158,7 @@ class TestTimings(unittest.TestCase, Entity):
 
     def test_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
-        request = EGPRequest()
-        request.max_time = 12
-        request.is_set = True
+        request = EGPRequest(max_time=12)
 
         sim_run(1)
 
@@ -180,29 +176,27 @@ class TestTimings(unittest.TestCase, Entity):
 
         self.assertTrue(self.timeout_handler_called[0])
 
-    def test_wrap_around(self):
+    def test_too_long_timeout(self):
         max_mhp_cycle_number = 10
 
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0, max_mhp_cycle_number=max_mhp_cycle_number)
-        request = EGPRequest()
-        request.max_time = 90
-        request.is_set = True
+        request = EGPRequest(max_time=90)
 
-        self.test_scheduler.add_request(request)
+        succ = self.test_scheduler.add_request(request)
 
-        sim_run(50)
-        self.test_scheduler.inc_cycle()
-        self.assertFalse(self.timeout_handler_called[0])
+        self.assertFalse(succ)
 
-        sim_run(90)
-
-        self.assertTrue(self.timeout_handler_called[0])
+        # sim_run(50)
+        # self.test_scheduler.inc_cycle()
+        # self.assertFalse(self.timeout_handler_called[0])
+        #
+        # sim_run(100)
+        #
+        # self.assertTrue(self.timeout_handler_called[0])
 
     def test_early_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
-        request = EGPRequest()
-        request.max_time = 1
-        request.is_set = True
+        request = EGPRequest(max_time=1)
 
         sim_run(1)
 
@@ -215,9 +209,7 @@ class TestTimings(unittest.TestCase, Entity):
 
     def test_short_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
-        request = EGPRequest()
-        request.max_time = 1
-        request.is_set = True
+        request = EGPRequest(max_time=1)
 
         sim_run(9.9)
 
@@ -233,9 +225,7 @@ class TestTimings(unittest.TestCase, Entity):
 
     def test_multiple_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
-        request = EGPRequest()
-        request.max_time = 10
-        request.is_set = True
+        request = EGPRequest(max_time=10)
 
         sim_run(10)
 

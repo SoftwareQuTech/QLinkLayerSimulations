@@ -174,8 +174,8 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                       purpose_id=2, priority=2)
 
         # Schedule a sequence of various create requests
-        alice_create_id, alice_create_time = egpA.create(alice_request)
-        bob_create_id, bob_create_time = egpB.create(bob_request)
+        alice_create_id = egpA.create(alice_request)
+        bob_create_id = egpB.create(bob_request)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
@@ -238,7 +238,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule a sequence of various create requests
         alice_create_info = []
         for request in alice_requests:
-            alice_create_id, alice_create_time = egpA.create(request)
+            alice_create_id = egpA.create(request)
             alice_create_info.append(alice_create_id)
 
         # Construct a network for the simulation
@@ -279,8 +279,8 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                       min_fidelity=0.5, max_time=0,
                                                                       purpose_id=2, priority=2)
 
-        alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
-        bob_scheduled_create = partial(egpB.create, cqc_request=bob_request)
+        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
+        bob_scheduled_create = partial(egpB.create, cqc_request_raw=bob_request)
 
         # Schedule a sequence of various create requests
         sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
@@ -315,8 +315,8 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                       min_fidelity=0.5, max_time=0,
                                                                       purpose_id=2, priority=2, measure_directly=True)
 
-        alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
-        bob_scheduled_create = partial(egpB.create, cqc_request=bob_request)
+        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
+        bob_scheduled_create = partial(egpB.create, cqc_request_raw=bob_request)
 
         # Schedule a sequence of various create requests
         sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
@@ -389,10 +389,10 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                            purpose_id=2, priority=2,
                                                                            measure_directly=True)
 
-        alice_scheduled_epr = partial(egpA.create, cqc_request=alice_request_epr)
-        alice_scheduled_bits = partial(egpA.create, cqc_request=alice_request_bits)
-        bob_scheduled_epr = partial(egpB.create, cqc_request=bob_request_epr)
-        bob_scheduled_bits = partial(egpB.create, cqc_request=bob_request_bits)
+        alice_scheduled_epr = partial(egpA.create, cqc_request_raw=alice_request_epr)
+        alice_scheduled_bits = partial(egpA.create, cqc_request_raw=alice_request_bits)
+        bob_scheduled_epr = partial(egpB.create, cqc_request_raw=bob_request_epr)
+        bob_scheduled_bits = partial(egpB.create, cqc_request_raw=bob_request_bits)
 
         # Schedule a sequence of various create requests
         sim_scheduler.schedule_function(func=alice_scheduled_epr, t=0)
@@ -468,8 +468,8 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                       min_fidelity=0.5, max_time=0,
                                                                       purpose_id=2, priority=2)
 
-        alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
-        bob_scheduled_create = partial(egpB.create, cqc_request=bob_request)
+        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
+        bob_scheduled_create = partial(egpB.create, cqc_request_raw=bob_request)
 
         # Schedule a sequence of various create requests
         sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
@@ -512,7 +512,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         sched_time = egpA.scheduler.get_schedule_cycle(alice_request)
         self.assertGreaterEqual(sched_time, 0)
         self.assertLess(sched_time, egpA.scheduler.max_mhp_cycle_number)
-        create_id, create_time = egpA.create(cqc_request=alice_request)
+        egpA.create(cqc_request_raw=alice_request)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
@@ -546,7 +546,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation to ensure timeout order when checking results
         sim_scheduler = SimulationScheduler()
         for t, request in enumerate(alice_requests):
-            alice_scheduled_create = partial(egpA.create, cqc_request=request)
+            alice_scheduled_create = partial(egpA.create, cqc_request_raw=request)
             sim_scheduler.schedule_function(func=alice_scheduled_create, t=t)
 
         # Construct a network for the simulation
@@ -566,7 +566,6 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         sim_run(10)
 
-        # alice_EGP_requests = list(map(EGPRequest, alice_requests))
         expected_results = [(egpA.dqp.DQ_TIMEOUT, create_id) for create_id in range(len(alice_requests))]
         self.assertEqual(self.alice_results, expected_results)
         self.assertEqual(self.bob_results, [])
@@ -592,7 +591,7 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                         min_fidelity=0.5, max_time=max_time,
                                                                         purpose_id=1, priority=10)
 
-        alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
+        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
         # Schedule a sequence of various create requests
         t0 = 0
         sim_scheduler.schedule_function(func=alice_scheduled_create, t=t0)
@@ -708,8 +707,8 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                       min_fidelity=0.5, max_time=0,
                                                                       purpose_id=2, priority=2)
 
-        alice_create_id, _ = egpA.create(cqc_request=alice_request)
-        bob_create_id, _ = egpB.create(cqc_request=bob_request)
+        alice_create_id = egpA.create(cqc_request_raw=alice_request)
+        bob_create_id = egpB.create(cqc_request_raw=bob_request)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
@@ -764,16 +763,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
 
         alice_pairs = 4
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
-                                                                        min_fidelity=0.5, max_time=0,
-                                                                        purpose_id=1, priority=10)
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs, min_fidelity=0.5, max_time=0, purpose_id=1, priority=10)
 
         bob_pairs = 4
-        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
-                                                                      min_fidelity=0.5, max_time=0,
-                                                                      purpose_id=1, priority=10)
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs, min_fidelity=0.5, max_time=0, purpose_id=1, priority=10)
 
-        alice_create_id, create_time = egpA.create(alice_request)
+        alice_create_id = egpA.create(alice_request)
         egpB.create(bob_request)
 
         # Construct a network for the simulation
@@ -867,7 +862,7 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                         min_fidelity=0.5, max_time=0,
                                                                         purpose_id=1, priority=10)
 
-        create_id, _ = egpA.create(cqc_request=alice_request)
+        create_id = egpA.create(cqc_request_raw=alice_request)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
@@ -932,10 +927,10 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                              min_fidelity=0.5, max_time=1e-9,
                                                                              purpose_id=1, priority=10)
 
-        egpA.create(cqc_request=node_self_request)
-        egpA.create(cqc_request=node_unknown_request)
-        egpA.create(cqc_request=unsuppfid_requet)
-        egpA.create(cqc_request=unsupptime_request)
+        egpA.create(cqc_request_raw=node_self_request)
+        egpA.create(cqc_request_raw=node_unknown_request)
+        egpA.create(cqc_request_raw=unsuppfid_requet)
+        egpA.create(cqc_request_raw=unsupptime_request)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
@@ -972,19 +967,19 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
 
         # Verify neither alice nor bob can add requests
-        expected_id, _ = egpA.create(alice_request)
+        expected_id = egpA.create(alice_request)
         sim_run(1)
         alice_expected = [(egpA.dqp.DQ_REJECT, expected_id)]
         self.assertEqual(self.alice_results, alice_expected)
 
-        expected_id, _ = egpB.create(bob_request)
+        expected_id = egpB.create(bob_request)
         sim_run(2)
         bob_expected = [(egpB.dqp.DQ_REJECT, expected_id)]
         self.assertEqual(self.bob_results, bob_expected)
 
         # Verify alice can submit when bob accepts
         egpB.add_queue_rule(alice, alice_purpose_id)
-        expected_id, _ = egpA.create(alice_request)
+        expected_id = egpA.create(alice_request)
         sim_run(5)
         self.assertEqual(len(self.alice_results), 2)
         self.assertEqual(len(self.alice_results), len(self.bob_results))
@@ -994,14 +989,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(alice_ent_id, bob_ent_id)
 
         # Verify is still unable
-        expected_id, _ = egpB.create(bob_request)
+        expected_id = egpB.create(bob_request)
         sim_run(7)
         self.assertEqual(len(self.bob_results), 3)
         self.assertEqual(self.bob_results[-1], (egpB.dqp.DQ_REJECT, expected_id))
 
         # Add a rule to alice for bob
         egpA.add_queue_rule(bob, bob_purpose_id)
-        expected_id, _ = egpB.create(bob_request)
+        expected_id = egpB.create(bob_request)
         sim_run(12)
         self.assertEqual(len(self.alice_results), 3)
         self.assertEqual(len(self.bob_results), 4)
@@ -1012,13 +1007,13 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Remove a rule from alice
         egpA.remove_queue_rule(bob, bob_purpose_id)
-        expected_id, _ = egpB.create(bob_request)
+        expected_id = egpB.create(bob_request)
         sim_run(13)
         self.assertEqual(len(self.bob_results), 5)
         self.assertEqual(self.bob_results[-1], (egpB.dqp.DQ_REJECT, expected_id))
 
         # Verify alice can submit bob accepts
-        expected_id, _ = egpA.create(alice_request)
+        expected_id = egpA.create(alice_request)
         sim_run(18)
         self.assertEqual(len(self.alice_results), 4)
         self.assertEqual(len(self.bob_results), 6)
@@ -1029,7 +1024,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Remove alice's rule from bob
         egpB.remove_queue_rule(alice, alice_purpose_id)
-        expected_id, _ = egpA.create(alice_request)
+        expected_id = egpA.create(alice_request)
         sim_run(23)
         self.assertEqual(len(self.alice_results), 5)
         self.assertEqual(self.alice_results[-1], (egpA.dqp.DQ_REJECT, expected_id))
@@ -1066,8 +1061,8 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                       min_fidelity=0.5, max_time=0,
                                                                       purpose_id=2, priority=2)
 
-        alice_scheduled_create = partial(egpA.create, cqc_request=alice_request)
-        bob_scheduled_create = partial(egpB.create, cqc_request=bob_request)
+        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
+        bob_scheduled_create = partial(egpB.create, cqc_request_raw=bob_request)
 
         # Schedule a sequence of various create requests
         sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
