@@ -23,7 +23,8 @@ from SimulaQron.cqc.backend.entInfoHeader import ENT_INFO_LENGTH, EntInfoCreateK
 
 EGPRequest = namedtuple("EGP_request",
                         ["purpose_id", "other_id", "num_pairs", "min_fidelity", "max_time", "priority", "store",
-                         "measure_directly", "atomic"], defaults=(0, 0, 0, 0, 0, 0, True, False, False))
+                         "measure_directly", "atomic"])
+EGPRequest.__new__.__defaults__ = (0, 0, 0, 0, 0, 0, True, False, False)
 
 
 class EGP(EasyProtocol):

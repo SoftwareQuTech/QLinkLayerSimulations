@@ -12,11 +12,11 @@ from qlinklayer.toolbox import LinkLayerException
 
 SchedulerRequest = namedtuple("Scheduler_request",
                               ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
-                               "priority", "store", "atomic", "measure_directly", "master_request"],
-                              defaults=(0,) * 7 + (True, False, False, True))
+                               "priority", "store", "atomic", "measure_directly", "master_request"])
+SchedulerRequest.__new__.__defaults__ = (0,) * 7 + (True, False, False, True)
 
-SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"],
-                          defaults=(False,) + (None,) * 4)
+SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"])
+SchedulerGen.__new__.__defaults__ = (False,) + (None,) * 4
 
 
 class Scheduler(metaclass=abc.ABCMeta):
