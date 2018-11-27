@@ -6,7 +6,6 @@ from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
-from netsquid.pydynaa import EventHandler, Entity
 from qlinklayer.distQueue import EGPDistributedQueue
 from qlinklayer.scheduler import RequestScheduler
 from qlinklayer.qmm import QuantumMemoryManagement
@@ -25,7 +24,7 @@ class IncreasMHPCycleProtocol(TimedProtocol):
         self.scheduler.inc_cycle()
 
 
-class TestRequestScheduler(unittest.TestCase, Entity):
+class TestRequestScheduler(unittest.TestCase):
     def setUp(self):
         memA = NVCommunicationDevice(name="AMem", num_positions=2)
         memB = NVCommunicationDevice(name="BMem", num_positions=2)
@@ -125,9 +124,9 @@ class TestRequestScheduler(unittest.TestCase, Entity):
         self.assertEqual(gen, (True, (0, 0), 0, 1, {}))
 
 
-class TestTimings(unittest.TestCase, Entity):
+class TestTimings(unittest.TestCase):
     def setUp(self):
-        def timeout_handler(evt):
+        def timeout_handler(request):
             self.timeout_handler_called[0] = True
 
         self.timeout_handler_called = [False]
@@ -154,8 +153,7 @@ class TestTimings(unittest.TestCase, Entity):
         increase_mhp_cycle_protocol = IncreasMHPCycleProtocol(scheduler=self.test_scheduler)
         increase_mhp_cycle_protocol.start()
 
-        handler = EventHandler(timeout_handler)
-        self._wait(handler, entity=self.test_scheduler, event_type=self.test_scheduler._EVT_REQ_TIMEOUT)
+        self.test_scheduler.set_timeout_callback(timeout_handler)
 
     def test_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
@@ -186,14 +184,6 @@ class TestTimings(unittest.TestCase, Entity):
         succ = self.test_scheduler.add_request(request)
 
         self.assertFalse(succ)
-
-        # sim_run(50)
-        # self.test_scheduler.inc_cycle()
-        # self.assertFalse(self.timeout_handler_called[0])
-        #
-        # sim_run(100)
-        #
-        # self.assertTrue(self.timeout_handler_called[0])
 
     def test_early_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)

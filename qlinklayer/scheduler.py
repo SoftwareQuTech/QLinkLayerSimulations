@@ -4,8 +4,8 @@
 import abc
 from math import ceil
 from collections import namedtuple
-from netsquid.pydynaa import Entity, EventType
 from netsquid.simutil import sim_time
+from netsquid.pydynaa import Entity
 from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
 from qlinklayer.toolbox import LinkLayerException
@@ -42,7 +42,7 @@ class Scheduler(metaclass=abc.ABCMeta):
         pass
 
 
-class RequestScheduler(Scheduler, Entity):
+class RequestScheduler(Scheduler):
     """
     Stub for a scheduler to decide how we assign and consume elements of the queue.
     """
@@ -52,9 +52,6 @@ class RequestScheduler(Scheduler, Entity):
         self.distQueue = distQueue
         self.feu = feu
 
-        # Queue service timeout handler
-        self._EVT_REQ_TIMEOUT = EventType("REQ TIMEOUT", "Triggers when request was not completed in time")
-
         # Quantum memory management
         self.qmm = qmm
         self.my_free_memory = self.qmm.get_free_mem_ad()
@@ -63,7 +60,6 @@ class RequestScheduler(Scheduler, Entity):
         # Generation tracking
         self.curr_aid = None  # The absolute queue ID of the current request being handled
         self.curr_gen = None  # The current generation being handled
-        self.timed_out_requests = []  # List of requests that have timed out
         self.prev_requests = []  # Previous requests (for filtering delayed communications)
         self.max_prev_requests = 5  # Number of previous requests to store
 
@@ -79,8 +75,20 @@ class RequestScheduler(Scheduler, Entity):
         self.local_trigger = 0.0  # Trigger for local MHP
         self.remote_trigger = 0.0  # Trigger for remote MHP
 
+        # Timeout callback, called when a request times out
+        self.timeout_callback = None
+
         if isinstance(distQueue, EGPDistributedQueue):
             distQueue.set_timeout_callback(self._handle_item_timeout)
+
+    def set_timeout_callback(self, timeout_callback):
+        """
+        Sets the timeout callback function. Should be a function which takes a SchedulerRequest as a single argument.
+
+        :param timeout_callback: function
+        :return: None
+        """
+        self.timeout_callback = timeout_callback
 
     def configure_mhp_timings(self, cycle_period, full_cycle, local_trigger, remote_trigger, max_mhp_cycle_number=None,
                               mhp_cycle_number=None, mhp_cycle_offset=None):
@@ -690,10 +698,9 @@ class RequestScheduler(Scheduler, Entity):
             The local queue item
         """
         request = queue_item.request
-        self.timed_out_requests.append(request)
         aid = queue_item.qid, queue_item.seq
         self.clear_request(aid)
-        self._schedule_now(self._EVT_REQ_TIMEOUT)
+        self.timeout_callback(request)
 
     def _reset_outstanding_req_data(self):
         """

@@ -1,7 +1,6 @@
 import abc
 from collections import namedtuple
 import random
-# import bitstring
 
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
@@ -239,8 +238,7 @@ class NodeCentricEGP(EGP):
 
         # Create the request scheduler
         self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
-        self.request_timeout_handler = EventHandler(self._request_timeout_handler)
-        self._wait(self.request_timeout_handler, entity=self.scheduler, event_type=self.scheduler._EVT_REQ_TIMEOUT)
+        self.scheduler.set_timeout_callback(self.request_timeout_handler)
 
         # Pydynaa events
         self._EVT_CREATE = EventType("CREATE", "Call to create has completed")
@@ -1118,13 +1116,11 @@ class NodeCentricEGP(EGP):
             self.measurement_results = []
             self._schedule_now(self._EVT_REQ_COMPLETED)
 
-    def _request_timeout_handler(self, evt):
+    def request_timeout_handler(self, request):
         """
         Handler for requests that were not serviced within their alotted time.  Passes an error along with the
         request up to higher layers.
-        :param evt: obj `~netsquid.pydynaa.Event`
-            The event that triggered this handler
+        :param evt: obj `~qlinklayer.scheduler.SchedulerRequest`
+            The request (used to get the Create ID)
         """
-        scheduler = evt.source
-        request = scheduler.timed_out_requests.pop(0)
         self.issue_err(err=self.ERR_TIMEOUT, err_data=request.create_id)
