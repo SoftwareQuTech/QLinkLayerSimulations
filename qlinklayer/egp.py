@@ -17,8 +17,8 @@ from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, \
-    CQC_VERSION, CQC_TP_EPR_OK, CQCNotifyHeader, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH, CQCXtraQubitHeader, CQC_XTRA_QUBIT_HDR_LENGTH
-from SimulaQron.cqc.backend.entInfoHeader import ENT_INFO_LENGTH, EntInfoCreateKeepHeader, EntInfoMeasDirectHeader, ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
+    CQC_VERSION, CQC_TP_EPR_OK, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH, CQCXtraQubitHeader, CQC_XTRA_QUBIT_HDR_LENGTH
+from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader, ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
 
 EGPRequest = namedtuple("EGP_request",
                         ["purpose_id", "other_id", "num_pairs", "min_fidelity", "max_time", "priority", "store",
@@ -1071,7 +1071,7 @@ class NodeCentricEGP(EGP):
         else:
             raise ValueError("Unknown EPR OK message type")
 
-        cqc_ok_message = cqc_header.pack() + cqc_notify_header.pack() + cqc_ent_info_header.pack()
+        cqc_ok_message = cqc_header.pack() + cqc_xtra_qubit_header.pack() + cqc_ent_info_header.pack()
         return cqc_ok_message
 
     def _return_ok(self, mhp_seq, aid):
