@@ -82,7 +82,7 @@ class TestRequestScheduler(unittest.TestCase, Entity):
         test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
         test_scheduler.configure_mhp_timings(1, 2, 0, 0)
 
-        request = EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=12, purpose_id=0, priority=0)
+        request = EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0, priority=0)
 
         conn = dqpA.conn
         self.network = EasyNetwork(name="DQPNetwork",
@@ -121,7 +121,7 @@ class TestRequestScheduler(unittest.TestCase, Entity):
 
         # Verify that the next request is the one we submitted
         gen = test_scheduler.next()
-        self.assertEqual(gen, (True, (0, 0), 0, 1, None))
+        self.assertEqual(gen, (True, (0, 0), 0, 1, {}))
 
 
 class TestTimings(unittest.TestCase, Entity):

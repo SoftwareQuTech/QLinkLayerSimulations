@@ -444,6 +444,7 @@ class NodeCentricEGP(EGP):
 
         # Fidelity Estimation Unit used to estimate the fidelity of produced entangled pairs
         self.feu = SingleClickFidelityEstimationUnit(node=self.node, mhp_service=self.mhp_service)
+        self.scheduler.add_feu(self.feu)
 
     def _connect_dqp(self, other_egp, dqp_conn=None):
         """
