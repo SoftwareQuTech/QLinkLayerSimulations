@@ -467,7 +467,6 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         :return: tuple (create_id, ent_id, meas_out, basis, f_goodness, t_create)
         """
         result = result[CQC_HDR_LENGTH:]
-        result = result[CQC_XTRA_QUBIT_HDR_LENGTH:]
         cqc_ent_info_header = EntInfoMeasDirectHeader(result)
 
         create_id = cqc_ent_info_header.create_id

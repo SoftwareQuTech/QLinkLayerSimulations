@@ -1054,24 +1054,23 @@ class NodeCentricEGP(EGP):
             cqc_ent_info_header.setVals(ip_A=creatorID, port_A=0, ip_B=otherID, port_B=0, mhp_seq=mhp_seq,
                                         t_create=t_create, t_goodness=t_goodness, goodness=fidelity_estimate,
                                         DF=0, create_id=create_id)
+            cqc_ok_message = cqc_header.pack() + cqc_xtra_qubit_header.pack() + cqc_ent_info_header.pack()
 
         elif type == EntInfoMeasDirectHeader.type:
             cqc_header = CQCHeader()
             length = CQC_XTRA_QUBIT_HDR_LENGTH + ENT_INFO_MEAS_DIRECT_LENGTH
             cqc_header.setVals(version=CQC_VERSION, tp=CQC_TP_EPR_OK, app_id=0, length=length)
 
-            cqc_xtra_qubit_header = CQCXtraQubitHeader()
-            cqc_xtra_qubit_header.setVals(logical_id)
-
             creatorID, otherID, mhp_seq = ent_id
             cqc_ent_info_header = EntInfoMeasDirectHeader()
             cqc_ent_info_header.setVals(ip_A=creatorID, port_A=0, ip_B=otherID, port_B=0, mhp_seq=mhp_seq,
                                         meas_out=m, basis=basis, t_create=t_create, goodness=fidelity_estimate,
                                         DF=0, create_id=create_id)
+            cqc_ok_message = cqc_header.pack() + cqc_ent_info_header.pack()
+
         else:
             raise ValueError("Unknown EPR OK message type")
 
-        cqc_ok_message = cqc_header.pack() + cqc_xtra_qubit_header.pack() + cqc_ent_info_header.pack()
         return cqc_ok_message
 
     def _return_ok(self, mhp_seq, aid):
