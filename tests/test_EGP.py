@@ -308,11 +308,11 @@ class TestNodeCentricEGP(unittest.TestCase):
         alice_num_bits = 255
         bob_num_bits = 255
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_bits,
-                                                                        min_fidelity=0.5, max_time=0,
+                                                                        min_fidelity=0.9, max_time=0,
                                                                         purpose_id=1, priority=10,
                                                                         measure_directly=True)
         bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
-                                                                      min_fidelity=0.5, max_time=0,
+                                                                      min_fidelity=0.9, max_time=0,
                                                                       purpose_id=2, priority=2, measure_directly=True)
 
         alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
@@ -381,11 +381,11 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                              measure_directly=True)
 
         bob_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_pairs,
-                                                                          min_fidelity=0.5, max_time=0,
+                                                                          min_fidelity=0.9, max_time=0,
                                                                           purpose_id=2, priority=2)
 
         bob_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
-                                                                           min_fidelity=0.5, max_time=0,
+                                                                           min_fidelity=0.9, max_time=0,
                                                                            purpose_id=2, priority=2,
                                                                            measure_directly=True)
 
