@@ -17,14 +17,17 @@ from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, \
-    CQC_VERSION, CQC_TP_EPR_OK, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH, CQCXtraQubitHeader, CQC_XTRA_QUBIT_HDR_LENGTH
-from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader, ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
+    CQC_VERSION, CQC_TP_EPR_OK, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH, CQCXtraQubitHeader,\
+    CQC_XTRA_QUBIT_HDR_LENGTH
+from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader,\
+    ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
 
 
 EGPRequest = namedtuple("EGP_request",
                         ["purpose_id", "other_id", "num_pairs", "min_fidelity", "max_time", "priority", "store",
                          "measure_directly", "atomic"])
 EGPRequest.__new__.__defaults__ = (0, 0, 0, 0, 0, 0, True, False, False)
+
 
 class EGP(EasyProtocol):
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None):
@@ -1088,8 +1091,9 @@ class NodeCentricEGP(EGP):
             logger.error("Request not found!")
             self.issue_err(err=self.ERR_OTHER)
 
-        # Check that aid actually corresponds to the current request
-        if not self.scheduler.is_generating_aid(aid):
+        # Check that aid actually corresponds to a request, measure directly requests may have in-flight messages
+        # which arrived after we switched to servicing another request
+        if not self.scheduler.is_generating_aid(aid) and not self.scheduler.is_measure_directly(aid):
             logger.error("Request absolute queue IDs mismatch!")
             self.issue_err(err=self.ERR_OTHER)
 

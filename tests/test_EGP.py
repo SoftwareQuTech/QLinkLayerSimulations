@@ -122,12 +122,12 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         return alice, bob
 
-    def create_egps(self, nodeA, nodeB, connected=True, accept_all=True):
+    def create_egps(self, nodeA, nodeB, connected=True, accept_all=True, num_priorities=1):
         # Set up EGP
         egpA = NodeCentricEGP(node=nodeA, err_callback=self.alice_err_callback, ok_callback=self.alice_callback,
-                              accept_all_requests=accept_all)
+                              accept_all_requests=accept_all, num_priorities=num_priorities)
         egpB = NodeCentricEGP(node=nodeB, err_callback=self.bob_err_callback, ok_callback=self.bob_callback,
-                              accept_all_requests=accept_all)
+                              accept_all_requests=accept_all, num_priorities=num_priorities)
 
         if connected:
             egpA.connect_to_peer_protocol(egpB)
@@ -307,20 +307,25 @@ class TestNodeCentricEGP(unittest.TestCase):
         sim_scheduler = SimulationScheduler()
         alice_num_bits = 255
         bob_num_bits = 255
+        # Construct a request with higher priority
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_bits,
                                                                         min_fidelity=0.9, max_time=0,
-                                                                        purpose_id=1, priority=10,
+                                                                        purpose_id=1, priority=0,
                                                                         measure_directly=True)
+
+        # Construct a request with lower priority
         bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
                                                                       min_fidelity=0.9, max_time=0,
-                                                                      purpose_id=2, priority=2, measure_directly=True)
+                                                                      purpose_id=2, priority=1, measure_directly=True)
 
         alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
         bob_scheduled_create = partial(egpB.create, cqc_request_raw=bob_request)
 
         # Schedule a sequence of various create requests
-        sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
-        sim_scheduler.schedule_function(func=bob_scheduled_create, t=5)
+        # We issue the low priority request first so that it begins and then verify that issuing a higher priority
+        # request afterwards will overtake the low priority request
+        sim_scheduler.schedule_function(func=bob_scheduled_create, t=0)
+        sim_scheduler.schedule_function(func=alice_scheduled_create, t=2)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
@@ -439,6 +444,256 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Check the entangled pairs, ignore communication qubit
         self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
+
+    def test_priority_mixed_requests(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=4)
+
+        # Schedule egp CREATE commands mid simulation
+        alice_num_pairs = 1
+        alice_num_bits = 20
+        bob_num_pairs = 2
+        bob_num_bits = 30
+        alice_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                            num_pairs=alice_num_pairs, min_fidelity=0.5,
+                                                                            max_time=0, purpose_id=1, priority=0)
+
+        bob_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_pairs,
+                                                                          min_fidelity=0.9, max_time=0,
+                                                                          purpose_id=2, priority=1)
+
+        alice_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                             num_pairs=alice_num_bits, min_fidelity=0.5,
+                                                                             max_time=0, purpose_id=1, priority=2,
+                                                                             measure_directly=True)
+
+        bob_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
+                                                                           min_fidelity=0.9, max_time=0,
+                                                                           purpose_id=2, priority=3,
+                                                                           measure_directly=True)
+
+        # Create the requests such that lowest priority enters first but highest priorities complete in correct order
+        create_id_bob_bits = egpB.create(cqc_request_raw=bob_request_bits)
+        create_id_alice_bits = egpA.create(cqc_request_raw=alice_request_bits)
+        create_id_bob_epr = egpB.create(cqc_request_raw=bob_request_epr)
+        create_id_alice_epr = egpA.create(cqc_request_raw=alice_request_epr)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(20)
+        self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
+
+        # We expect the OKs to come back in priority order
+        expected_result_data = [(EntInfoCreateKeepHeader.type, create_id_alice_epr, (alice.nodeID, bob.nodeID, i))
+                                for i in range(alice_num_pairs)]
+        expected_result_data += [(EntInfoCreateKeepHeader.type, create_id_bob_epr, (bob.nodeID, alice.nodeID, i))
+                                 for i in range(alice_num_pairs, alice_num_pairs + bob_num_pairs)]
+        expected_result_data += [(EntInfoMeasDirectHeader.type, create_id_alice_bits, (alice.nodeID, bob.nodeID, i))
+                                 for i in range(alice_num_pairs + bob_num_pairs,
+                                                alice_num_pairs + bob_num_pairs + alice_num_bits)]
+
+        for resA, resB, expected in zip(self.alice_results, self.bob_results, expected_result_data):
+            self.assertEqual(resA[0:3], expected)
+            self.assertEqual(resB[0:3], expected)
+
+        # Need to use initial sequence number because measure directly may lose successful sequence numbers when
+        # requests are completed
+        mhp_seq_start = self.alice_results[-bob_num_bits][2][2]
+        expected_result_data = [(EntInfoMeasDirectHeader.type, create_id_bob_bits, (bob.nodeID, alice.nodeID, i))
+                                for i in range(mhp_seq_start, mhp_seq_start + bob_num_bits)]
+
+        for resA, resB, expected in zip(self.alice_results[-bob_num_bits:], self.bob_results[-bob_num_bits:],
+                                        expected_result_data):
+
+            self.assertEqual(resA[0:3], expected)
+            self.assertEqual(resB[0:3], expected)
+
+    def test_mixed_fidelity(self):
+        # Verify switching between bright state populations
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=4)
+
+        # Schedule egp CREATE commands mid simulation
+        alice_num_pairs = 1
+        alice_num_bits = 20
+        bob_num_pairs = 2
+        bob_num_bits = 30
+        alice_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                            num_pairs=alice_num_pairs,
+                                                                            min_fidelity=0.7,
+                                                                            max_time=0, purpose_id=1, priority=0)
+
+        bob_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID,
+                                                                          num_pairs=bob_num_pairs,
+                                                                          min_fidelity=0.9, max_time=0,
+                                                                          purpose_id=2, priority=1)
+
+        alice_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                             num_pairs=alice_num_bits,
+                                                                             min_fidelity=0.8,
+                                                                             max_time=0, purpose_id=1, priority=2,
+                                                                             measure_directly=True)
+
+        bob_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID,
+                                                                           num_pairs=bob_num_bits,
+                                                                           min_fidelity=0.6, max_time=0,
+                                                                           purpose_id=2, priority=3,
+                                                                           measure_directly=True)
+
+        # Create the requests such that lowest priority enters first but highest priorities complete in correct order
+        egpB.create(cqc_request_raw=bob_request_bits)
+        create_id_alice_bits = egpA.create(cqc_request_raw=alice_request_bits)
+        create_id_bob_epr = egpB.create(cqc_request_raw=bob_request_epr)
+        create_id_alice_epr = egpA.create(cqc_request_raw=alice_request_epr)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(20)
+        self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
+
+        # We expect the OKs to come back in priority order
+        expected_result_data = [(EntInfoCreateKeepHeader.type, create_id_alice_epr, (alice.nodeID, bob.nodeID, i))
+                                for i in range(alice_num_pairs)]
+        expected_result_data += [(EntInfoCreateKeepHeader.type, create_id_bob_epr, (bob.nodeID, alice.nodeID, i))
+                                 for i in range(alice_num_pairs, alice_num_pairs + bob_num_pairs)]
+        expected_result_data += [(EntInfoMeasDirectHeader.type, create_id_alice_bits, (alice.nodeID, bob.nodeID, i))
+                                 for i in range(alice_num_pairs + bob_num_pairs,
+                                                alice_num_pairs + bob_num_pairs + alice_num_bits)]
+
+        for resA, resB, expected in zip(self.alice_results, self.bob_results, expected_result_data):
+            self.assertEqual(resA[0:3], expected)
+            self.assertEqual(resB[0:3], expected)
+
+        # Need to use initial sequence number because measure directly may lose successful sequence numbers when
+        # requests are completed
+        mhp_seq_start = self.alice_results[-bob_num_bits][2][2]
+        expected_result_data = [(EntInfoMeasDirectHeader.type, create_id_alice_bits, (bob.nodeID, alice.nodeID, i))
+                                for i in range(mhp_seq_start, mhp_seq_start + bob_num_bits)]
+
+        for resA, resB, expected in zip(self.alice_results[-bob_num_bits:], self.bob_results[-bob_num_bits:],
+                                        expected_result_data):
+            self.assertEqual(resA[0:3], expected)
+            self.assertEqual(resB[0:3], expected)
+
+    def test_priority_overtake(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=3)
+
+        # Schedule egp CREATE commands mid simulation
+        sim_scheduler = SimulationScheduler()
+        alice_num_bits = 10
+        bob_num_bits = 50
+        bob_num_bits2 = 100
+
+        # Construct a request with higher priority
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_bits,
+                                                                        min_fidelity=0.9, max_time=0,
+                                                                        purpose_id=1, priority=0,
+                                                                        measure_directly=True)
+
+        # Construct a request with lower priority
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
+                                                                      min_fidelity=0.9, max_time=0,
+                                                                      purpose_id=2, priority=1, measure_directly=True)
+
+        # Construct a request with lower priority
+        bob_request2 = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits2,
+                                                                       min_fidelity=0.9, max_time=0,
+                                                                       purpose_id=2, priority=2, measure_directly=True)
+
+        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
+        bob_scheduled_create = partial(egpB.create, cqc_request_raw=bob_request)
+        bob_scheduled_create2 = partial(egpB.create, cqc_request_raw=bob_request2)
+
+        # Schedule a sequence of various create requests
+        # We issue the low priority request first so that it begins and then verify that issuing a higher priority
+        # request afterwards will overtake the low priority request
+        sim_scheduler.schedule_function(func=bob_scheduled_create2, t=0)
+        sim_scheduler.schedule_function(func=bob_scheduled_create, t=2)
+        sim_scheduler.schedule_function(func=alice_scheduled_create, t=4)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(20)
+
+        # Verify all the bits were generated
+        self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + bob_num_bits2)
+        for resA, resB in zip(self.alice_results, self.bob_results):
+            self.assertEqual(resA[0:3], resB[0:3])
+            if resA[1] == 1 and resA[2][0] == bob.nodeID:
+                bob_num_bits2 -= 1
+            elif resA[1] == 0 and resA[2][0] == bob.nodeID:
+                bob_num_bits -= 1
+            elif resA[1] == 0 and resA[2][0] == alice.nodeID:
+                alice_num_bits -= 1
+
+            if bob_num_bits2 == 0:
+                self.assertEqual(bob_num_bits, 0)
+                self.assertEqual(alice_num_bits, 0)
+
+            if bob_num_bits == 0:
+                self.assertEqual(alice_num_bits, 0)
+
+    def test_atomic_requests(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        # Schedule egp CREATE commands mid simulation
+        sim_scheduler = SimulationScheduler()
+        alice_num_bits = 30
+        bob_num_bits = 10
+
+        # Construct a request with higher priority
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_bits,
+                                                                        min_fidelity=0.9, max_time=0,
+                                                                        purpose_id=1, priority=0,
+                                                                        measure_directly=True)
+
+        # Construct a request with lower priority but is atomic
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
+                                                                      min_fidelity=0.9, max_time=0,
+                                                                      purpose_id=2, priority=1, atomic=True,
+                                                                      measure_directly=True)
+
+        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
+        bob_scheduled_create = partial(egpB.create, cqc_request_raw=bob_request)
+
+        # Schedule a sequence of various create requests
+        # We issue the low priority request first so that it begins and then verify that issuing a higher priority
+        # request afterwards does not break up the OKs for the lower priority request
+        sim_scheduler.schedule_function(func=bob_scheduled_create, t=0)
+        sim_scheduler.schedule_function(func=alice_scheduled_create, t=5)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(20)
+
+        # Verify all the bits were generated
+        self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits)
+
+        for resA, resB in zip(self.alice_results, self.bob_results):
+            self.assertEqual(resA[0:3], resB[0:3])
+            if resA[2][0] == bob.nodeID:
+                bob_num_bits -= 1
+            elif resA[2][0] == alice.nodeID:
+                alice_num_bits -= 1
+
+            if alice_num_bits == 0:
+                self.assertEqual(bob_num_bits, 0)
 
     def test_manual_connect(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)

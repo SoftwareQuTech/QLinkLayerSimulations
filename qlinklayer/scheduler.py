@@ -123,6 +123,11 @@ class RequestScheduler(Scheduler):
             self.mhp_cycle_offset = mhp_cycle_offset
 
     def add_feu(self, feu):
+        """
+        Adds the fidelity estimation unit to the scheduler
+        :param feu: obj `~qlinklayer.feu.FidelityEstimationUnit`
+            The FEU to attach to the scheduler
+        """
         self.feu = feu
 
     def inc_cycle(self):
@@ -493,7 +498,9 @@ class RequestScheduler(Scheduler):
             # Update number of remaining pairs on request, remove if completed
             self.decrement_num_pairs(aid)
         else:
-            logger.warning("Marking gen completed for inactive request")
+            request = self.get_request(aid)
+            if not request.measure_directly:
+                logger.warning("Marking gen completed for inactive request")
             self.decrement_num_pairs(aid)
 
     def decrement_num_pairs(self, aid):
@@ -613,6 +620,20 @@ class RequestScheduler(Scheduler):
         else:
             return False
 
+    def is_measure_directly(self, aid):
+        """
+        Checks if the request corresponding to the aid is a measure directly request
+        :param aid: tuple (int, int)
+            The absolute queue id of the request to check
+        :return: bool
+            True/False
+        """
+        # A measure directly request may have in-flight messages of success
+        request = self.get_request(aid)
+        if request and request.measure_directly:
+            return True
+        return False
+
     def reserve_resources_for_gen(self, request):
         """
         Allocates the appropriate communication qubit/storage qubit given the specifications of the request
@@ -637,8 +658,8 @@ class RequestScheduler(Scheduler):
         # Simply process the requests in FIFO order (for now...)
         self.remove_unfulfillable_requests()
 
-        if self.curr_request and self.curr_request.atomic:
-            return self.curr_aid, self.curr_request
+        if self.curr_aid and self.distQueue.local_peek(self.curr_aid).request.atomic:
+            return self.curr_aid, self.distQueue.local_peek(self.curr_aid).request
 
         for local_queue in self.distQueue.queueList:
             queue_item = local_queue.peek()
