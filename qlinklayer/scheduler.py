@@ -309,19 +309,19 @@ class RequestScheduler(Scheduler):
         """
         return self.other_mem != (0, 0)
 
+    def get_priority_range(self):
+        """
+        Returns the range of available priorities in the scheduler
+        :return: range
+            The range of unique priorities
+        """
+        return range(0, len(self.distQueue.queueList))
+
     def get_queue(self, request):
         """
         Determines which queue id to add the next request to.
         """
-        # TODO - now we always use qid=0
-        return 0
-
-    def next_pop(self):
-        """
-        Determines which queue id to server next. 
-        """
-        # TODO - now we always use qid=0
-        return 0
+        return min(request.priority, len(self.distQueue.queueList) - 1)
 
     def next(self):
         """
