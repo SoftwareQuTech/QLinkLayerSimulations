@@ -640,10 +640,11 @@ class RequestScheduler(Scheduler):
         """
         # Simply process the requests in FIFO order (for now...)
         self.remove_unfulfillable_requests()
-        queue_item = self.distQueue.queueList[0].peek()
-        if queue_item and queue_item.ready:
-            aid = queue_item.qid, queue_item.seq
-            return aid, queue_item.request
+        for local_queue in self.distQueue.queueList:
+            queue_item = local_queue.peek()
+            if queue_item and queue_item.ready:
+                aid = queue_item.qid, queue_item.seq
+                return aid, queue_item.request
 
         return None, None
 
@@ -652,15 +653,16 @@ class RequestScheduler(Scheduler):
         Checks the head items of the queue to see if there are any that can be removed
         :return:
         """
-        while self.distQueue.queueList[0].peek():
-            queue_item = self.distQueue.queueList[0].peek()
-            # Check if the queue item is too close to timeout to service
-            if self.near_timeout(queue_item):
-                self._handle_item_timeout(queue_item)
+        for local_queue in self.distQueue.queueList:
+            while local_queue.peek():
+                queue_item = local_queue.peek()
+                # Check if the queue item is too close to timeout to service
+                if self.near_timeout(queue_item):
+                    self._handle_item_timeout(queue_item)
 
-            # Otherwise we have a valid item
-            else:
-                break
+                # Otherwise we have a valid item
+                else:
+                    break
 
     def near_timeout(self, queue_item):
         """
