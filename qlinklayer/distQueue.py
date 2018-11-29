@@ -106,7 +106,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Waiting for acks
         self.waitAddAcks = {}
-        self.addAckBacklog = deque()
+        self.addAckBacklog = [deque() for i in range(numQueues)]
         self.acksWaiting = 0
         self.comm_timeout_handler = None
         self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
@@ -212,7 +212,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # If our peer failed to add our item we should remove any Acks we should provide for
             # subsequent items they attempted to add
             if self.has_subsequent_acks(qid=qid, qseq=queue_seq):
-                self.reject_outstanding_acks()
+                self.reject_outstanding_acks(qid)
 
             # Pass error information upwards
             if self.add_callback:
@@ -548,8 +548,14 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, rec_qseq))
             agreed_qseq = rec_qseq
 
+            # If this is the last queue item before our backlog of the slave's request then ready/schedule and send an
+            # ack to the slave
+            if self.has_subsequent_acks(qid, agreed_qseq):
+                self.release_acks(qid)
+
         else:
             logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, qseq))
+
             # We are not in control but merely hold a copy of the queue
             # We can now add
             self.queueList[qid].add_with_id(nodeID, qseq, request)
@@ -566,11 +572,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # We are now waiting for one ack less
         self.acksWaiting = self.acksWaiting - 1
-
-        # If this is the last queue item before our backlog of the slave's request then ready/schedule and send an
-        # ack to the slave
-        if self.has_subsequent_acks(qid, agreed_qseq):
-            self.release_acks()
 
         # Process backlog, and go idle if applicable
         self._try_go_idle()
@@ -595,38 +596,38 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :return: bool
             Whether the addAckBacklog contains queue items that are subsequent to the specified info
         """
-        if self.addAckBacklog:
-            cseq, next_qid, next_qseq, request = self.addAckBacklog[0]
+        if self.addAckBacklog[qid]:
+            cseq, next_qid, next_qseq, request = self.addAckBacklog[qid][0]
             return next_qid == qid and next_qseq == qseq + 1
         else:
             return False
 
-    def reject_outstanding_acks(self):
+    def reject_outstanding_acks(self, qid):
         """
         Deletes an ACK we should provide and any subsequent ACKs
         """
         # Grab item info, ack, and schedule
-        cseq, qid, qseq, request = self.addAckBacklog.popleft()
+        cseq, qid, qseq, request = self.addAckBacklog[qid].popleft()
         self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
             # Check if this item is a subsequent item in the same queue
-            cseq, qid, qseq, request = self.addAckBacklog.popleft()
+            cseq, qid, qseq, request = self.addAckBacklog[qid].popleft()
             self.send_msg(self.CMD_ERR_REJ, [cseq, qid, qseq, request])
 
-    def release_acks(self):
+    def release_acks(self, qid):
         """
         Releases a stored ack and any stored items that are subsequent queue items
         """
         # Grab item info, ack, and schedule
-        cseq, qid, qseq, request = self.addAckBacklog.popleft()
+        cseq, qid, qseq, request = self.addAckBacklog[qid].popleft()
         self.send_ADD_ACK(cseq, qseq, qid)
         self._post_process_release(qid, qseq)
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
-            cseq, qid, qseq, request = self.addAckBacklog.popleft()
+            cseq, qid, qseq, request = self.addAckBacklog[qid].popleft()
             self.send_ADD_ACK(cseq, qseq, qid)
             self._post_process_release(qid, qseq)
 
@@ -814,14 +815,21 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         queue_seq = self.queueList[qid].add(self.myID, request)
 
         # Check if we are waiting for any acks from the slave
-        if not self.waitAddAcks:
+        if not self.waitingForAcks(qid):
             self.send_ADD_ACK(cseq, queue_seq, qid)
 
         # Otherwise wait on a response for our ADDs we have in flight before we ack
         else:
-            self.addAckBacklog.append((cseq, qid, queue_seq, request))
+            self.addAckBacklog[qid].append((cseq, qid, queue_seq, request))
 
         return queue_seq
+
+    def waitingForAcks(self, qid):
+        for data in self.waitAddAcks.values():
+            if qid == data[0]:
+                return True
+
+        return False
 
     def _general_do_add(self, request, qid=0):
 

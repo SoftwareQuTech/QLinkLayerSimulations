@@ -52,11 +52,6 @@ class TestRequestScheduler(unittest.TestCase):
         self.assertEqual(test_scheduler.my_free_memory, qmm.get_free_mem_ad())
         self.assertEqual(test_scheduler.other_mem, (0, 0))
 
-    def test_next_pop(self):
-        qmm = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
-        self.assertEqual(test_scheduler.next_pop(), 0)
-
     def test_get_queue(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
         request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1,
@@ -122,6 +117,37 @@ class TestRequestScheduler(unittest.TestCase):
         # Verify that the next request is the one we submitted
         gen = test_scheduler.next()
         self.assertEqual(gen, (True, (0, 0), 0, 1, {}))
+
+    def test_priority(self):
+        sim_reset()
+        num_priorities = 10
+        dqpA = EGPDistributedQueue(node=self.nodeA, accept_all=True, numQueues=num_priorities)
+        dqpB = EGPDistributedQueue(node=self.nodeB, accept_all=True, numQueues=num_priorities)
+        dqpA.connect_to_peer_protocol(dqpB)
+        qmmA = QuantumMemoryManagement(node=self.nodeA)
+        test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
+        test_scheduler.configure_mhp_timings(1, 2, 0, 0)
+
+        requests = [EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0,
+                               priority=i) for i in range(num_priorities)]
+
+        conn = dqpA.conn
+        self.network = EasyNetwork(name="DQPNetwork",
+                                   nodes=[(self.nodeA, [dqpA]), (self.nodeB, [dqpB])],
+                                   connections=[(conn, "dqp_conn", [dqpA, dqpB])])
+        self.network.start()
+
+        for i, request in enumerate(reversed(requests)):
+            test_scheduler.add_request(request)
+            sim_run(i * 5)
+            for cycle in range(2 * test_scheduler.mhp_cycle_offset):
+                test_scheduler.inc_cycle()
+
+        for i in range(num_priorities):
+            next_aid, next_request = test_scheduler._get_next_request()
+            self.assertEqual((i, 0), next_aid)
+            self.assertEqual(next_request.priority, i)
+            test_scheduler.clear_request(next_aid)
 
 
 class TestTimings(unittest.TestCase):
