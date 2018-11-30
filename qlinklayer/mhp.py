@@ -671,8 +671,12 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         if alpha is None:
             self.allowed_bright_states = [0.1, 0.3]
-        else:
+        elif isinstance(alpha, list):
             self.allowed_bright_states = alpha
+        elif isinstance(alpha, float):
+            self.allowed_bright_states = [alpha]
+        else:
+            raise ValueError("alpha needs to be None, list or float")
 
         self.set_bright_state_population(alpha=self.allowed_bright_states[0])
 
@@ -769,6 +773,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         # Extract info from the message
         respM, passM = reply_message.response_data, reply_message.pass_data
+        print(respM, passM)
 
         # Got some kind of command
         if isinstance(respM, int):
