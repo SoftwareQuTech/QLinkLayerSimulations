@@ -162,8 +162,9 @@ class EGPSimulationScenario(TimedProtocol):
         """
         # Only extract result information if the create was successfully submitted
         create_id = self.egp.create(cqc_request_raw=cqc_request_raw)
+        create_time = sim_time()
         if create_id is not None:
-            self.create_storage.append((self.egp.node.nodeID, cqc_request_raw, create_id))
+            self.create_storage.append((self.egp.node.nodeID, cqc_request_raw, create_id, create_time))
             logger.debug("Scheduling create event now.")
             self._schedule_now(self._EVT_CREATE)
 

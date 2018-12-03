@@ -120,11 +120,11 @@ class EGPCreateSequence(EGPDataSequence):
 
     def get_column_names(self):
         # TODO ITEMS AFTER "Timestamp and "Node ID" currently have to be sorted....
-        return ["Timestamp", "Node ID", "CQC Request Raw", "Create ID", "Success"]
+        return ["Timestamp", "Node ID", "CQC Request Raw", "Create ID", "Create Time", "Success"]
 
     def getData(self, time, source=None):
-        nodeID, cqc_request_raw, create_id = source[0].get_create_info()
-        return [(nodeID, cqc_request_raw, create_id), True]
+        nodeID, cqc_request_raw, create_id, create_time = source[0].get_create_info()
+        return [(nodeID, cqc_request_raw, create_id, create_time), True]
 
 
 class EGPCreateDataPoint(EGPDataPoint):
@@ -138,6 +138,7 @@ class EGPCreateDataPoint(EGPDataPoint):
             self.timestamp = None
             self.node_id = None
             self.create_id = None
+            self.create_time = None
             self.max_time = None
             self.measure_directly = None
             self.min_fidelity = None
@@ -150,9 +151,10 @@ class EGPCreateDataPoint(EGPDataPoint):
 
     def from_raw_data(self, data):
         try:
-            self.timestamp, self.node_id, cqc_request_raw, create_id, self.success = data
+            self.timestamp, self.node_id, cqc_request_raw, create_id, create_time, self.success = data
             egp_request = EGP._get_egp_request(cqc_request_raw=cqc_request_raw)
             self.create_id = create_id
+            self.create_time = create_time
             self.max_time = egp_request.max_time
             self.measure_directly = egp_request.measure_directly
             self.min_fidelity = egp_request.min_fidelity
@@ -169,6 +171,7 @@ class EGPCreateDataPoint(EGPDataPoint):
             self.timestamp = data.timestamp
             self.node_id = data.node_id
             self.create_id = data.create_id
+            self.create_time = data.create_time
             self.max_time = data.max_time
             self.measure_directly = data.measure_directly
             self.min_fidelity = data.min_fidelity
@@ -186,6 +189,7 @@ class EGPCreateDataPoint(EGPDataPoint):
         to_print += "    Timestamp: {}\n".format(self.timestamp)
         to_print += "    Node ID: {}\n".format(self.node_id)
         to_print += "    Create ID: {}\n".format(self.create_id)
+        to_print += "    Create Time: {}\n".format(self.create_time)
         to_print += "    Max Time: {}\n".format(self.max_time)
         to_print += "    Measure Directly: {}\n".format(self.measure_directly)
         to_print += "    Min Fidelity: {}\n".format(self.min_fidelity)
@@ -224,22 +228,33 @@ class EGPOKSequence(EGPDataSequence):
                 ok_type = EntInfoMeasDirectHeader.type
             except ValueError:
                 raise ValueError("Unknown OK type")
-        other_id = ent_id[1]
+        origin_id = ent_id[0]
 
-        nodeID = scenario.node.nodeID
+        node_id = scenario.node.nodeID
+
+        if scenario.egp.dqp.master:
+            if origin_id == node_id:
+                master_request = True
+            else:
+                master_request = False
+        else:
+            if origin_id == node_id:
+                master_request = False
+            else:
+                master_request = True
 
         # Get number of attempts
         if self._attempt_collectors:
             try:
-                attempt_collector = self._attempt_collectors[nodeID]
+                attempt_collector = self._attempt_collectors[node_id]
             except KeyError:
                 nr_attempts = -1
             else:
-                nr_attempts = attempt_collector.get_attempts(create_id, other_id)
+                nr_attempts = attempt_collector.get_attempts(create_id, master_request)
         else:
             nr_attempts = -1
 
-        data = [nodeID, ok_type, ok, nr_attempts]
+        data = [node_id, ok_type, ok, nr_attempts]
         return [data, True]
 
 
@@ -637,48 +652,58 @@ class AttemptCollector(Entity):
         """
         # The node transmitted a photon
         # Get the absolute queue ID
-        aid = self._mhp.aid
+        aid = self._mhp._previous_aid
 
         # Get the current request, the create ID and the ID of other
-        request = self._egp.scheduler.get_request(aid=aid)
+        try:
+            request = self._egp.scheduler.get_request(aid=aid)
+        except Exception as err:
+            print("Attempt collector got exception when trying to get request with aid={}".format(aid))
+            qids = self._egp.dqp.queueList
+            print("Current qids are {}".format(qids))
+            for q in qids:
+                print(q._queue)
+            raise err
         if request:
             create_id = request.create_id
-            other_id = request.otherID
+            master_request = request.master_request
 
-            self._register_attempt(create_id, other_id)
+            self._register_attempt(create_id, master_request)
         else:
             logger.warning("Entanglement attempt occurred without request")
 
-    def _register_attempt(self, create_id, other_id):
+    def _register_attempt(self, create_id, master_request):
         """
         Register the attempt in the storage
         """
-        key = (create_id, other_id)
+        key = (create_id, master_request)
         if key in self._attempts:
             self._attempts[key] += 1
         else:
             self._attempts[key] = 1
 
-    def get_attempts(self, create_id, other_id, remove=True):
+    def get_attempts(self, create_id, master_request, remove=True):
         """
         Returns the number current number of attempts for this create_id and other_id
         :param create_id: int
-        :param other_id: int
+        :param master_request: bool
         :param remove: bool
         :return: int
         """
-        key = (create_id, other_id)
+        key = (create_id, master_request)
         if remove:
             try:
                 return self._attempts.pop(key)
             except KeyError:
-                logger.warning("No attempt info for create ID {} and other ID {}".format(create_id, other_id))
+                logger.warning("No attempt info for create ID {} and master request {}".format(create_id, master_request))
+                print(self._attempts)
                 return None
         else:
             try:
                 return self._attempts[key]
             except KeyError:
-                logger.warning("No attempt info for create ID {} and other ID {}".format(create_id, other_id))
+                logger.warning("No attempt info for create ID {} and master request {}".format(create_id, master_request))
+                print(self._attempts)
                 return None
 
     def get_all_remaining_attempts(self):

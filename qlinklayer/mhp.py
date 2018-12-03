@@ -659,6 +659,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.allowed_bright_states = None
         self.set_allowed_bright_state_populations(alpha=alpha)
 
+        # For data collection
+        self._previous_aid = None
+
     def set_allowed_bright_state_populations(self, alpha=None):
         """
         Sets the allowed bright state populations in the MHP
@@ -790,7 +793,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         result = self._construct_error_result(err_code=respM, err_data=passM)
         self.callback(result=result)
-        self.reset_protocol()
 
     def _extract_aid_from_err_data(self, err_data):
         if isinstance(err_data, tuple):
@@ -832,7 +834,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         # Call back with the results
         self.callback(result=self.result)
-        self.reset_protocol()
 
     def _transmit_photon(self, photon):
         """
@@ -844,6 +845,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         try:
             # Construct the information to pass to our peer
             pass_info = self.aid
+            self._previous_aid = self.aid
             logger.debug("Sending pass info: {}".format(pass_info))
 
             # Send info to the heralding station
@@ -855,6 +857,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             logger.exception("Error occurred while handling photon emission")
             result = self._construct_error_result(err_code=self.ERR_LOCAL, err_data=self.aid)
             self._handle_error(None, result)
+
+        finally:
+            self.reset_protocol()
 
 
 class SimulatedNodeCentricMHPService(Service):
