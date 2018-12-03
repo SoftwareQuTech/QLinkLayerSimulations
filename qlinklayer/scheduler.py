@@ -347,6 +347,9 @@ class RequestScheduler(Scheduler):
             logger.debug("Generation is currently suspended")
 
         else:
+            if self.curr_gen:
+                self.free_gen_resources(self.curr_gen.aid)
+
             next_gen = self.get_next_gen_template()
             logger.debug("Scheduler has next gen {}".format(next_gen))
 
@@ -384,7 +387,7 @@ class RequestScheduler(Scheduler):
         """
         if self.curr_gen is None:
             return False
-        if self.curr_aid == aid:
+        if self.curr_gen.flag and self.curr_aid == aid:
             return True
         else:
             return False
@@ -438,9 +441,6 @@ class RequestScheduler(Scheduler):
         :return: tuple
             Represents the information to be used for the next entanglement generation attempts
         """
-        if self.curr_gen:
-            logger.debug("Currently processing generation")
-            return self.curr_gen
 
         aid, request = self._get_next_request()
         if aid is None and request is None:
@@ -495,13 +495,29 @@ class RequestScheduler(Scheduler):
                 self.qmm.free_qubit(comm_q)
 
             self.curr_gen = None
+
             # Update number of remaining pairs on request, remove if completed
             self.decrement_num_pairs(aid)
+
         else:
             request = self.get_request(aid)
             if not request.measure_directly:
                 logger.warning("Marking gen completed for inactive request")
             self.decrement_num_pairs(aid)
+
+    def free_gen_resources(self, aid):
+        """
+        Frees resources that were reserved for a generation
+        :param aid: tuple of (int, int)
+            The absolute queue id of the generation we should free resources for
+        """
+        if self.is_generating_aid(aid):
+            # Get the used qubit info and free unused resources
+            self.qmm.free_qubit(self.curr_gen.comm_q)
+            if self.curr_gen.comm_q != self.curr_gen.storage_q:
+                self.qmm.free_qubit(self.curr_gen.storage_q)
+
+            self.my_free_memory = self.qmm.get_free_mem_ad()
 
     def decrement_num_pairs(self, aid):
         """

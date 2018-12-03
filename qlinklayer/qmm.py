@@ -112,11 +112,12 @@ class QuantumMemoryManagement:
             Address of the qubit to free
         """
         self.vacate_qubit(qid=id)
-        q = self.node.qmem.pop(id)[0]
-        if q is not None:
-            qapi.discard(q)
-        else:
-            logger.warning("Trying to free a non-existing qubit")
+        if self.node.qmem.position_in_use(id):
+            q = self.node.qmem.pop(id)[0]
+            if q is not None:
+                qapi.discard(q)
+            else:
+                logger.warning("Trying to free a non-existing qubit")
 
     def free_qubits(self, id_list):
         """
