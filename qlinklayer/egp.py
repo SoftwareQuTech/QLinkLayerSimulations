@@ -698,10 +698,15 @@ class NodeCentricEGP(EGP):
                         logger.error("Request not found!")
                         self.issue_err(err=self.ERR_OTHER)
 
-                    # If handling a measure directly request we need to throw away the measurement result
-                    if creq.measure_directly and self.scheduler.is_generating_aid(aid):
-                        m, basis = self.measurement_results.pop(0)
-                        logger.debug("Removing measurement outcome {} in basis {} from stored results".format(m, basis))
+                    else:
+                        # Free the resources for the next attempt
+                        self.scheduler.free_gen_resources(aid)
+
+                        # If handling a measure directly request we need to throw away the measurement result
+                        if creq.measure_directly and self.scheduler.is_generating_aid(aid):
+                            m, basis = self.measurement_results.pop(0)
+                            logger.debug("Removing measurement outcome {} in basis {} from stored results"
+                                         .format(m, basis))
 
                 elif midpoint_outcome in [1, 2]:
                     # Check if we need to time out this request
@@ -964,15 +969,11 @@ class NodeCentricEGP(EGP):
             prgm = QuantumProgram()
             qs = prgm.get_qubit_indices(2)
             prgm.apply(INSTR_INIT, qs[1])
-            # qs = prgm.load_mem_qubits(qmem=self.node.qmem)
-            # qs[storage_q].init()
             qprgms.move_using_CNOTs(prgm, qs[0], qs[1])
 
             # Set the callback
             self.node.qmem.set_program_done_callback(self._return_ok, mhp_seq=mhp_seq, aid=aid)
             self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q, storage_q])
-            # prgm.set_callback(callback=self._return_ok, mhp_seq=mhp_seq, aid=aid)
-            # self.node.qmem.execute_program(prgm)
 
         # Otherwise proceed to return the okay
         else:
