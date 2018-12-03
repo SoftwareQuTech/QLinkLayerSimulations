@@ -4,7 +4,7 @@ from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
-from qlinklayer.egp import NodeCentricEGP, EGPRequest
+from qlinklayer.egp import NodeCentricEGP, EGPRequest, EGP
 from qlinklayer.scenario import MeasureBeforeSuccessScenario, MeasureAfterSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoMeasDirectHeader, EntInfoCreateKeepHeader
 
@@ -120,11 +120,11 @@ class EGPCreateSequence(EGPDataSequence):
 
     def get_column_names(self):
         # TODO ITEMS AFTER "Timestamp and "Node ID" currently have to be sorted....
-        return ["Timestamp", "Node ID", "CQC Request", "Create ID", "Create Time", "Success"]
+        return ["Timestamp", "Node ID", "CQC Request Raw", "Create ID", "Create Time", "Success"]
 
     def getData(self, time, source=None):
-        nodeID, cqc_request, create_id, create_time = source[0].get_create_info()
-        return [(nodeID, cqc_request, create_id, create_time), True]
+        nodeID, cqc_request_raw, create_id, create_time = source[0].get_create_info()
+        return [(nodeID, cqc_request_raw, create_id, create_time), True]
 
 
 class EGPCreateDataPoint(EGPDataPoint):
@@ -147,21 +147,22 @@ class EGPCreateDataPoint(EGPDataPoint):
             self.priority = None
             self.store = None
             self.success = None
+            self.atomic = None
 
     def from_raw_data(self, data):
         try:
-            self.timestamp, self.node_id, cqc_request, create_id, create_time, self.success = data
-            request = EGPRequest(cqc_request=cqc_request)
-            request.assign_create_id(create_id, create_time)
-            self.create_id = request.create_id
-            self.create_time = request.create_time
-            self.max_time = request.max_time
-            self.measure_directly = request.measure_directly
-            self.min_fidelity = request.min_fidelity
-            self.num_pairs = request.num_pairs
-            self.other_id = request.otherID
-            self.priority = request.priority
-            self.store = request.store
+            self.timestamp, self.node_id, cqc_request_raw, create_id, create_time, self.success = data
+            egp_request = EGP._get_egp_request(cqc_request_raw=cqc_request_raw)
+            self.create_id = create_id
+            self.create_time = create_time
+            self.max_time = egp_request.max_time
+            self.measure_directly = egp_request.measure_directly
+            self.min_fidelity = egp_request.min_fidelity
+            self.num_pairs = egp_request.num_pairs
+            self.other_id = egp_request.other_id
+            self.priority = egp_request.priority
+            self.store = egp_request.store
+            self.atomic = egp_request.atomic
         except Exception as err:
             raise ValueError("Cannot parse data since {}".format(err))
 
@@ -179,6 +180,7 @@ class EGPCreateDataPoint(EGPDataPoint):
             self.priority = data.priority
             self.store = data.store
             self.success = data.success
+            self.atomic = data.atomic
         else:
             raise ValueError("'data' is not an instance of this class")
 
@@ -196,6 +198,7 @@ class EGPCreateDataPoint(EGPDataPoint):
         to_print += "    Priority: {}\n".format(self.priority)
         to_print += "    Store: {}\n".format(self.store)
         to_print += "    Success: {}\n".format(self.success)
+        to_print += "    Atomic: {}\n".format(self.atomic)
         return to_print
 
 
@@ -225,22 +228,33 @@ class EGPOKSequence(EGPDataSequence):
                 ok_type = EntInfoMeasDirectHeader.type
             except ValueError:
                 raise ValueError("Unknown OK type")
-        other_id = ent_id[1]
+        origin_id = ent_id[0]
 
-        nodeID = scenario.node.nodeID
+        node_id = scenario.node.nodeID
+
+        if scenario.egp.dqp.master:
+            if origin_id == node_id:
+                master_request = True
+            else:
+                master_request = False
+        else:
+            if origin_id == node_id:
+                master_request = False
+            else:
+                master_request = True
 
         # Get number of attempts
         if self._attempt_collectors:
             try:
-                attempt_collector = self._attempt_collectors[nodeID]
+                attempt_collector = self._attempt_collectors[node_id]
             except KeyError:
                 nr_attempts = -1
             else:
-                nr_attempts = attempt_collector.get_attempts(create_id, other_id)
+                nr_attempts = attempt_collector.get_attempts(create_id, master_request)
         else:
             nr_attempts = -1
 
-        data = [nodeID, ok_type, ok, nr_attempts]
+        data = [node_id, ok_type, ok, nr_attempts]
         return [data, True]
 
 
@@ -638,48 +652,58 @@ class AttemptCollector(Entity):
         """
         # The node transmitted a photon
         # Get the absolute queue ID
-        aid = self._mhp.aid
+        aid = self._mhp._previous_aid
 
         # Get the current request, the create ID and the ID of other
-        request = self._egp.scheduler.get_request(aid=aid)
+        try:
+            request = self._egp.scheduler.get_request(aid=aid)
+        except Exception as err:
+            print("Attempt collector got exception when trying to get request with aid={}".format(aid))
+            qids = self._egp.dqp.queueList
+            print("Current qids are {}".format(qids))
+            for q in qids:
+                print(q._queue)
+            raise err
         if request:
             create_id = request.create_id
-            other_id = request.otherID
+            master_request = request.master_request
 
-            self._register_attempt(create_id, other_id)
+            self._register_attempt(create_id, master_request)
         else:
             logger.warning("Entanglement attempt occurred without request")
 
-    def _register_attempt(self, create_id, other_id):
+    def _register_attempt(self, create_id, master_request):
         """
         Register the attempt in the storage
         """
-        key = (create_id, other_id)
+        key = (create_id, master_request)
         if key in self._attempts:
             self._attempts[key] += 1
         else:
             self._attempts[key] = 1
 
-    def get_attempts(self, create_id, other_id, remove=True):
+    def get_attempts(self, create_id, master_request, remove=True):
         """
         Returns the number current number of attempts for this create_id and other_id
         :param create_id: int
-        :param other_id: int
+        :param master_request: bool
         :param remove: bool
         :return: int
         """
-        key = (create_id, other_id)
+        key = (create_id, master_request)
         if remove:
             try:
                 return self._attempts.pop(key)
             except KeyError:
-                logger.warning("No attempt info for create ID {} and other ID {}".format(create_id, other_id))
+                logger.warning("No attempt info for create ID {} and master request {}".format(create_id, master_request))
+                print(self._attempts)
                 return None
         else:
             try:
                 return self._attempts[key]
             except KeyError:
-                logger.warning("No attempt info for create ID {} and other ID {}".format(create_id, other_id))
+                logger.warning("No attempt info for create ID {} and master request {}".format(create_id, master_request))
+                print(self._attempts)
                 return None
 
     def get_all_remaining_attempts(self):

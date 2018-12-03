@@ -142,7 +142,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :return: bool
             Whether we are master or not
         """
-        if master is None and self.otherID:
+        if master is None and self.otherID is not None:
             # Lowest ID gets to be master
             return self.myID < self.otherID
 
