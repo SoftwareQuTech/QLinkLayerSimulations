@@ -773,7 +773,6 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         # Extract info from the message
         respM, passM = reply_message.response_data, reply_message.pass_data
-        print(respM, passM)
 
         # Got some kind of command
         if isinstance(respM, int):
