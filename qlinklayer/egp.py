@@ -655,10 +655,6 @@ class NodeCentricEGP(EGP):
         """
         try:
             logger.debug("Handling MHP Reply: {}".format(result))
-            # Check if the reply came in before our measurement completed, defer processing
-            if self.measurement_in_progress and self.scheduler.is_handling_measure_directly():
-                self.measure_directly_reply = result
-                return
 
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
@@ -681,13 +677,16 @@ class NodeCentricEGP(EGP):
                         logger.debug("Updating MHP Seq")
                         self._process_mhp_seq(mhp_seq, aid)
 
+            # Check if the reply came in before our measurement completed, defer processing
+            elif self.measurement_in_progress and self.scheduler.is_measure_directly(aid):
+                self.measure_directly_reply = result
+                return
+
             # Otherwise this response is associated with a generation attempt
             else:
                 # Check if an error occurred while processing a request
                 if proto_err:
                     logger.error("Protocol error occured in MHP: {}".format(proto_err))
-                    comm_q = self.mhp_service.get_comm_qubit_id(self.node)
-                    self.qmm.vacate_qubit(comm_q)
                     self.issue_err(err=proto_err)
 
                 # No entanglement generated
@@ -703,7 +702,7 @@ class NodeCentricEGP(EGP):
                         self.scheduler.free_gen_resources(aid)
 
                         # If handling a measure directly request we need to throw away the measurement result
-                        if creq.measure_directly and self.scheduler.is_generating_aid(aid):
+                        if creq.measure_directly and self.scheduler.has_request(aid):
                             m, basis = self.measurement_results.pop(0)
                             logger.debug("Removing measurement outcome {} in basis {} from stored results"
                                          .format(m, basis))
