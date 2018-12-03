@@ -29,40 +29,40 @@ config_dir = "setupsim/config"
 # success probability and also significantly lower.
 
 config_to_p_succ = {
-    "no_losses/no_losses.json": 0.18962460137276416,
-    "no_losses/no_noise.json": 0.19,
-    "lab_configs/networks_no_cavity_no_conversion.json": 7.015991568047906e-05,
-    "lab_configs/networks_no_cavity_with_conversion.json": 2.1629224382238053e-05,
-    "lab_configs/networks_with_cavity_no_conversion.json": 0.0011008895034067229,
-    "lab_configs/networks_with_cavity_with_conversion.json": 0.00033126325807618113,
-    "qlink_configs/networks_no_cavity_no_conversion.json": 7.999995199289722e-07,
-    "qlink_configs/networks_no_cavity_with_conversion.json": 5.944852544500876e-06,
-    "qlink_configs/networks_with_cavity_no_conversion.json": 7.999995199289722e-07,
-    "qlink_configs/networks_with_cavity_with_conversion.json": 8.243310647958359e-05
+    "no_noise/no_losses.json": 0.18962460137276416,
+    "no_noise/no_noise.json": 0.19,
+    "lab/networks_no_cavity_no_conversion.json": 7.015991568047906e-05,
+    "lab/networks_no_cavity_with_conversion.json": 2.1629224382238053e-05,
+    "lab/networks_with_cavity_no_conversion.json": 0.0011008895034067229,
+    "lab/networks_with_cavity_with_conversion.json": 0.00033126325807618113,
+    "qlink/networks_no_cavity_no_conversion.json": 7.999995199289722e-07,
+    "qlink/networks_no_cavity_with_conversion.json": 5.944852544500876e-06,
+    "qlink/networks_with_cavity_no_conversion.json": 7.999995199289722e-07,
+    "qlink/networks_with_cavity_with_conversion.json": 8.243310647958359e-05
 }
 
 # Create a dictionary that relates the name of the simulation to the config file and req freq factor
 name_to_scenario = {
-    "NoNoise_NC_NC_LRF": ("no_losses/no_noise.json", 0.2),
-    "NoNoise_NC_NC_HRF": ("no_losses/no_noise.json", 0.8),
-    "NoLoss_NC_NC_LRF": ("no_losses/no_losses.json", 0.2),
-    "NoLoss_NC_NC_HRF": ("no_losses/no_losses.json", 0.8),
-    "Lab_NC_NC_LRF": ("lab_configs/networks_no_cavity_no_conversion.json", 0.2),
-    "Lab_NC_NC_HRF": ("lab_configs/networks_no_cavity_no_conversion.json", 0.8),
-    "Lab_NC_WC_LRF": ("lab_configs/networks_no_cavity_with_conversion.json", 0.2),
-    "Lab_NC_WC_HRF": ("lab_configs/networks_no_cavity_with_conversion.json", 0.8),
-    "Lab_WC_NC_LRF": ("lab_configs/networks_with_cavity_no_conversion.json", 0.2),
-    "Lab_WC_NC_HRF": ("lab_configs/networks_with_cavity_no_conversion.json", 0.8),
-    "Lab_WC_WC_LRF": ("lab_configs/networks_with_cavity_with_conversion.json", 0.2),
-    "Lab_WC_WC_HRF": ("lab_configs/networks_with_cavity_with_conversion.json", 0.8),
-    "QLink_NC_NC_LRF": ("qlink_configs/networks_no_cavity_no_conversion.json", 0.2),
-    "QLink_NC_NC_HRF": ("qlink_configs/networks_no_cavity_no_conversion.json", 0.8),
-    "QLink_NC_WC_LRF": ("qlink_configs/networks_no_cavity_with_conversion.json", 0.2),
-    "QLink_NC_WC_HRF": ("qlink_configs/networks_no_cavity_with_conversion.json", 0.8),
-    "QLink_WC_NC_LRF": ("qlink_configs/networks_with_cavity_no_conversion.json", 0.2),
-    "QLink_WC_NC_HRF": ("qlink_configs/networks_with_cavity_no_conversion.json", 0.8),
-    "QLink_WC_WC_LRF": ("qlink_configs/networks_with_cavity_with_conversion.json", 0.2),
-    "QLink_WC_WC_HRF": ("qlink_configs/networks_with_cavity_with_conversion.json", 0.8)
+    "NoNoise_NC_NC_LRF": ("no_noise/no_noise.json", 0.2),
+    "NoNoise_NC_NC_HRF": ("no_noise/no_noise.json", 0.8),
+    "NoLoss_NC_NC_LRF": ("no_noise/no_losses.json", 0.2),
+    "NoLoss_NC_NC_HRF": ("no_noise/no_losses.json", 0.8),
+    "Lab_NC_NC_LRF": ("lab/networks_no_cavity_no_conversion.json", 0.2),
+    "Lab_NC_NC_HRF": ("lab/networks_no_cavity_no_conversion.json", 0.8),
+    "Lab_NC_WC_LRF": ("lab/networks_no_cavity_with_conversion.json", 0.2),
+    "Lab_NC_WC_HRF": ("lab/networks_no_cavity_with_conversion.json", 0.8),
+    "Lab_WC_NC_LRF": ("lab/networks_with_cavity_no_conversion.json", 0.2),
+    "Lab_WC_NC_HRF": ("lab/networks_with_cavity_no_conversion.json", 0.8),
+    "Lab_WC_WC_LRF": ("lab/networks_with_cavity_with_conversion.json", 0.2),
+    "Lab_WC_WC_HRF": ("lab/networks_with_cavity_with_conversion.json", 0.8),
+    "QLink_NC_NC_LRF": ("qlink/networks_no_cavity_no_conversion.json", 0.2),
+    "QLink_NC_NC_HRF": ("qlink/networks_no_cavity_no_conversion.json", 0.8),
+    "QLink_NC_WC_LRF": ("qlink/networks_no_cavity_with_conversion.json", 0.2),
+    "QLink_NC_WC_HRF": ("qlink/networks_no_cavity_with_conversion.json", 0.8),
+    "QLink_WC_NC_LRF": ("qlink/networks_with_cavity_no_conversion.json", 0.2),
+    "QLink_WC_NC_HRF": ("qlink/networks_with_cavity_no_conversion.json", 0.8),
+    "QLink_WC_WC_LRF": ("qlink/networks_with_cavity_with_conversion.json", 0.2),
+    "QLink_WC_WC_HRF": ("qlink/networks_with_cavity_with_conversion.json", 0.8)
 }
 
 # create paramcombinations

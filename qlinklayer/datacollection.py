@@ -4,7 +4,7 @@ from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
-from qlinklayer.egp import NodeCentricEGP, EGPRequest
+from qlinklayer.egp import NodeCentricEGP, EGPRequest, EGP
 from qlinklayer.scenario import MeasureBeforeSuccessScenario, MeasureAfterSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoMeasDirectHeader, EntInfoCreateKeepHeader
 
@@ -120,11 +120,11 @@ class EGPCreateSequence(EGPDataSequence):
 
     def get_column_names(self):
         # TODO ITEMS AFTER "Timestamp and "Node ID" currently have to be sorted....
-        return ["Timestamp", "Node ID", "CQC Request", "Create ID", "Create Time", "Success"]
+        return ["Timestamp", "Node ID", "CQC Request Raw", "Create ID", "Success"]
 
     def getData(self, time, source=None):
-        nodeID, cqc_request, create_id, create_time = source[0].get_create_info()
-        return [(nodeID, cqc_request, create_id, create_time), True]
+        nodeID, cqc_request_raw, create_id = source[0].get_create_info()
+        return [(nodeID, cqc_request_raw, create_id), True]
 
 
 class EGPCreateDataPoint(EGPDataPoint):
@@ -138,7 +138,6 @@ class EGPCreateDataPoint(EGPDataPoint):
             self.timestamp = None
             self.node_id = None
             self.create_id = None
-            self.create_time = None
             self.max_time = None
             self.measure_directly = None
             self.min_fidelity = None
@@ -147,21 +146,21 @@ class EGPCreateDataPoint(EGPDataPoint):
             self.priority = None
             self.store = None
             self.success = None
+            self.atomic = None
 
     def from_raw_data(self, data):
         try:
-            self.timestamp, self.node_id, cqc_request, create_id, create_time, self.success = data
-            request = EGPRequest(cqc_request=cqc_request)
-            request.assign_create_id(create_id, create_time)
-            self.create_id = request.create_id
-            self.create_time = request.create_time
-            self.max_time = request.max_time
-            self.measure_directly = request.measure_directly
-            self.min_fidelity = request.min_fidelity
-            self.num_pairs = request.num_pairs
-            self.other_id = request.otherID
-            self.priority = request.priority
-            self.store = request.store
+            self.timestamp, self.node_id, cqc_request_raw, create_id, self.success = data
+            egp_request = EGP._get_egp_request(cqc_request_raw=cqc_request_raw)
+            self.create_id = create_id
+            self.max_time = egp_request.max_time
+            self.measure_directly = egp_request.measure_directly
+            self.min_fidelity = egp_request.min_fidelity
+            self.num_pairs = egp_request.num_pairs
+            self.other_id = egp_request.other_id
+            self.priority = egp_request.priority
+            self.store = egp_request.store
+            self.atomic = egp_request.atomic
         except Exception as err:
             raise ValueError("Cannot parse data since {}".format(err))
 
@@ -170,7 +169,6 @@ class EGPCreateDataPoint(EGPDataPoint):
             self.timestamp = data.timestamp
             self.node_id = data.node_id
             self.create_id = data.create_id
-            self.create_time = data.create_time
             self.max_time = data.max_time
             self.measure_directly = data.measure_directly
             self.min_fidelity = data.min_fidelity
@@ -179,6 +177,7 @@ class EGPCreateDataPoint(EGPDataPoint):
             self.priority = data.priority
             self.store = data.store
             self.success = data.success
+            self.atomic = data.atomic
         else:
             raise ValueError("'data' is not an instance of this class")
 
@@ -187,7 +186,6 @@ class EGPCreateDataPoint(EGPDataPoint):
         to_print += "    Timestamp: {}\n".format(self.timestamp)
         to_print += "    Node ID: {}\n".format(self.node_id)
         to_print += "    Create ID: {}\n".format(self.create_id)
-        to_print += "    Create Time: {}\n".format(self.create_time)
         to_print += "    Max Time: {}\n".format(self.max_time)
         to_print += "    Measure Directly: {}\n".format(self.measure_directly)
         to_print += "    Min Fidelity: {}\n".format(self.min_fidelity)
@@ -196,6 +194,7 @@ class EGPCreateDataPoint(EGPDataPoint):
         to_print += "    Priority: {}\n".format(self.priority)
         to_print += "    Store: {}\n".format(self.store)
         to_print += "    Success: {}\n".format(self.success)
+        to_print += "    Atomic: {}\n".format(self.atomic)
         return to_print
 
 

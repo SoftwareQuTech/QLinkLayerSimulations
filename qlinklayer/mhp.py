@@ -196,12 +196,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
             raise EasySquidException("Missing control data")
 
         # Send messages back to the node
-        if receiver == self.idA:
-            self.channel_M_to_A.send(channel_data)
-        elif receiver == self.idB:
-            self.channel_M_to_B.send(channel_data)
-        else:
-            raise EasySquidException("Unknown receiver")
+        self._send_to_node(receiver, channel_data)
 
     @abc.abstractmethod
     def _get_notification_data(self, notification_type, receiver):
@@ -258,6 +253,7 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
         :param data: obj any
             The data to place on the channel to the node
         """
+        logger.debug("Midpoint sending data={} to node {}".format(data, node.name))
         if node.nodeID == self.nodeA.nodeID:
             self.channel_M_to_A.send(data)
 

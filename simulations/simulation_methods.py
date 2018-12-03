@@ -15,10 +15,11 @@ from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreate
 from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
+from simulations._get_configs_from_easysquid import NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
 
 # Here we add an entry into the Connection structure in Easysquid Easynetwork to give us access to load up configs
 # for the simulation using connections defined here in the QLinkLayer
-Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibre_connection"
+Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
 Connections._CONN_BY_NAME[Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION] = NodeCentricMHPHeraldedConnection
 
 
