@@ -1,10 +1,11 @@
 import abc
 import numpy as np
+import bitstring
 from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
-from qlinklayer.egp import NodeCentricEGP, EGPRequest, EGP
+from qlinklayer.egp import NodeCentricEGP, EGP
 from qlinklayer.scenario import MeasureBeforeSuccessScenario, MeasureAfterSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoMeasDirectHeader, EntInfoCreateKeepHeader
 
@@ -222,11 +223,12 @@ class EGPOKSequence(EGPDataSequence):
         try:
             create_id, ent_id, _, _, _, _ = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
             ok_type = EntInfoCreateKeepHeader.type
-        except ValueError:
+        # TODO the bitstring.ReadError should occur but this needs to be fixed in SimulaQron
+        except (ValueError, bitstring.ReadError):
             try:
                 create_id, ent_id, _, _, _, _ = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
                 ok_type = EntInfoMeasDirectHeader.type
-            except ValueError:
+            except (ValueError, bitstring.ReadError):
                 raise ValueError("Unknown OK type")
         origin_id = ent_id[0]
 
@@ -291,12 +293,12 @@ class EGPOKDataPoint(EGPDataPoint):
         self.success = data[5]
 
         if self.ok_type == EntInfoMeasDirectHeader.type:
-            self.create_id, ent_id, self.meas_out, self.basis, self.goodness,\
-                self.t_create = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
+            (self.create_id, ent_id, self.measurement_outcome, self.measurement_basis, self.goodness,
+             self.create_time) = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
             self.origin_id, self.other_id, self.mhp_seq = ent_id
         elif self.ok_type == EntInfoCreateKeepHeader.type:
-            self.create_id, ent_id, self.logical_id, self.goodness, self.t_create,\
-                self.t_goodness = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
+            (self.create_id, ent_id, self.logical_id, self.goodness, self.create_time,
+             self.goodness_time) = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
             self.origin_id, self.other_id, self.mhp_seq = ent_id
         else:
             raise ValueError("Cannot parse data")
@@ -695,14 +697,16 @@ class AttemptCollector(Entity):
             try:
                 return self._attempts.pop(key)
             except KeyError:
-                logger.warning("No attempt info for create ID {} and master request {}".format(create_id, master_request))
+                logger.warning(
+                    "No attempt info for create ID {} and master request {}".format(create_id, master_request))
                 print(self._attempts)
                 return None
         else:
             try:
                 return self._attempts[key]
             except KeyError:
-                logger.warning("No attempt info for create ID {} and master request {}".format(create_id, master_request))
+                logger.warning(
+                    "No attempt info for create ID {} and master request {}".format(create_id, master_request))
                 print(self._attempts)
                 return None
 
