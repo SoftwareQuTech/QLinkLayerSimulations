@@ -44,7 +44,7 @@ class printer:
                 with open(self._analysis_folder + "/analysis_output.txt", 'a') as out_file:
                     out_file.write(to_print + "\n")
             else:
-                with open(self._results_path[-3] + "_analysis_output.txt", 'a') as out_file:
+                with open(self._results_path[:-3] + "_analysis_output.txt", 'a') as out_file:
                     out_file.write(to_print + "\n")
 
 
@@ -162,7 +162,7 @@ def parse_request_data_from_sql(results_path, max_real_time=None):
         node_id = data_point.node_id
         req_id = data_point.create_id, data_point.origin_id, data_point.other_id
         mhp_seq = data_point.mhp_seq
-        gen_info = data_point.t_create, data_point.attempts
+        gen_info = data_point.create_time, data_point.attempts
 
         if node_id in gens:
             gens[node_id][req_id].append((node_id,) + req_id + (mhp_seq,) + gen_info)
@@ -800,9 +800,9 @@ def get_data(results_path, max_real_time=None):
 
 def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_figs=False, save_output=False,
                         analysis_folder=None):
-    print("results_path: {}".format(results_path))
     # Initialize the printer
     prnt = printer(results_path=results_path, save_output=save_output, analysis_folder=analysis_folder)
+    prnt.print("results_path: {}".format(results_path))
 
     # Check if there is an additional data file
     try:
@@ -851,9 +851,9 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     prnt.print("Analysing data in file {}".format(results_path))
     key_str, run_str = get_key_and_run_from_path(results_path)
     path_to_folder = "/".join(results_path.split('/')[:-1])
-    print("path_to_folder: {}".format(path_to_folder))
-    print("key_str: {}".format(key_str))
-    print("run_str: {}".format(run_str))
+    prnt.print("path_to_folder: {}".format(path_to_folder))
+    prnt.print("key_str: {}".format(key_str))
+    prnt.print("run_str: {}".format(run_str))
     with open(path_to_folder + "/paramcombinations.json") as json_file:
         arguments = json.load(json_file)[key_str]
     prnt.print("Arguments in paramcombinations.py for this simulation was:")
@@ -1019,8 +1019,6 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 
 
 def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output=False, analysis_folder=None):
-    # Initialize the printer
-    prnt = printer(results_path=results_path, save_output=save_output, analysis_folder=analysis_folder)
 
     if results_path is None:
         # Find the latest folder containing simulation data
@@ -1057,9 +1055,13 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
             results_path = results_path[:-1]
         for entry in os.listdir(results_path):
             if entry.endswith('.db'):
+                # Initialize the printer
+                entry_results_path = results_path + "/" + entry
+                prnt = printer(results_path=entry_results_path, save_output=save_output, analysis_folder=analysis_folder)
+
                 prnt.print("")
                 prnt.print("====================================")
-                analyse_single_file(results_path + "/" + entry, no_plot, max_real_time=max_real_time,
+                analyse_single_file(entry_results_path, no_plot, max_real_time=max_real_time,
                                     save_figs=save_figs, save_output=save_output, analysis_folder=analysis_folder)
                 prnt.print("====================================")
                 prnt.print("")

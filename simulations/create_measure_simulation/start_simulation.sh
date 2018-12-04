@@ -143,6 +143,7 @@ echo '- Getting software versions of NetSquid and EasySquid'
 EASYSQUIDHASH="$("$SIMULATION_DIR"/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")"
 NETSQUIDHASH="$("$SIMULATION_DIR"/readonly/get_git_hash.sh -dir "$NETSQUIDDIR")"
 QLINKLAYERHASH=$("$SIMULATION_DIR"/readonly/get_git_hash.sh -dir "$QLINKLAYERDIR")
+SIMULAQRONHASH=$("$SIMULATION_DIR"/readonly/get_git_hash.sh -dir "$SIMULAQRONDIR")
 
 #####################################
 # Create files for logging purposes #
@@ -189,6 +190,8 @@ then
 	echo $EASYSQUIDHASH >> "$descrfilename"
 	echo $'\nQLinkLayer:' >> $descrfilename
 	echo $QLINKLAYERHASH >> $descrfilename
+	echo $'\nSimulaQron:' >> $descrfilename
+	echo $SIMULAQRONHASH >> $descrfilename
 	echo $'\n\nParameter choices\n-----------------\n' >> "$descrfilename"
 	echo $OPTPARAMS >> "$descrfilename"
 

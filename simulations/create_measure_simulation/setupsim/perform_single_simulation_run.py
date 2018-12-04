@@ -11,9 +11,7 @@ import sys
 from simulations.simulation_methods import run_simulation
 
 
-def main():
-    # get parameters
-    params_received_from_start_simulation = sys.argv[1:]
+def main(params_received_from_start_simulation):
 
     # pass on the parameters to the SimulationInputParser to get them
     # in the correct form
@@ -29,4 +27,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # get parameters
+    params_received_from_start_simulation = sys.argv[1:]
+    main(params_received_from_start_simulation)

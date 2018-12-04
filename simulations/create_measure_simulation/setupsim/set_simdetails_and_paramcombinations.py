@@ -1,13 +1,22 @@
+import os
+
+import qlinklayer
+import SimulaQron.cqc
+
 #######################
 # Mandatory paramaters
 #######################
 
-description_string = "Simulation of EGP under CREATE+measure scenariou"
-easysquid_directory = "/Users/adahlberg/Documents/EasySquid/"  # full absolute path
-netsquid_directory = "/Users/adahlberg/Documents/NetSQUID/"  # full absolute path
-qlinklayer_directory = "/Users/adahlberg/Documents/QLinkLayer/"  # full absolute path
+description_string = "Simulation of EGP under CREATE+measure scenario"
 number_of_runs = 1
 outputdirname = "CREATE_and_measure"
+
+# Get paths to QLinkLayer and SimulaQron folders
+path_to_qlinklayer___init__ = os.path.abspath(qlinklayer.__file__)
+path_to_qlinklayer = "/".join(path_to_qlinklayer___init__.split("/")[:-2])
+
+path_to_cqc___init__ = os.path.abspath(SimulaQron.cqc.__file__)
+path_to_SimulaQron = "/".join(path_to_cqc___init__.split("/")[:-2])
 
 #########################
 # Optional parameters
@@ -71,7 +80,7 @@ opt_params = {
     "num_requests": 0,
     "max_sim_time": 0,
     "max_wall_time": 4 * 24 * 3600,
-    "max_mhp_cycle": 8000,
+    "max_mhp_cycle": 80000000,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
@@ -92,7 +101,6 @@ for name, scenario in name_to_scenario.items():
     p_succ = config_to_p_succ[config_file]
     param_set["create_probA"] = freq_req_factor * p_succ
     paramcombinations[name] = param_set
-    break
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #
@@ -114,12 +122,14 @@ def main():
     try:
         paramcombinations
     except NameError:
-        create_module.setup_sim_parameters(opt_params, description_string, easysquid_directory, netsquid_directory,
-                                           number_of_runs, outputdirname, make_paramcombinations=True)
+        create_module.setup_sim_parameters(opt_params, description_string, number_of_runs, outputdirname,
+                                           make_paramcombinations=True, QLINKLAYERDIR=path_to_qlinklayer,
+                                           SIMULAQRONDIR=path_to_SimulaQron)
         return
 
-    create_module.setup_sim_parameters(paramcombinations, description_string, easysquid_directory, netsquid_directory,
-                                       number_of_runs, outputdirname, make_paramcombinations=False)
+    create_module.setup_sim_parameters(paramcombinations, description_string, number_of_runs, outputdirname,
+                                       make_paramcombinations=False, QLINKLAYERDIR=path_to_qlinklayer,
+                                       SIMULAQRONDIR=path_to_SimulaQron)
 
 
 if __name__ == '__main__':

@@ -3,6 +3,9 @@ import sys
 import json
 import itertools
 
+import netsquid
+import easysquid
+
 
 ######################################################################################
 #
@@ -33,11 +36,18 @@ def get_sim_dir():
     return sim_dir
 
 
-def get_general_params(description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname,
-                       other_gen_params=None):
+def get_general_params(description_string, number_of_runs, outputdirname, other_gen_params = None):
     assert (type(number_of_runs) == int)
-    general_params = {"EASYSQUIDDIR": easysquid_directory,
-                      "NETSQUIDDIR": netsquid_directory,
+
+    # Get paths to easysquid and netsquid
+    path_to_netsquid___init__ = os.path.abspath(netsquid.__file__)
+    path_to_netsquid = "/".join(path_to_netsquid___init__.split("/")[:-2])
+
+    path_to_easysquid___init__ = os.path.abspath(easysquid.__file__)
+    path_to_easysquid = "/".join(path_to_easysquid___init__.split("/")[:-2])
+
+    general_params = {"EASYSQUIDDIR": path_to_easysquid,
+                      "NETSQUIDDIR": path_to_netsquid,
                       "DESCRIPTION": description_string,
                       "NUMRUNS": number_of_runs,
                       "OUTPUTDIRNAME": outputdirname
@@ -74,13 +84,14 @@ def get_paramcombinations(opt_params):
     return paramcombinations
 
 
-def save_to_ini(data, filename):
-    if os.path.isfile(filename):
-        input(
-            """
-                About to overwrite {}.
-                If this is fine with you, press enter.
-                If not, then abort using CTRL+C""".format(filename))
+def save_to_ini(data, filename, ask_for_input=True):
+    if ask_for_input:
+        if os.path.isfile(filename):
+            input(
+                """
+                    About to overwrite {}.
+                    If this is fine with you, press enter.
+                    If not, then abort using CTRL+C""".format(filename))
 
     with open(filename, 'w') as simdetailsfile:
         for key, value in data.items():
@@ -90,25 +101,27 @@ def save_to_ini(data, filename):
                 simdetailsfile.write("{}={}\n".format(key, value))
 
 
-def save_to_json(data, filename):
-    if os.path.isfile(filename):
-        input(
-            """
-                About to overwrite {}.
-                If this is fine with you, press enter.
-                If not, then abort using CTRL+C""".format(filename))
+def save_to_json(data, filename, ask_for_input=True):
+    if ask_for_input:
+        if os.path.isfile(filename):
+            input(
+                """
+                    About to overwrite {}.
+                    If this is fine with you, press enter.
+                    If not, then abort using CTRL+C""".format(filename))
 
     with open(filename, 'w') as simdetailsfile:
         json.dump(data, simdetailsfile, indent=4)
 
 
-def save_to_csv(param_combinations_keys, nrruns, filename):
-    if os.path.isfile(filename):
-        input(
-            """
-                About to overwrite {}.
-                If this is fine with you, press enter.
-                If not, then abort using CTRL+C""".format(filename))
+def save_to_csv(param_combinations_keys, nrruns, filename, ask_for_input=True):
+    if ask_for_input:
+        if os.path.isfile(filename):
+            input(
+                """
+                    About to overwrite {}.
+                    If this is fine with you, press enter.
+                    If not, then abort using CTRL+C""".format(filename))
 
     with open(filename, 'w') as simdetailsfile:
         for key in param_combinations_keys:
@@ -116,8 +129,7 @@ def save_to_csv(param_combinations_keys, nrruns, filename):
                 simdetailsfile.write("{} {}\n".format(key, i))
 
 
-def setup_sim_parameters(params, description_string, easysquid_directory, netsquid_directory, number_of_runs,
-                         outputdirname, make_paramcombinations=True, **other_gen_params):
+def setup_sim_parameters(params, description_string, number_of_runs, outputdirname, make_paramcombinations=True, ask_for_input=True, **other_gen_params):
     """
     This is the main function and should be called to setup the simulation details and parameters.
     Called by the script set_simdetails_and_paramcombinations.py
@@ -151,23 +163,24 @@ def setup_sim_parameters(params, description_string, easysquid_directory, netsqu
                  "number_of_remaining_wildebeasts": 2.5
              }
          }
+    :param ask_for_input: bool
+        If True, then you will be asked for confirmation before overwriting files, otherwise not.
     :return:
     """
 
     sim_dir = get_sim_dir()
-    general_params = get_general_params(description_string, easysquid_directory, netsquid_directory, number_of_runs,
-                                        outputdirname, other_gen_params)
+    general_params = get_general_params(description_string, number_of_runs, outputdirname, other_gen_params)
     if make_paramcombinations:
         paramcombinations = get_paramcombinations(params)
     else:
         paramcombinations = params
 
     # write ini file with simdetails
-    save_to_ini(data=general_params, filename=sim_dir + "setupsim/simdetails.ini")
+    save_to_ini(data=general_params, filename=sim_dir + "setupsim/simdetails.ini", ask_for_input=ask_for_input)
 
     # write the combinations of parameters to a file
-    save_to_json(data=paramcombinations, filename=sim_dir + 'setupsim/paramcombinations.json')
+    save_to_json(data=paramcombinations, filename=sim_dir + 'setupsim/paramcombinations.json', ask_for_input=ask_for_input)
 
     # Prepare CSV file for stopos
     save_to_csv(param_combinations_keys=paramcombinations.keys(), nrruns=number_of_runs,
-                filename=sim_dir + "setupsim/paramset.csv")
+                filename=sim_dir + "setupsim/paramset.csv", ask_for_input=ask_for_input)

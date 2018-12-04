@@ -9,7 +9,8 @@
 import shutil
 import os
 import json
-from argparse import ArgumentParser
+
+import easysquid
 
 path_to_this_file = os.path.realpath(__file__)
 path_to_this_folder = "/".join(path_to_this_file.split("/")[:-1])
@@ -25,8 +26,11 @@ def _remove_current_files():
             shutil.rmtree(dst)
 
 
-def copy_files_from_easysquid(path_to_easysquid):
+def copy_files_from_easysquid():
     _remove_current_files()
+
+    path_to_easysquid___init__ = os.path.abspath(easysquid.__file__)
+    path_to_easysquid = "/".join(path_to_easysquid___init__.split("/")[:-2])
 
     path_to_network_configs = os.path.join(path_to_easysquid, "config/networks/NV")
     for folder in os.listdir(path_to_network_configs):
@@ -163,21 +167,11 @@ def _update_no_noise_file(path_to_file):
         json.dump(config_dct, f, indent=2)
 
 
-def main(path_to_easysquid):
-    copy_files_from_easysquid(path_to_easysquid=path_to_easysquid)
+def main():
+    copy_files_from_easysquid()
     change_connnection_type()
     make_no_loss_and_no_noise_files()
 
 
-def parse_args():
-    parser = ArgumentParser()
-
-    parser.add_argument('--path_to_easysquid', required=True, type=str,
-                        help="Absolute path to the EasySquid repo")
-
-    return parser.parse_args()
-
-
 if __name__ == '__main__':
-    args = parse_args()
-    main(path_to_easysquid=args.path_to_easysquid)
+    main()
