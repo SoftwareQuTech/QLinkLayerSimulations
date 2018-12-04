@@ -76,7 +76,7 @@ opt_params = {
     "num_requests": 0,
     "max_sim_time": 0,
     "max_wall_time": 4 * 24 * 3600,
-    "max_mhp_cycle": 80000000,
+    "max_mhp_cycle": 8000,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
@@ -97,119 +97,33 @@ for name, scenario in name_to_scenario.items():
     p_succ = config_to_p_succ[config_file]
     param_set["create_probA"] = freq_req_factor * p_succ
     paramcombinations[name] = param_set
+    break
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #
 ################################################################
 
-sim_dir_env = "SIMULATION_DIR"
-
-# Check that the simulation path is set
-if sim_dir_env not in os.environ:
-    print("The environment variable {} must be set to the path to the simulation folder"
-          "before running this script!".format(sim_dir_env))
-    sys.exit()
-else:
-    sim_dir = os.getenv(sim_dir_env)
-    if not os.path.isdir(sim_dir):
-        print("The environment variable {} is not a path to a folder.")
-        sys.exit()
-
-# Check that sim_dir ends with '/'
-if not sim_dir[-1] == '/':
-    sim_dir += "/"
-
-#########################
-# Output simdetails.ini
-#########################
-general_params = {"EASYSQUIDDIR": easysquid_directory,
-                  "NETSQUIDDIR": netsquid_directory,
-                  "QLINKLAYERDIR": qlinklayer_directory,
-                  "DESCRIPTION": description_string,
-                  "NUMRUNS": number_of_runs,
-                  "OUTPUTDIRNAME": outputdirname
-                  }
-if "number_of_runs" in list(general_params.keys()):
-    assert (type(number_of_runs) == int)
-
-# merging the two dictionaries
-params = {"general_params": general_params,
-          "opt_params": opt_params}
+import os
+import importlib.util
 
 
-def save_to_ini(data, filename):
-    if os.path.isfile(filename):
-        input(
-            """
-                About to overwrite {}.
-                If this is fine with you, press enter.
-                If not, then abort using CTRL+C""".format(filename))
+def main():
+    abspath_to_this_file = os.path.abspath(__file__)
+    abspath_to_create_file = "/".join(abspath_to_this_file.split("/")[:-2]) + "/readonly/create_simdetails_and_paramcombinations.py"
 
-    with open(filename, 'w') as simdetailsfile:
-        for key, value in data.items():
-            if isinstance(value, str):
-                simdetailsfile.write("{}=\"{}\"\n".format(key, value))
-            else:
-                simdetailsfile.write("{}={}\n".format(key, value))
+    # Load the functions from the file ../readyonly/create_simdetails_and_paramcombinations.py
+    spec = importlib.util.spec_from_file_location("module.name", abspath_to_create_file)
+    create_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(create_module)
+    try:
+        paramcombinations
+    except NameError:
+        create_module.setup_sim_parameters(opt_params, description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname, make_paramcombinations=True)
+        return
 
-
-def save_to_json(data, filename):
-    if os.path.isfile(filename):
-        input(
-            """
-                About to overwrite {}.
-                If this is fine with you, press enter.
-                If not, then abort using CTRL+C""".format(filename))
-
-    with open(filename, 'w') as simdetailsfile:
-        json.dump(data, simdetailsfile, indent=4)
+    create_module.setup_sim_parameters(paramcombinations, description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname, make_paramcombinations=False)
 
 
-def save_to_csv(param_combinations_keys, nrruns, filename):
-    if os.path.isfile(filename):
-        input(
-            """
-                About to overwrite {}.
-                If this is fine with you, press enter.
-                If not, then abort using CTRL+C""".format(filename))
+if __name__ == '__main__':
+    main()
 
-    with open(filename, 'w') as simdetailsfile:
-        for key in param_combinations_keys:
-            for i in range(nrruns):
-                simdetailsfile.write("{} {}\n".format(key, i))
-
-
-save_to_ini(data=general_params, filename=sim_dir + "setupsim/simdetails.ini")
-
-# make all parameters that were not a list (i.e. they consist
-# of a single element only, into a list
-allparams = []
-for value in list(opt_params.values()):
-    if isinstance(value, list):
-        allparams.append(value)
-    else:
-        allparams.append([value])
-
-# create a dictionary `paramcombinations` with keys integers
-# and as values all possible combinations of the parameters
-# (that is, `paramcombinations` is like the cartesian product
-# of all parameter choices).
-# First try if user already defined this dictionary
-try:
-    paramcombinations
-except NameError:
-    paramcombinations = {}
-    counter = 0
-    for parametertuple in itertools.product(*allparams):
-        pardict = {}
-        for keyindex, key in enumerate(list(opt_params.keys())):
-            pardict[key] = parametertuple[keyindex]
-        paramcombinations[counter] = pardict
-        counter += 1
-
-# write the cartesian product to a file
-save_to_json(data=paramcombinations, filename=sim_dir + 'setupsim/paramcombinations.json')
-
-# Prepare CSV file for stopos
-save_to_csv(param_combinations_keys=paramcombinations.keys(), nrruns=number_of_runs,
-            filename=sim_dir + "setupsim/paramset.csv")

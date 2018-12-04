@@ -1,5 +1,6 @@
 import abc
 import numpy as np
+import bitstring
 from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
@@ -222,11 +223,12 @@ class EGPOKSequence(EGPDataSequence):
         try:
             create_id, ent_id, _, _, _, _ = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
             ok_type = EntInfoCreateKeepHeader.type
-        except ValueError:
+        # TODO the bitstring.ReadError should occur but this needs to be fixed in SimulaQron
+        except (ValueError, bitstring.ReadError):
             try:
                 create_id, ent_id, _, _, _, _ = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
                 ok_type = EntInfoMeasDirectHeader.type
-            except ValueError:
+            except (ValueError, bitstring.ReadError):
                 raise ValueError("Unknown OK type")
         origin_id = ent_id[0]
 

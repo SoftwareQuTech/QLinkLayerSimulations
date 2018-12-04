@@ -26,6 +26,6 @@ done
 #obtaining the git hashes
 
 #go to directory
-cd $(echo $GITDIR)
-GITHASH=$(git --git-dir .git rev-parse HEAD)
+cd "$(echo $GITDIR)"
+GITHASH=$(git rev-parse HEAD)
 echo $GITHASH

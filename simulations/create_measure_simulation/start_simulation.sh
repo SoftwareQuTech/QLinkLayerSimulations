@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -p fat # requested parition (normal, short, staging, ...)
-#SBATCH -t 5-00:00:00 # wall clock time
+#SBATCH -p fat # requested parition (normal, short, fat, staging, ...)
+#SBATCH -t 5-0:00:00 # wall clock time
 # This script:
 # - creates a new folder <TIMESTAMP>_<OUTPUTDIRNAME>
 # - extracts information about the simulation setup and 
@@ -24,7 +24,8 @@
 #    data such as a timestamp and the directory where to put the 
 #    data gathered during or after the single simulation run.
 
-# Author: Axel
+# Author: Axel Dahlberg
+# Revisions: Przemyslaw Pawelczak
 
 if [[ -z "${SIMULATION_DIR}" ]]; then
     echo "The environment variable SIMULATION_DIR must be set to the path to the simulation folder before running this script!"
@@ -39,16 +40,16 @@ echo 'Usage : --outputdescription [y/n] --copysimdetails [y/n] --copyconfigurati
 echo $'\nNOTE BEFOREHAND: it is advised to remain paying attention to the simulation until the message "Starting simulations..." appears in case the preparation of the simulation runs does not finish successfully\n'
 
 # relevant files
-runsimulation=$SIMULATION_DIR/setupsim/perform_single_simulation_run.py
-simdetailsfile=$SIMULATION_DIR/setupsim/simdetails.ini
-paramcombinationsfile=$SIMULATION_DIR/setupsim/paramcombinations.json
-configdir=$SIMULATION_DIR/setupsim/config
-paramsetfile=$SIMULATION_DIR/setupsim/paramset.csv
-archivejobfile=$SIMULATION_DIR/readonly/archivejob.sh
+runsimulation="$SIMULATION_DIR"/setupsim/perform_single_simulation_run.py
+simdetailsfile="$SIMULATION_DIR"/setupsim/simdetails.ini
+paramcombinationsfile="$SIMULATION_DIR"/setupsim/paramcombinations.json
+configdir="$SIMULATION_DIR"/setupsim/config
+paramsetfile="$SIMULATION_DIR"/setupsim/paramset.csv
+archivejobfile="$SIMULATION_DIR"/readonly/archivejob.sh
 
 # Get simulation details
 # TODO Check that requiered arguments are set
-. $simdetailsfile
+. "$simdetailsfile"
 
 # get the date and time as a single timestamp in ISO8601 format YYYY-MM-DDTHH:MM:SS+02:00
 timestamp=$(date '+%Y-%m-%dT%H:%M:%S%Z')
@@ -56,7 +57,6 @@ timestamp=$(date '+%Y-%m-%dT%H:%M:%S%Z')
 # Set the Python Path
 # TODO should we set this here?
 export PYTHONPATH=$PYTHONPATH:$SIMULATION_DIR
-
 
 ##################
 # Read arguments #
@@ -129,10 +129,10 @@ echo $timestamp
 echo $'Preparing simulation\n--------------------'
 
 # Set the paths to the repos
-# TODO should we do this here?
-export PYTHONPATH=$PYTHONPATH:$EASYSQUIDDIR
-export PYTHONPATH=$PYTHONPATH:$NETSQUIDDIR
-export PYTHONPATH=$PYTHONPATH:$QLINKLAYERDIR
+# TODO should we do this here? Przemek: I don't think so, you need to have it ready to have EasySquid running anyway (commented out)
+# export PYTHONPATH=$PYTHONPATH:$EASYSQUIDDIR
+# export PYTHONPATH=$PYTHONPATH:$NETSQUIDDIR
+# export PYTHONPATH=$PYTHONPATH:$QLINKLAYERDIR
 
 #########################
 # Get software versions #
@@ -140,22 +140,20 @@ export PYTHONPATH=$PYTHONPATH:$QLINKLAYERDIR
 
 echo '- Getting software versions of NetSquid and EasySquid'
 
-
-EASYSQUIDHASH=$($SIMULATION_DIR/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")
-NETSQUIDHASH=$($SIMULATION_DIR/readonly/get_git_hash.sh -dir "$NETSQUIDDIR")
-QLINKLAYERHASH=$($SIMULATION_DIR/readonly/get_git_hash.sh -dir "$QLINKLAYERDIR")
-
+EASYSQUIDHASH="$("$SIMULATION_DIR"/readonly/get_git_hash.sh -dir "$EASYSQUIDDIR")"
+NETSQUIDHASH="$("$SIMULATION_DIR"/readonly/get_git_hash.sh -dir "$NETSQUIDDIR")"
+QLINKLAYERHASH=$("$SIMULATION_DIR"/readonly/get_git_hash.sh -dir "$QLINKLAYERDIR")
 
 #####################################
 # Create files for logging purposes #
 #####################################
 
-resultsdir=$SIMULATION_DIR/$timestamp\_$OUTPUTDIRNAME
+resultsdir="$SIMULATION_DIR"/$timestamp\_$OUTPUTDIRNAME
 echo "- Creating directory $resultsdir for storing data"
 
 # create new directory
 #TODO: GIVE AN ERROR WHEN THE DIRECTORY ALREADY EXISTS
-mkdir -p $resultsdir
+mkdir -p "$resultsdir"
 
 # copy the simulation details
 if [ "$COPYSIMDETAILS" = 'y' ]
@@ -164,9 +162,9 @@ then
 	paramcombinationsdestination=$resultsdir/paramcombinations.json
 	configdirdestination=$resultsdir/config
 	echo "- Copying simulation parameters and configuration"
-	cp -i $simdetailsfile $simdetailsdestination
-	cp -i $paramcombinationsfile $paramcombinationsdestination
-	cp -r -i $configdir $configdirdestination
+	cp -i "$simdetailsfile" "$simdetailsdestination"
+	cp -i "$paramcombinationsfile" "$paramcombinationsdestination"
+	cp -r -i "$configdir" "$configdirdestination"
 fi
 
 # create a description file with a short
@@ -177,22 +175,22 @@ then
 	echo "- Writing description file $descrfilename"
 
 	# create the file
-	touch $descrfilename
+	touch "$descrfilename"
 
 	# write to the file
-	echo $timestamp >> $descrfilename
-	echo $'\n\nNumber of runs:' >> $descrfilename
-	echo $NUMRUNS >> $descrfilename
-	echo $'\nSimulation experiment description\n---------------------------------\n' >> $descrfilename
-	echo $DESCRIPTION >> $descrfilename
-	echo $'\n\nSoftware version\n----------------\nNetSQUID:' >> $descrfilename
-	echo $NETSQUIDHASH >> $descrfilename
-	echo $'\nEasySquid:' >> $descrfilename
-	echo $EASYSQUIDHASH >> $descrfilename
+	echo "$timestamp" >> "$descrfilename"
+	echo $'\n\nNumber of runs:' >> "$descrfilename"
+	echo "$NUMRUNS" >> "$descrfilename"
+	echo $'\nSimulation experiment description\n---------------------------------\n' >> "$descrfilename"
+	echo $DESCRIPTION >> "$descrfilename"
+	echo $'\n\nSoftware version\n----------------\nNetSQUID:' >> "$descrfilename"
+	echo $NETSQUIDHASH >> "$descrfilename"
+	echo $'\nEasySquid:' >> "$descrfilename"
+	echo $EASYSQUIDHASH >> "$descrfilename"
 	echo $'\nQLinkLayer:' >> $descrfilename
 	echo $QLINKLAYERHASH >> $descrfilename
-	echo $'\n\nParameter choices\n-----------------\n' >> $descrfilename
-	echo $OPTPARAMS >> $descrfilename
+	echo $'\n\nParameter choices\n-----------------\n' >> "$descrfilename"
+	echo $OPTPARAMS >> "$descrfilename"
 
 fi
 
@@ -200,12 +198,12 @@ fi
 # create logfile
 if [ "$OUTPUTLOGFILE" = 'y' ]
 then
-	logfiledestination=$resultsdir/simulationlog\_$timestamp\_$OUTPUTDIRNAME.txt
-	echo $'Start time:' >> $logfiledestination
-	echo $(date '+%Y-%m-%dT%H:%M:%S%Z') >> $logfiledestination
-	echo $'\n\nLog of simulating: ' >> $logfiledestination
-	echo $OUTPUTDIRNAME >> $logfiledestination
-	echo $'\n-----------------------------\n' >> $logfiledestination
+	logfiledestination="$resultsdir"/simulationlog\_$timestamp\_$OUTPUTDIRNAME.txt
+	echo $'Start time:' >> "$logfiledestination"
+	echo $(date '+%Y-%m-%dT%H:%M:%S%Z') >> "$logfiledestination"
+	echo $'\n\nLog of simulating: ' >> "$logfiledestination"
+	echo $OUTPUTDIRNAME >> "$logfiledestination"
+	echo $'\n-----------------------------\n' >> "$logfiledestination"
 fi
 
 #####################
@@ -271,7 +269,7 @@ for ((i=1; i<=processes; i++)); do
             params=( $STOPOS_VALUE )
         else
             # Get the next line of parameters
-            line=$(sed "${counter}q;d" $paramsetfile)
+            line=$(sed "${counter}q;d" "$paramsetfile")
             if [[ -z "$line" ]]; then
                 break
             fi
@@ -296,8 +294,8 @@ for ((i=1; i<=processes; i++)); do
         # logging to the logfile
         if [ "$OUTPUTLOGFILE" = 'y' ]
         then
-            echo $logstr >> $logfiledestination
-            echo $'\n' >> $logfiledestination
+            echo $logstr >> "$logfiledestination"
+            echo $'\n' >> "$logfiledestination"
         fi
 
         # Schedule the simulation
