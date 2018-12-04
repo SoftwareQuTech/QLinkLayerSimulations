@@ -5,7 +5,7 @@ from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
-from qlinklayer.egp import NodeCentricEGP, EGPRequest, EGP
+from qlinklayer.egp import NodeCentricEGP, EGP
 from qlinklayer.scenario import MeasureBeforeSuccessScenario, MeasureAfterSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoMeasDirectHeader, EntInfoCreateKeepHeader
 
@@ -293,12 +293,12 @@ class EGPOKDataPoint(EGPDataPoint):
         self.success = data[5]
 
         if self.ok_type == EntInfoMeasDirectHeader.type:
-            self.create_id, ent_id, self.meas_out, self.basis, self.goodness,\
-                self.t_create = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
+            (self.create_id, ent_id, self.measurement_outcome, self.measurement_basis, self.goodness,
+             self.create_time) = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
             self.origin_id, self.other_id, self.mhp_seq = ent_id
         elif self.ok_type == EntInfoCreateKeepHeader.type:
-            self.create_id, ent_id, self.logical_id, self.goodness, self.t_create,\
-                self.t_goodness = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
+            (self.create_id, ent_id, self.logical_id, self.goodness, self.create_time,
+             self.goodness_time) = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
             self.origin_id, self.other_id, self.mhp_seq = ent_id
         else:
             raise ValueError("Cannot parse data")
@@ -697,14 +697,16 @@ class AttemptCollector(Entity):
             try:
                 return self._attempts.pop(key)
             except KeyError:
-                logger.warning("No attempt info for create ID {} and master request {}".format(create_id, master_request))
+                logger.warning(
+                    "No attempt info for create ID {} and master request {}".format(create_id, master_request))
                 print(self._attempts)
                 return None
         else:
             try:
                 return self._attempts[key]
             except KeyError:
-                logger.warning("No attempt info for create ID {} and master request {}".format(create_id, master_request))
+                logger.warning(
+                    "No attempt info for create ID {} and master request {}".format(create_id, master_request))
                 print(self._attempts)
                 return None
 

@@ -1,8 +1,3 @@
-import json
-import itertools
-import os
-import sys
-
 #######################
 # Mandatory paramaters
 #######################
@@ -109,7 +104,8 @@ import importlib.util
 
 def main():
     abspath_to_this_file = os.path.abspath(__file__)
-    abspath_to_create_file = "/".join(abspath_to_this_file.split("/")[:-2]) + "/readonly/create_simdetails_and_paramcombinations.py"
+    abspath_to_create_file = "/".join(
+        abspath_to_this_file.split("/")[:-2]) + "/readonly/create_simdetails_and_paramcombinations.py"
 
     # Load the functions from the file ../readyonly/create_simdetails_and_paramcombinations.py
     spec = importlib.util.spec_from_file_location("module.name", abspath_to_create_file)
@@ -118,12 +114,13 @@ def main():
     try:
         paramcombinations
     except NameError:
-        create_module.setup_sim_parameters(opt_params, description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname, make_paramcombinations=True)
+        create_module.setup_sim_parameters(opt_params, description_string, easysquid_directory, netsquid_directory,
+                                           number_of_runs, outputdirname, make_paramcombinations=True)
         return
 
-    create_module.setup_sim_parameters(paramcombinations, description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname, make_paramcombinations=False)
+    create_module.setup_sim_parameters(paramcombinations, description_string, easysquid_directory, netsquid_directory,
+                                       number_of_runs, outputdirname, make_paramcombinations=False)
 
 
 if __name__ == '__main__':
     main()
-

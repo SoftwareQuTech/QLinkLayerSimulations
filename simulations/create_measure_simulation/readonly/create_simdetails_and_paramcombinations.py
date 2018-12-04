@@ -33,7 +33,8 @@ def get_sim_dir():
     return sim_dir
 
 
-def get_general_params(description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname, other_gen_params = None):
+def get_general_params(description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname,
+                       other_gen_params=None):
     assert (type(number_of_runs) == int)
     general_params = {"EASYSQUIDDIR": easysquid_directory,
                       "NETSQUIDDIR": netsquid_directory,
@@ -115,7 +116,8 @@ def save_to_csv(param_combinations_keys, nrruns, filename):
                 simdetailsfile.write("{} {}\n".format(key, i))
 
 
-def setup_sim_parameters(params, description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname, make_paramcombinations=True, **other_gen_params):
+def setup_sim_parameters(params, description_string, easysquid_directory, netsquid_directory, number_of_runs,
+                         outputdirname, make_paramcombinations=True, **other_gen_params):
     """
     This is the main function and should be called to setup the simulation details and parameters.
     Called by the script set_simdetails_and_paramcombinations.py
@@ -153,7 +155,8 @@ def setup_sim_parameters(params, description_string, easysquid_directory, netsqu
     """
 
     sim_dir = get_sim_dir()
-    general_params = get_general_params(description_string, easysquid_directory, netsquid_directory, number_of_runs, outputdirname, other_gen_params)
+    general_params = get_general_params(description_string, easysquid_directory, netsquid_directory, number_of_runs,
+                                        outputdirname, other_gen_params)
     if make_paramcombinations:
         paramcombinations = get_paramcombinations(params)
     else:

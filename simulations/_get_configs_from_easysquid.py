@@ -24,6 +24,7 @@ def _remove_current_files():
         if os.path.exists(dst):
             shutil.rmtree(dst)
 
+
 def copy_files_from_easysquid(path_to_easysquid):
     _remove_current_files()
 
@@ -32,6 +33,7 @@ def copy_files_from_easysquid(path_to_easysquid):
         src = os.path.join(path_to_network_configs, folder)
         dst = os.path.join(path_to_this_config_folder, folder)
         shutil.copytree(src, dst)
+
 
 def change_connnection_type():
     for dirpath, dirname, filenames in os.walk(path_to_this_config_folder):
@@ -134,8 +136,8 @@ def _update_no_noise_file(path_to_file):
 
     # Update noise parameters of photon emission
     photon_emission_noise = qpd_parameters["photon_emission"]["photon_emission_noise"]
-    photon_emission_noise["delta_w"] = [0]*len(photon_emission_noise["delta_w"])
-    photon_emission_noise["tau_decay"] = [0]*len(photon_emission_noise["tau_decay"])
+    photon_emission_noise["delta_w"] = [0] * len(photon_emission_noise["delta_w"])
+    photon_emission_noise["tau_decay"] = [0] * len(photon_emission_noise["tau_decay"])
     photon_emission_noise["delta_phi"] = 0
     photon_emission_noise["tau_emission"] = 0
 
