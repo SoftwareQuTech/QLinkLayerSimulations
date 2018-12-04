@@ -1019,7 +1019,6 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 
 
 def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output=False, analysis_folder=None):
-
     if results_path is None:
         # Find the latest folder containing simulation data
         sim_dir_env = "SIMULATION_DIR"
@@ -1057,7 +1056,8 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
             if entry.endswith('.db'):
                 # Initialize the printer
                 entry_results_path = results_path + "/" + entry
-                prnt = printer(results_path=entry_results_path, save_output=save_output, analysis_folder=analysis_folder)
+                prnt = printer(results_path=entry_results_path, save_output=save_output,
+                               analysis_folder=analysis_folder)
 
                 prnt.print("")
                 prnt.print("====================================")

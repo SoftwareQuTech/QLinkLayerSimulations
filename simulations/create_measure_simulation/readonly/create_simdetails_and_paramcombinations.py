@@ -36,7 +36,7 @@ def get_sim_dir():
     return sim_dir
 
 
-def get_general_params(description_string, number_of_runs, outputdirname, other_gen_params = None):
+def get_general_params(description_string, number_of_runs, outputdirname, other_gen_params=None):
     assert (type(number_of_runs) == int)
 
     # Get paths to easysquid and netsquid
@@ -129,7 +129,8 @@ def save_to_csv(param_combinations_keys, nrruns, filename, ask_for_input=True):
                 simdetailsfile.write("{} {}\n".format(key, i))
 
 
-def setup_sim_parameters(params, description_string, number_of_runs, outputdirname, make_paramcombinations=True, ask_for_input=True, **other_gen_params):
+def setup_sim_parameters(params, description_string, number_of_runs, outputdirname, make_paramcombinations=True,
+                         ask_for_input=True, **other_gen_params):
     """
     This is the main function and should be called to setup the simulation details and parameters.
     Called by the script set_simdetails_and_paramcombinations.py
@@ -179,7 +180,8 @@ def setup_sim_parameters(params, description_string, number_of_runs, outputdirna
     save_to_ini(data=general_params, filename=sim_dir + "setupsim/simdetails.ini", ask_for_input=ask_for_input)
 
     # write the combinations of parameters to a file
-    save_to_json(data=paramcombinations, filename=sim_dir + 'setupsim/paramcombinations.json', ask_for_input=ask_for_input)
+    save_to_json(data=paramcombinations, filename=sim_dir + 'setupsim/paramcombinations.json',
+                 ask_for_input=ask_for_input)
 
     # Prepare CSV file for stopos
     save_to_csv(param_combinations_keys=paramcombinations.keys(), nrruns=number_of_runs,

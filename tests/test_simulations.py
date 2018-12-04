@@ -101,7 +101,7 @@ class TestSimulations(unittest.TestCase):
         self.assertEqual(create_probB, self.create_probB)
         self.assertEqual(total_matrix_time, mhp_t_cycle * self.max_mhp_cycle)
 
-        self.assertAlmostEqual(p_succ, 2 * self.alpha * (1 - self.alpha) + self.alpha**2, places=1)
+        self.assertAlmostEqual(p_succ, 2 * self.alpha * (1 - self.alpha) + self.alpha ** 2, places=1)
 
     def test_simulations_5(self):
         if os.path.exists(self.results_folder):
@@ -121,7 +121,8 @@ class TestSimulations(unittest.TestCase):
             perform_single_simulation_run.main(params_for_simulation)
 
     def test_simulations_6(self):
-        nr_of_add_data_files = len(glob.glob("{}/test_simulation_tmp/*additional_data.json".format(os.path.dirname(__file__))))
+        nr_of_add_data_files = len(
+            glob.glob("{}/test_simulation_tmp/*additional_data.json".format(os.path.dirname(__file__))))
         self.assertEqual(nr_of_add_data_files, 20)
 
         nr_of_data_files = len(glob.glob("{}/test_simulation_tmp/*.db".format(os.path.dirname(__file__))))
@@ -129,8 +130,10 @@ class TestSimulations(unittest.TestCase):
 
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
 
-        nr_of_data_files = len(glob.glob("{}/test_simulation_tmp/*analysis_output.txt".format(os.path.dirname(__file__))))
+        nr_of_data_files = len(
+            glob.glob("{}/test_simulation_tmp/*analysis_output.txt".format(os.path.dirname(__file__))))
         self.assertEqual(nr_of_data_files, 20)
+
 
 if __name__ == '__main__':
     unittest.main()
