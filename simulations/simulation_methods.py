@@ -220,7 +220,7 @@ def run_simulation(results_path, name=None, config=None, create_probA=1, create_
     # print(nodeA.qmem._memory_positions[0].get_gate(CNOTGate(), 1))
     # raise RuntimeError()
     mhp_conn = network.get_connection(nodeA, nodeB, "mhp_conn")
-    mhp_conn.set_timings(t_cycle=t_cycle, t0=t0, measure_directly=measure_directly)
+    mhp_conn.set_timings(t_cycle=t_cycle, t0=t0)
     if save_additional_data:
         additional_data["mhp_t_cycle"] = mhp_conn.t_cycle
 

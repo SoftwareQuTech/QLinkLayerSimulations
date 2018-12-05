@@ -702,7 +702,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.1)
         dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
         mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=0.02, lengthB=0.03,
-                                                    use_time_window=True, measure_directly=True)
+                                                    use_time_window=True)
         egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
 
         self.assertEqual(egpA.conn, egp_conn)
@@ -945,7 +945,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.1)
         dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
         mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=0.02, lengthB=0.03,
-                                                    use_time_window=True, measure_directly=True)
+                                                    use_time_window=True)
         egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
 
         alice_pairs = 2

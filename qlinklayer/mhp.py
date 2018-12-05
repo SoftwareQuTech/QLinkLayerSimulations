@@ -891,7 +891,7 @@ class SimulatedNodeCentricMHPService(Service):
         # Set up a default connection if not specified
         if not conn:
             conn = self.conn_class(nodeA=nodeA, nodeB=nodeB, lengthA=lengthA, lengthB=lengthB, use_time_window=True,
-                                   time_window=0.01, measure_directly=True)
+                                   time_window=0.01)
 
         # Create the MHP node protocols
         nodeAProto = self.protocol_class(timeStep=conn.t_cycle, node=nodeA, connection=conn, t0=conn.trigA,
