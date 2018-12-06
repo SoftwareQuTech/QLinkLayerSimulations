@@ -259,7 +259,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         data : object
             Data to be sent
         """
-        self.conn.put_from(self.myID, [[cmd, data]])
+        self.conn.put_from(self.myID, [(cmd, data)])
 
     def send_ADD_ACK(self, cseq, qseq, qid=0):
         """

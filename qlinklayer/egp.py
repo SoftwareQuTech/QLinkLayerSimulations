@@ -408,7 +408,7 @@ class NodeCentricEGP(EGP):
         """
         logger.debug("Requesting other node's free memory advertisement")
         my_free_mem = self.qmm.get_free_mem_ad()
-        self.conn.put_from(self.node.nodeID, [[self.CMD_REQ_E, my_free_mem]])
+        self.conn.put_from(self.node.nodeID, [(self.CMD_REQ_E, my_free_mem)])
 
     def send_expire_notification(self, aid, createID, originID, new_seq):
         """
@@ -423,7 +423,7 @@ class NodeCentricEGP(EGP):
             The new sequence number of the local node to be informed to peer
         """
         logger.error("Sending EXPIRE notification to peer")
-        self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE, (aid, createID, originID, new_seq)]])
+        self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE, (aid, createID, originID, new_seq))])
 
     def cmd_EXPIRE(self, data):
         """
@@ -449,7 +449,7 @@ class NodeCentricEGP(EGP):
         self.scheduler.clear_request(aid)
 
         # Let our peer know we expired
-        self.conn.put_from(self.node.nodeID, [[self.CMD_EXPIRE_ACK, self.expected_seq]])
+        self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE_ACK, self.expected_seq)])
 
         # Alert higher layer protocols
         self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
@@ -481,7 +481,7 @@ class NodeCentricEGP(EGP):
         free_memory_size = self.qmm.get_free_mem_ad()
         logger.debug("{} Got request for free memory advertisement, sending: {}".format(self.node.nodeID,
                                                                                         free_memory_size))
-        self.conn.put_from(self.node.nodeID, [[self.CMD_ACK_E, free_memory_size]])
+        self.conn.put_from(self.node.nodeID, [(self.CMD_ACK_E, free_memory_size)])
 
     def cmd_ACK_E(self, data):
         """

@@ -479,8 +479,8 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         Returns the current absolute queue IDs from A and B stored at the midpoint
         :return: tuple (aid_A, aid_B)
         """
-        aid_A = self.node_requests[self.nodeA.nodeID].pass_data[1]
-        aid_B = self.node_requests[self.nodeB.nodeID].pass_data[1]
+        aid_A = self.node_requests[self.nodeA.nodeID].pass_data
+        aid_B = self.node_requests[self.nodeB.nodeID].pass_data
         return aid_A, aid_B
 
     def _has_same_aid(self):
@@ -849,7 +849,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             logger.debug("Sending pass info: {}".format(pass_info))
 
             # Send info to the heralding station
-            self.conn.put_from(self.node.nodeID, [[self.conn.CMD_PRODUCE, pass_info], photon])
+            self.conn.put_from(self.node.nodeID, [(self.conn.CMD_PRODUCE, pass_info), photon])
             logger.debug("Scheduling entanglement event now.")
             self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
