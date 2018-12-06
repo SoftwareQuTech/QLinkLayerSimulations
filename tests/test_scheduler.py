@@ -7,7 +7,7 @@ from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
 from qlinklayer.distQueue import EGPDistributedQueue
-from qlinklayer.scheduler import RequestScheduler
+from qlinklayer.scheduler import StrictPriorityRequestScheduler
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.egp import EGPRequest
 from qlinklayer.scenario import EGPSimulationScenario
@@ -38,15 +38,15 @@ class TestRequestScheduler(unittest.TestCase):
     def test_init(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
         with self.assertRaises(TypeError):
-            RequestScheduler()
+            StrictPriorityRequestScheduler()
 
         with self.assertRaises(TypeError):
-            RequestScheduler(distQueue=self.dqpA)
+            StrictPriorityRequestScheduler(distQueue=self.dqpA)
 
         with self.assertRaises(TypeError):
-            RequestScheduler(qmm=qmm)
+            StrictPriorityRequestScheduler(qmm=qmm)
 
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=self.dqpA, qmm=qmm)
         self.assertEqual(test_scheduler.distQueue, self.dqpA)
         self.assertEqual(test_scheduler.qmm, qmm)
         self.assertEqual(test_scheduler.my_free_memory, qmm.get_free_mem_ad())
@@ -57,12 +57,12 @@ class TestRequestScheduler(unittest.TestCase):
         request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1,
                                                                              min_fidelity=1, max_time=1, purpose_id=0,
                                                                              priority=0))
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=self.dqpA, qmm=qmm)
         self.assertEqual(test_scheduler.get_queue(request), 0)
 
     def test_update_other_mem_size(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=self.dqpA, qmm=qmm)
 
         test_size = 3
         test_scheduler.update_other_mem_size(mem=test_size)
@@ -73,7 +73,7 @@ class TestRequestScheduler(unittest.TestCase):
         dqpB = EGPDistributedQueue(node=self.nodeB, accept_all=True)
         dqpA.connect_to_peer_protocol(dqpB)
         qmmA = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=dqpA, qmm=qmmA)
         test_scheduler.configure_mhp_timings(1, 2, 0, 0)
 
         request = EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0,
@@ -125,7 +125,7 @@ class TestRequestScheduler(unittest.TestCase):
         dqpB = EGPDistributedQueue(node=self.nodeB, accept_all=True, numQueues=num_priorities)
         dqpA.connect_to_peer_protocol(dqpB)
         qmmA = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=dqpA, qmm=qmmA)
         test_scheduler.configure_mhp_timings(1, 2, 0, 0)
 
         requests = [EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0,
@@ -168,7 +168,7 @@ class TestTimings(unittest.TestCase):
         dqpB = EGPDistributedQueue(node=nodeB, accept_all=True)
         dqpA.connect_to_peer_protocol(dqpB)
         qmm = QuantumMemoryManagement(node=nodeA)
-        self.test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmm)
+        self.test_scheduler = StrictPriorityRequestScheduler(distQueue=dqpA, qmm=qmm)
 
         conn = dqpA.conn
         network = EasyNetwork(name="DQPNetwork",

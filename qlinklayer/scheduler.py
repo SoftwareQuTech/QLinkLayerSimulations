@@ -15,6 +15,11 @@ SchedulerRequest = namedtuple("Scheduler_request",
                                "priority", "store", "atomic", "measure_directly", "master_request"])
 SchedulerRequest.__new__.__defaults__ = (0,) * 7 + (True, False, False, True)
 
+WFQSchedulerRequest = namedtuple("WFQ_Scheduler_request",
+                                 ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
+                                  "priority", "virtual_finish", "store", "atomic", "measure_directly", "master_request"])
+WFQSchedulerRequest.__new__.__defaults__ = (0,) * 8 + (True, False, False, True)
+
 SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"])
 SchedulerGen.__new__.__defaults__ = (False,) + (None,) * 4
 
@@ -42,12 +47,24 @@ class Scheduler(metaclass=abc.ABCMeta):
         pass
 
 
-class RequestScheduler(Scheduler):
-    """
-    Stub for a scheduler to decide how we assign and consume elements of the queue.
-    """
+class StrictPriorityRequestScheduler(Scheduler):
+
+    # The scheduler request named tuple to use
+    _scheduler_request_named_tuple = SchedulerRequest
 
     def __init__(self, distQueue, qmm, feu=None):
+        """
+        Stub for a scheduler to decide how we assign and consume elements of the queue.
+        This scheduler puts requests in queues depending on only their specified priority
+        and always serves the highest priority queue first.
+
+        :param distQueue: :obj:`~qlinklayer.distQueue.DistributedQueue`
+            The distributed queue
+        :param qmm: :obj:`~qlinklayer.qmm.QuantumMemoryManagement`
+            The quantum memory management
+        :param feu: :obj:`~qlinklayer.feu.FidelityEstimationUnit`
+            (optional) The fidelity estimation unit
+        """
         # Distributed Queue to schedule from
         self.distQueue = distQueue
         self.feu = feu
@@ -169,8 +186,8 @@ class RequestScheduler(Scheduler):
 
         return cycle_number
 
-    @staticmethod
-    def _get_scheduler_request(egp_request, create_id, sched_cycle, timeout_cycle, master_request):
+    @classmethod
+    def _get_scheduler_request(cls, egp_request, create_id, sched_cycle, timeout_cycle, master_request):
         """
         Creates a Scheduler request from a EGP request plus additional arguments.
 
@@ -181,7 +198,7 @@ class RequestScheduler(Scheduler):
         :param master_request: bool
         :return: :obj:`~qlinklayer.scheduler.SchedulerRequest`
         """
-        scheduler_request = SchedulerRequest(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle,
+        scheduler_request = cls._scheduler_request_named_tuple(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle,
                                              min_fidelity=egp_request.min_fidelity, purpose_id=egp_request.purpose_id,
                                              create_id=create_id, num_pairs=egp_request.num_pairs,
                                              priority=egp_request.priority, store=egp_request.store,
@@ -220,12 +237,21 @@ class RequestScheduler(Scheduler):
                                                         master_request=self.distQueue.master)
 
         try:
-            self.distQueue.add(scheduler_request, qid)
+            self._add_to_queue(scheduler_request, qid)
         except LinkLayerException:
             logger.warning("Could not add request to queue.")
             return False
 
         return True
+
+    def _add_to_queue(self, scheduler_request, qid):
+        """
+        Adds request to queue
+        :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :param qid: int
+        :return: None
+        """
+        self.distQueue.add(scheduler_request, qid)
 
     def get_timeout_cycle(self, request):
         """
@@ -666,6 +692,14 @@ class RequestScheduler(Scheduler):
         if self.curr_aid and self.distQueue.local_peek(self.curr_aid).request.atomic:
             return self.curr_aid, self.distQueue.local_peek(self.curr_aid).request
 
+        return self.select_queue()
+
+    def select_queue(self):
+        """
+        Selects the next queue from which the next request should be popped
+        :return: tuple of (tuple, request)
+            The absolute queue ID and request (if any)
+        """
         for local_queue in self.distQueue.queueList:
             queue_item = local_queue.peek()
             if queue_item and queue_item.ready:
@@ -737,3 +771,70 @@ class RequestScheduler(Scheduler):
         """
         self._last_aid_added = None
         self._last_aid_removed = None
+
+class WFQRequestScheduler(StrictPriorityRequestScheduler):
+
+    # The scheduler request named tuple to use
+    _scheduler_request_named_tuple = WFQSchedulerRequest
+
+    def __init__(self, distQueue, qmm, feu=None, weights=None):
+        """
+        Stub for a scheduler to decide how we assign and consume elements of the queue.
+        This weighted fair queue (WFQ) scheduler implements a weighted fair queue where queue i
+        gets a share of the rate depending on its weight, see https://en.wikipedia.org/wiki/Weighted_fair_queueing.
+
+        :param distQueue: :obj:`~qlinklayer.distQueue.DistributedQueue`
+            The distributed queue
+        :param qmm: :obj:`~qlinklayer.qmm.QuantumMemoryManagement`
+            The quantum memory management
+        :param feu: :obj:`~qlinklayer.feu.FidelityEstimationUnit`
+            (optional) The fidelity estimation unit
+        :param weights: None, list of floats
+            * If None, a fair queue with equal weights will be used.
+            * If list of floats, the length of the list needs to equal the number of queues in the distributed queue.
+              The floats need to be non-zero. If a weight is zero, this is seen as infinite weight and queues with zero
+              weight will always be scheduled before other queues. If multiple queues have weight zero, then
+              these will always be satisfied in the order of their queue IDs.
+        """
+        super().__init__(distQueue=distQueue, qmm=qmm, feu=feu)
+
+        self._check_weight_input(weights)
+
+        self.weights = weights
+
+        self.last_virt_finish = [-1] * len(weights)
+
+    @staticmethod
+    def _check_weight_input(weights):
+        if weights is None:
+            return
+        if not isinstance(weights, list) or isinstance(weights, tuple):
+            raise ValueError("Weights need to be None or list")
+        for weight in weights:
+            try:
+                if weight < 0:
+                    raise ValueError("All weights need to be non-zero")
+            except TypeError:
+                raise ValueError("Weights need to be comparable, got TypeError when comparing weight={} to 0".format(weight))
+
+    def select_queue(self):
+        """
+        Selects the next queue from which the next request should be popped
+        :return: tuple of (tuple, request)
+            The absolute queue ID and request (if any)
+        """
+        pass
+
+    def update_virtual_finish(self, scheduler_request):
+        pass
+
+    def _add_to_queue(self, scheduler_request, qid):
+        """
+        Adds request to queue
+        and updates the virtual finish cycle
+        :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :param qid: int
+        :return: None
+        """
+        self.update_virtual_finish(scheduler_request)
+        self.distQueue.add(scheduler_request, qid)
