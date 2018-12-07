@@ -404,7 +404,7 @@ class _EGPLocalQueueItem(_LocalQueueItem):
             The max MHP cycle
         """
         logger.debug("Updating to MHP cycle {}".format(current_cycle))
-        if self.timeout_cycle > 0:
+        if self.timeout_cycle is not None and self.timeout_cycle > 0:
             if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
                 logger.debug("Item timed out, calling callback")
                 if not self.acked:

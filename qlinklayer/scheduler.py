@@ -137,8 +137,6 @@ class RequestScheduler(Scheduler):
         """
         # Calculate the new cycle number mod the max
         self.mhp_cycle_number = (self.mhp_cycle_number + 1) % self.max_mhp_cycle_number
-        if self.mhp_cycle_number == 0:  # Skip MHP cycle number 0
-            self.mhp_cycle_number = 1
         logger.debug("Incremented MHP cycle to {}".format(self.mhp_cycle_number))
         self.distQueue.update_mhp_cycle_number(self.mhp_cycle_number, self.max_mhp_cycle_number)
 
@@ -168,8 +166,6 @@ class RequestScheduler(Scheduler):
             cycle_delay += ceil(max(0.0, self.remote_trigger - self.local_trigger) / self.mhp_cycle_period)
 
         cycle_number = (self.mhp_cycle_number + cycle_delay) % self.max_mhp_cycle_number
-        if cycle_number == 0:
-            cycle_number = 1
 
         return cycle_number
 
@@ -240,11 +236,7 @@ class RequestScheduler(Scheduler):
         max_time = request.max_time
 
         if max_time == 0:
-            return 0
-
-        # Compute how many MHP cycles this corresponds to
-        if self.mhp_cycle_period == 0:
-            raise ValueError("MHP cycle period cannot be zero when using timeouts")
+            return None
 
         # Get current time
         now = sim_time()
@@ -268,9 +260,6 @@ class RequestScheduler(Scheduler):
                     max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
 
         timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
-        if timeout_mhp_cycle == 0:
-            timeout_mhp_cycle = 1
-
         return timeout_mhp_cycle
 
     def suspend_generation(self, t):
@@ -710,7 +699,7 @@ class RequestScheduler(Scheduler):
             True/False whether item is near timeout
         """
         min_cycles = ceil(self.mhp_full_cycle / self.mhp_cycle_period)
-        if queue_item.timeout_cycle != 0 and queue_item.timeout_cycle - self.mhp_cycle_number < min_cycles:
+        if queue_item.timeout_cycle is not None and queue_item.timeout_cycle - self.mhp_cycle_number < min_cycles:
             return True
 
         return False
