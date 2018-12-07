@@ -178,7 +178,9 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
 
         # TODO I don't think this is correct
         p_uu = alpha**2 * ((1 - p_dc)**2 * (p_det_A + p_det_B) / 2 + 2 * (1 - p_dc) * p_dc * (1-p_det_A) * (1-p_det_B))
-        p_ud = alpha * (1-alpha)((1-p_dc)**2 * p_det_A
+        p_ud = alpha * (1-alpha)((1-p_dc)**2 * p_det_A)
+
+        # TODO NOT FINISHED!!!
 
     def _extract_params(self):
         """
