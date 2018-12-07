@@ -220,7 +220,7 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         # Store the request into the queue
         try:
-            qid = self.get_queue(egp_request)
+            qid = self.choose_queue(egp_request)
         except LinkLayerException:
             logger.warning("Scheduler could not get a valid queue ID for request.")
             return False
@@ -249,7 +249,6 @@ class StrictPriorityRequestScheduler(Scheduler):
         Adds request to queue
         :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
         :param qid: int
-        :return: None
         """
         self.distQueue.add(scheduler_request, qid)
 
@@ -337,7 +336,7 @@ class StrictPriorityRequestScheduler(Scheduler):
         """
         return range(0, len(self.distQueue.queueList))
 
-    def get_queue(self, request):
+    def choose_queue(self, request):
         """
         Determines which queue id to add the next request to.
         """
@@ -772,6 +771,7 @@ class StrictPriorityRequestScheduler(Scheduler):
         self._last_aid_added = None
         self._last_aid_removed = None
 
+
 class WFQRequestScheduler(StrictPriorityRequestScheduler):
 
     # The scheduler request named tuple to use
@@ -798,18 +798,46 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         """
         super().__init__(distQueue=distQueue, qmm=qmm, feu=feu)
 
-        self._check_weight_input(weights)
-
-        self.weights = weights
+        self.relative_weights = self._get_relative_weights(weights)
 
         self.last_virt_finish = [-1] * len(weights)
 
-    @staticmethod
-    def _check_weight_input(weights):
+    def _compare_mhp_cycle(self, cycle1, cycle2):
+        """
+        Returns -1 if cycle1 is considered earlier than cycle two.
+        Returns  0 if cycle1 is considered equal than cycle two.
+        Returns +1 if cycle1 is considered later than cycle two.
+        When is a cycle considered earlier than another?
+        Call 'opposite' the opposite number of the current cycle number i.e.
+            'opposite' = 'current_cycle_number' - int(nr_mhp_cycles / 2)
+        The 'opposite' is considered the smallest cycle and the others are ordered consecutively
+        :param cycle1: int
+        :param cycle2: int
+        :return: int
+            -1, 0 or +1
+        """
+        if cycle1 == cycle2:
+            return 0
+
+        # Compute opposite of current
+        opposite = self.mhp_cycle_number - int(self.max_mhp_cycle_number / 2)
+
+        # Shift numbers such that opposite is effectively 0
+        cycle1_shifted = (cycle1 - opposite) % self.max_mhp_cycle_number
+        cycle2_shifted = (cycle2 - opposite) % self.max_mhp_cycle_number
+
+        if cycle1_shifted < cycle2_shifted:
+            return -1
+        else:
+            return 1
+
+    def _get_relative_weights(self, weights):
         if weights is None:
             return
         if not isinstance(weights, list) or isinstance(weights, tuple):
             raise ValueError("Weights need to be None or list")
+        if not len(weights) == len(self.distQueue.queueList):
+            raise ValueError("Number of weights must equal number of queues")
         for weight in weights:
             try:
                 if weight < 0:
@@ -817,16 +845,60 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
             except TypeError:
                 raise ValueError("Weights need to be comparable, got TypeError when comparing weight={} to 0".format(weight))
 
+        # Compute relative weights
+        total_sum = sum(weights)
+        if total_sum == 0:
+            # All weights are zero
+            return weights
+        relative_weights = [weight / total_sum for weight in weights]
+
+        return relative_weights
+
     def select_queue(self):
         """
         Selects the next queue from which the next request should be popped
         :return: tuple of (tuple, request)
             The absolute queue ID and request (if any)
         """
-        pass
+        # Virt start is the virtual start of the service (see https://en.wikipedia.org/wiki/Fair_queuing#Pseudo_code)
+        # Look through the head of each queue and pick the one with the smallest virtual_finish
+        # unless a queue has infinite (0) weight.
+        min_virtual_finish = float('inf')
+        queue_item_to_use = None
+        for local_queue in self.distQueue.queueList:
+            queue_item = local_queue.peek()
+            if queue_item is not None and queue_item.ready:
+                if queue_item.request.virtual_finish is None:
+                    # This queue has infinite weight so just take this queue_item directly
+                    queue_item_to_use = queue_item
+                    break
+                if self._compare_mhp_cycle(queue_item.request.virtual_finish, min_virtual_finish) == -1:
+                    min_virtual_finish = queue_item.request.virtual_finish
+                    queue_item_to_use = queue_item
+        if queue_item_to_use is None:
+            return None, None
+        else:
+            aid = queue_item_to_use.qid, queue_item_to_use.seq
+            return aid, queue_item_to_use
 
-    def update_virtual_finish(self, scheduler_request):
-        pass
+    def update_virtual_finish(self, scheduler_request, qid):
+        """
+        Updates the virtual finish time of request
+        :param wfq_scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :param qid: int
+        :return: :obj:`~qlinklayer.scheduler.WFQSchedulerRequest`
+        """
+        # Virt start is the virtual start of the service (see https://en.wikipedia.org/wiki/Fair_queuing#Pseudo_code)
+        # If queue has weight zero (seen as infinite) we put virtual finish to None
+        if self.relative_weights[qid] == 0:
+            virt_finish = None
+        else:
+            virt_start = max(self.mhp_cycle_number, self.last_virt_finish[qid])
+            est_time = self.feu.estimate_time_to_process(scheduler_request, units="mhp_cycles")
+            virt_finish = virt_start + est_time / self.relative_weights[qid]
+
+        wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(), virtual_finish=virt_finish)
+        return wfq_scheduler_request
 
     def _add_to_queue(self, scheduler_request, qid):
         """
@@ -836,5 +908,5 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         :param qid: int
         :return: None
         """
-        self.update_virtual_finish(scheduler_request)
-        self.distQueue.add(scheduler_request, qid)
+        wfq_scheduler_request = self.update_virtual_finish(scheduler_request, qid)
+        self.distQueue.add(wfq_scheduler_request, qid)

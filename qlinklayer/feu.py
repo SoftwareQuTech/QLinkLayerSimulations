@@ -138,6 +138,48 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         estimated_state = self._calculate_estimated_state(*params)
         return float(dm_fidelity(estimated_state, ideal_state, squared=True))
 
+    def _compute_total_detection_probabilities(self):
+        """
+        Computes the total detection probabilities of the two nodes, i.e. given that the the electron is excited,
+        what is the probability that a detector clicks at the midpoint.
+        :return: tuple (p_det_A, p_det_B)
+        """
+        mhp_conn = self.mhp_service.conn
+        total_det_effA = self._compute_total_detection_probability_of_node(mhp_conn.nodeA)
+        total_det_effB = self._compute_total_detection_probability_of_node(mhp_conn.nodeB)
+        return total_det_effA, total_det_effB
+
+    def _compute_total_detection_probability_of_node(self, node):
+        """
+        Computes the total detection probabilities of one node, i.e. given that the the electron is excited,
+        what is the probability that a detector clicks at the midpoint. (assuming no dark counts)
+        :return: float
+        """
+        p_zero_phonon = node.qmem.photon_emission_noise.p_zero_phonon
+        collection_eff = node.qmem.photon_emission_noise.collection_eff
+        if node == self.mhp_service.conn.nodeA:
+            p_loss = self.mhp_service.get_fibre_transmissivities(node)[0]
+        else:
+            p_loss = self.mhp_service.get_fibre_transmissivities(node)[1]
+        detection_eff = self.mhp_service.conn.midpoint.detection_eff
+
+        total_detection_eff = p_zero_phonon * collection_eff * (1 - p_loss) * detection_eff
+
+        return total_detection_eff
+
+    def _compute_conditional_detection_probabilities(self, alpha):
+        """
+        Computes the probabilites p_uu, p_ud, pdu, pdd as given in eq (10) in https://arxiv.org/src/1712.07567v2/anc/SupplementaryInformation.pdf
+        :return:
+        """
+
+        p_det_A, p_det_B = self._compute_total_detection_probabilities()
+        p_dc = self.mhp_service.conn.midpoint.pdark
+
+        # TODO I don't think this is correct
+        p_uu = alpha**2 * ((1 - p_dc)**2 * (p_det_A + p_det_B) / 2 + 2 * (1 - p_dc) * p_dc * (1-p_det_A) * (1-p_det_B))
+        p_ud = alpha * (1-alpha)((1-p_dc)**2 * p_det_A
+
     def _extract_params(self):
         """
         Extracts parameters for fidelity estimation from the provided hardware such as midpoint detectors, fibre
@@ -270,3 +312,18 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         }
 
         return bright_state_populations
+
+    def estimate_time_to_process(self, scheduler_request, units="seconds"):
+        """
+        Computes the estimated time to process a request (assuming that this is the only request in the queues
+        and that its ready)
+
+        The 'units' argument can be used to choose whether what is returned is in seconds or nr of mhp cycles
+        :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :param units: str (either "seconds" or "mhp_cycles")
+        :return: float or int
+        """
+        if not units in ["seconds", "mhp_cycles"]:
+            raise ValueError("'units' need to be 'seconds' or 'mhp_cycles'")
+        # TODO implement this
+        return 1

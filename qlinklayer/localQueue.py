@@ -64,6 +64,14 @@ class LocalQueue(Entity):
         """
         return self.num_items() >= self.maxSeq
 
+    def is_empty(self):
+        """
+        Checks whether the local queue is empty
+        :return: bool
+            True/False
+        """
+        return self.num_items() == 0
+
     def num_items(self):
         return len(self.queue)
 

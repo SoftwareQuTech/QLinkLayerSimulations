@@ -52,13 +52,13 @@ class TestRequestScheduler(unittest.TestCase):
         self.assertEqual(test_scheduler.my_free_memory, qmm.get_free_mem_ad())
         self.assertEqual(test_scheduler.other_mem, (0, 0))
 
-    def test_get_queue(self):
+    def test_choose_queue(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
         request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1,
                                                                              min_fidelity=1, max_time=1, purpose_id=0,
                                                                              priority=0))
         test_scheduler = StrictPriorityRequestScheduler(distQueue=self.dqpA, qmm=qmm)
-        self.assertEqual(test_scheduler.get_queue(request), 0)
+        self.assertEqual(test_scheduler.choose_queue(request), 0)
 
     def test_update_other_mem_size(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
