@@ -1,16 +1,19 @@
 import unittest
 import logging
+from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
-from qlinklayer.distQueue import EGPDistributedQueue
-from qlinklayer.scheduler import StrictPriorityRequestScheduler
+from qlinklayer.distQueue import EGPDistributedQueue, WFQDistributedQueue
+from qlinklayer.scheduler import StrictPriorityRequestScheduler, WFQRequestScheduler
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.egp import EGPRequest
 from qlinklayer.scenario import EGPSimulationScenario
+from qlinklayer.feu import SingleClickFidelityEstimationUnit
+from qlinklayer.mhp import SimulatedNodeCentricMHPService
 
 logger.setLevel(logging.CRITICAL)
 
@@ -148,6 +151,27 @@ class TestRequestScheduler(unittest.TestCase):
             self.assertEqual((i, 0), next_aid)
             self.assertEqual(next_request.priority, i)
             test_scheduler.clear_request(next_aid)
+
+
+class TestWFQRequestScheduler(unittest.TestCase):
+    def setUp(self):
+        alice = QuantumNode("alice", 0)
+        bob = QuantumNode("bob", 0)
+        conn = ClassicalFibreConnection(alice, bob, length=0.001)
+
+        distQueueA = WFQDistributedQueue(alice, numQueues=3, accept_all=True)
+        distQueueB = WFQDistributedQueue(bob, numQueues=3, accept_all=True)
+        distQueueA.connect_to_peer_protocol(distQueueB, conn=conn)
+
+        qmmA = QuantumMemoryManagement(alice)
+        qmmB = QuantumMemoryManagement(bob)
+
+        # mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob)
+        #
+        # feuA = SingleClickFidelityEstimationUnit(alice, )
+        # self.schedulerA = WFQRequestScheduler(distQueueA, qmmA, feuA)
+    def test_init(self):
+        pass
 
 
 class TestTimings(unittest.TestCase):

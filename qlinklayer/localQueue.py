@@ -306,6 +306,19 @@ class EGPLocalQueue(LocalQueue):
         return _EGPLocalQueueItem(request, seq, self.qid, self.timeout_callback)
 
 
+class WFQLocalQueue(EGPLocalQueue):
+    def get_new_queue_item(self, request, seq):
+        """
+        Returns a fresh queue item instance
+        :param request: :obj:`qlinklayer.EGP.EGPRequest`
+            The request
+        :param seq: int
+            The queue item sequence number
+        :return: :obj:`qlinklayer.localQueue._EGPLocalQueueItem`
+        """
+        return _WFQLocalQueueItem(request, seq, self.qid, self.timeout_callback)
+
+
 class TimeoutLocalQueue(LocalQueue):
     def __init__(self, qid=None, wsize=None, maxSeq=None, throw_events=False):
         """

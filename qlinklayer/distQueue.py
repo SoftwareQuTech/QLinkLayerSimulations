@@ -3,7 +3,7 @@
 #
 # Implements a simple distributed queue shared with one other node over a connection.
 #
-# Author: Stephanie Wehner
+# Authors: Stephanie Wehner, Matthew Skrzypczyk, Axel Dahlberg
 
 from copy import copy
 from collections import deque, defaultdict
@@ -11,7 +11,7 @@ from functools import partial
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
 from netsquid.pydynaa import EventType, EventHandler
-from qlinklayer.localQueue import TimeoutLocalQueue, EGPLocalQueue
+from qlinklayer.localQueue import TimeoutLocalQueue, EGPLocalQueue, WFQLocalQueue
 from qlinklayer.toolbox import LinkLayerException
 from easysquid.toolbox import logger
 
@@ -1094,3 +1094,22 @@ class EGPDistributedQueue(FilteredDistributedQueue):
             Sequence number within local queue of item
         """
         self.queueList[qid].ack(qseq)
+
+
+class WFQDistributedQueue(EGPDistributedQueue):
+    def _init_queues(self, numQueues=1, maxSeq=2 ** 8, throw_local_queue_events=False):
+        """
+        Initializes the local queues
+        :param numQueues: int
+            Number of queues
+        :param throw_local_queue_events: bool
+            Whether the local queues should throw events for data collection or not
+        :return:
+        """
+        # Initialize queues
+        self.queueList = []
+        self.numLocalQueues = numQueues
+        for j in range(numQueues):
+            q = WFQLocalQueue(qid=j, maxSeq=maxSeq, throw_events=throw_local_queue_events,
+                              timeout_callback=self.timeout_callback)
+            self.queueList.append(q)
