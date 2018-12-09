@@ -170,6 +170,7 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
     def _compute_conditional_detection_probabilities(self, alpha):
         """
         Computes the probabilites p_uu, p_ud, pdu, pdd as given in eq (10) in https://arxiv.org/src/1712.07567v2/anc/SupplementaryInformation.pdf
+        Note that this assumed low detection efficiencies
         :return:
         """
 
@@ -177,8 +178,16 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         p_dc = self.mhp_service.conn.midpoint.pdark
 
         # TODO I don't think this is correct
-        p_uu = alpha**2 * ((1 - p_dc)**2 * (p_det_A + p_det_B) / 2 + 2 * (1 - p_dc) * p_dc * (1-p_det_A) * (1-p_det_B))
-        p_ud = alpha * (1-alpha)((1-p_dc)**2 * p_det_A)
+        prob_click_given_two_photons = ((1 - p_dc)**2 * (p_det_A*(1-p_det_B) + p_det_B*(1-p_det_A) + p_det_A*p_det_B) +
+                                     2 * p_dc * (1-p_dc) * (1-p_det_A) * (1-p_det_B))
+        p_uu = alpha**2 * prob_click_given_two_photons
+
+        prob_click_given_photon_A = (1-p_dc)**2*p_det_A + 2*p_dc*(1-p_dc)*(1-p_det_A)
+        prob_click_given_photon_B = (1-p_dc)**2*p_det_B + 2*p_dc*(1-p_dc)*(1-p_det_B)
+        p_ud = alpha * (1-alpha) * prob_click_given_photon_A
+        p_du = alpha * (1-alpha) * prob_click_given_photon_B
+
+        prob_click_given_no_photons = 
 
         # TODO NOT FINISHED!!!
 
