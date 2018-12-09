@@ -13,16 +13,15 @@ from numpy import kron, isclose
 
 
 class TestSingleClickFidelityEstimationUnit(unittest.TestCase):
-    def create_nodes(self, alice_device_positions, bob_device_positions):
-        # Set up Alice
-        aliceMemory = NVCommunicationDevice(name="AliceMem", num_positions=alice_device_positions)
-        alice = QuantumNode(name="Alice", nodeID=1, memDevice=aliceMemory)
-
-        # Set up Bob
-        bobMemory = NVCommunicationDevice(name="BobMem", num_positions=bob_device_positions)
-        bob = QuantumNode(name="Bob", nodeID=2, memDevice=bobMemory)
-
-        return alice, bob
+    def setUp(self):
+        # Setup MHP network and MHP service
+        network = setup_physical_network(ConfigPathStorage.NETWORK_NV_LAB_NOCAV_NOCONV)
+        alice = network.get_node_by_id(0)
+        bob = network.get_node_by_id(1)
+        self.mhp_conn = network.get_connection(alice, bob, "mhp_conn")
+        mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob, conn=self.mhp_conn)
+        self.feuA = SingleClickFidelityEstimationUnit(alice, mhp_service)
+        self.feuB = SingleClickFidelityEstimationUnit(alice, mhp_service)
 
     def test_dm_fidelity(self):
         # Basic test cases using bell states
@@ -52,103 +51,65 @@ class TestSingleClickFidelityEstimationUnit(unittest.TestCase):
         self.assertEqual(round(dm_fidelity(dm11, dm11, squared=True), ndigits=8), 1)
 
     def test_success_prob_est(self):
-        # Setup MHP network and MHP service
-        network = setup_physical_network(ConfigPathStorage.NETWORK_NV_LAB_NOCAV_NOCONV)
-        alice = network.get_node_by_id(0)
-        bob = network.get_node_by_id(1)
-        mhp_conn = network.get_connection(alice, bob, "mhp_conn")
-        mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob, conn=mhp_conn)
-        feu = SingleClickFidelityEstimationUnit(alice, mhp_service)
 
-        print(feu._estimate_success_probability())
+        with self.assertRaises(LinkLayerException):
+            self.feuA._estimate_success_probability()
+
+        # Should evaluate to total detection probability
+        p_succ = self.feuA._estimate_success_probability(1, 0)
+        self.assertAlmostEqual(p_succ, 4e-4, places=4)
+
+        # Test zero alpha
+        p_succ = self.feuA._estimate_success_probability(0)
+        self.assertAlmostEqual(p_succ, 0, places=4)
+
+        # Test linearity in alpha
+        for i in range(11):
+            alpha = i/20
+            p_succ = self.feuA._estimate_success_probability(alpha)
+            self.assertAlmostEqual(p_succ, 2 * alpha * (4e-4), places=4)
 
     def test_fidelity_estimation(self):
-        # Check various parameters against the estimation
-        etaA = 1       # Transmitivity of fibre from A to midpoint
-        etaB = 1       # Transmitivity of fibre from B to midpoint
-        alphaA = 0.5   # Bright state population at A
-        alphaB = 0.5   # Bright state population at B
-        pdark = 0      # Probability of a dark count at the midpoint
-        dp_photon = 1  # Dephasing parameter of the entangled qubit
-        ideal_state = kron(b01.H, b01)  # (|01> + |10>)(<01| + <10|)
+        # Both electrons excited
+        self.assertAlmostEqual(self.feuA._estimate_fidelity(1), 0, places=4)
 
-        # Check a lossless scenario with bright state populations of 1/2
-        estimated_state = SingleClickFidelityEstimationUnit._calculate_estimated_state(etaA, etaB, alphaA, alphaB,
-                                                                                       pdark, dp_photon)
+        # No excitation (all dark counts)
+        self.assertAlmostEqual(self.feuA._estimate_fidelity(0), 0, places=4)
 
-        estimated_fidelity = dm_fidelity(estimated_state, ideal_state, squared=True)
-        self.assertTrue(isclose(estimated_fidelity, 2 / 3))
+        # Check linearity in alpha (for high enough alpha due to dark counts)
+        for i in range(40, 100):
+            alpha = i/200
+            F = self.feuA._estimate_fidelity(alpha)
+            self.assertAlmostEqual(F, 1 - alpha, places=1)
 
-        # Check a lossless scenario with a dark count probability of 1/2
-        pdark = 0.5
-        estimated_state = SingleClickFidelityEstimationUnit._calculate_estimated_state(etaA, etaB, alphaA, alphaB,
-                                                                                       pdark, dp_photon)
+        # Perfect entanglement when no dark counts
+        self.mhp_conn.midPoint.pdark = 0
+        self.assertAlmostEqual(self.feuA._estimate_fidelity(0.00001), 1, places=1)
 
-        estimated_fidelity = dm_fidelity(ideal_state, estimated_state, squared=True)
-        self.assertEqual(round(estimated_fidelity, ndigits=5), 0.5)
-
-        # Check that depolarizing the electron completely would estimate 0 fidelity with the desired state
-        dp_photon = 0
-        estimated_state = SingleClickFidelityEstimationUnit._calculate_estimated_state(etaA, etaB, alphaA, alphaB,
-                                                                                       pdark, dp_photon)
-
-        estimated_fidelity = dm_fidelity(ideal_state, estimated_state, squared=True)
-        self.assertEqual(estimated_fidelity, 0)
-
-        # Check that effectively setting chance of no clicks to zero yields a state with 0 fidelity to the ideal state
-        alphaA = 1
-        alphaB = 1
-        estimated_state = SingleClickFidelityEstimationUnit._calculate_estimated_state(etaA, etaB, alphaA, alphaB,
-                                                                                       pdark, dp_photon)
-
-        estimated_fidelity = dm_fidelity(ideal_state, estimated_state, squared=True)
-        self.assertEqual(estimated_fidelity, 0)
-
-        # Test a few extreme cases
-        # Transmitivity of the fibres from a and b are 0 (imagine someone cuts the fibre)
-        with self.assertRaises(EasySquidException):
-            SingleClickFidelityEstimationUnit._calculate_estimated_state(etaA=0, etaB=0, alphaA=0, alphaB=0, pdark=0,
-                                                                         dp_photon=0)
-
-        with self.assertRaises(EasySquidException):
-            SingleClickFidelityEstimationUnit._calculate_estimated_state(etaA=0, etaB=0, alphaA=1, alphaB=1, pdark=0,
-                                                                         dp_photon=0)
-
-        # Probability of a dark count is 1, effectively never get single clicks
-        with self.assertRaises(EasySquidException):
-            SingleClickFidelityEstimationUnit._calculate_estimated_state(etaA=1, etaB=1, alphaA=1, alphaB=1, pdark=1,
-                                                                         dp_photon=0)
+        with self.assertRaises(LinkLayerException):
+            self.feuA._calculate_estimated_state(0)
 
     def test_minimum_fidelities(self):
-        nodeA, nodeB = self.create_nodes(1, 1)
-        mhp_service = SimulatedNodeCentricMHPService("mhp_service", nodeA, nodeB)
-        feuA = SingleClickFidelityEstimationUnit(nodeA, mhp_service)
-        feuB = SingleClickFidelityEstimationUnit(nodeB, mhp_service)
 
-        self.assertTrue(isclose(feuA.estimated_fidelity, 0.9473684210526312))
-        self.assertTrue(isclose(feuB.estimated_fidelity, 0.9473684210526312))
-        self.assertEqual(feuA.achievable_fidelities, feuB.achievable_fidelities)
-        self.assertEqual(feuA.achievable_fidelities[0][0], 0.1)
-        self.assertTrue(isclose(feuA.achievable_fidelities[0][1], 0.9473684210526312))
-        self.assertEqual(feuA.achievable_fidelities[1][0], 0.3)
-        self.assertTrue(isclose(feuA.achievable_fidelities[1][1], 0.8235294278458571))
+        self.assertEqual(self.feuA.achievable_fidelities, self.feuB.achievable_fidelities)
+        self.assertEqual(self.feuA.achievable_fidelities[0][0], 0.1)
+        self.assertTrue(isclose(self.feuA.achievable_fidelities[0][1], 0.8614038170052276))
+        self.assertEqual(self.feuA.achievable_fidelities[1][0], 0.3)
+        self.assertTrue(isclose(self.feuA.achievable_fidelities[1][1], 0.6800331800062903))
 
-        self.assertTrue(isclose(feuA.get_max_fidelity(), 0.9473684210526312))
+        self.assertTrue(isclose(self.feuA.get_max_fidelity(), 0.8614038170052276))
 
-        protoA = mhp_service.get_node_proto(nodeA)
+        protoA = self.feuA.mhp_service.get_node_proto(self.feuA.node)
         protoA.set_allowed_bright_state_populations([0.1, 0.2])
 
         with self.assertRaises(LinkLayerException):
-            feuA._calculate_achievable_fidelities()
+            self.feuA._calculate_achievable_fidelities()
 
     def test_get_bright_state(self):
-        nodeA, nodeB = self.create_nodes(1, 1)
-        mhp_service = SimulatedNodeCentricMHPService("mhp_service", nodeA, nodeB)
-        feuA = SingleClickFidelityEstimationUnit(nodeA, mhp_service)
-
-        self.assertEqual(feuA.select_bright_state(0.9), 0.1)
-        self.assertEqual(feuA.select_bright_state(0.8), 0.3)
-        self.assertEqual(feuA.select_bright_state(0.95), None)
+        self.assertEqual(self.feuA.select_bright_state(0.9), None)
+        self.assertEqual(self.feuA.select_bright_state(0.8), 0.1)
+        self.assertEqual(self.feuA.select_bright_state(0.7), 0.1)
+        self.assertEqual(self.feuA.select_bright_state(0.6), 0.3)
 
 
 if __name__ == '__main__':

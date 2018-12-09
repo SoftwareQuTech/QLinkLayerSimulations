@@ -113,15 +113,6 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
 
         return None
 
-    def recalculate_estimate(self):
-        """
-        Recalculates and updates the stored fidelity estimate
-        :return: float
-            The recalculated fidelity estimate
-        """
-        self.estimated_fidelity = self._estimate_fidelity()
-        return self.estimated_fidelity
-
     def _estimate_fidelity(self, alphaA=None, alphaB=None):
         """
         Calculates the fidelity by extracting parameters from the mhp components, calculating an estimated state of
@@ -139,7 +130,7 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         what is the probability that a detector clicks at the midpoint.
         :return: tuple (p_det_A, p_det_B)
         """
-        mhp_conn = self.mhp_service.conn
+        mhp_conn = self.mhp_service.get_mhp_conn(self.node)
         total_det_effA = self._compute_total_detection_probability_of_node(mhp_conn.nodeA)
         total_det_effB = self._compute_total_detection_probability_of_node(mhp_conn.nodeB)
         return total_det_effA, total_det_effB
@@ -152,13 +143,14 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         """
         p_zero_phonon = node.qmem.photon_emission_noise.p_zero_phonon
         collection_eff = node.qmem.photon_emission_noise.collection_eff
-        if node == self.mhp_service.conn.nodeA:
-            p_loss = self.mhp_service.get_fibre_transmissivities(node)[0]
+        mhp_conn = self.mhp_service.get_mhp_conn(node)
+        if node == mhp_conn.nodeA:
+            p_no_loss = self.mhp_service.get_fibre_transmissivities(node)[0]
         else:
-            p_loss = self.mhp_service.get_fibre_transmissivities(node)[1]
-        detection_eff = self.mhp_service.conn.midpoint.detection_eff
+            p_no_loss = self.mhp_service.get_fibre_transmissivities(node)[1]
+        detection_eff = mhp_conn.midPoint.detection_eff
 
-        total_detection_eff = p_zero_phonon * collection_eff * (1 - p_loss) * detection_eff
+        total_detection_eff = p_zero_phonon * collection_eff * p_no_loss * detection_eff
 
         return total_detection_eff
 
@@ -179,7 +171,8 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
             alphaB = alphaA
 
         p_det_A, p_det_B = self._compute_total_detection_probabilities()
-        p_dc = self.mhp_service.conn.midpoint.pdark
+        mhp_conn = self.mhp_service.get_mhp_conn(self.node)
+        p_dc = mhp_conn.midPoint.pdark
         # Dark count probabilities for both detectors
         p_no_dc = (1 - p_dc)**2
         p_at_least_one_dc = 1 - p_no_dc
@@ -208,27 +201,6 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         """
         return sum(self._compute_conditional_detection_probabilities(alphaA, alphaB))
 
-    def _extract_params(self):
-        """
-        Extracts parameters for fidelity estimation from the provided hardware such as midpoint detectors, fibre
-        properties, node state preparation, etc.
-        :return: Parameters to use for fidelity estimation
-        """
-        # Get the transmissivity info from the service
-        etaA, etaB = self.mhp_service.get_fibre_transmissivities(self.node)
-
-        # Get bright state info from the service (states are prepared in sqrt(1-alpha)|0> + sqrt(alpha)|1> so the
-        # probability of emission is simply alpha for both end nodes
-        alphaA, alphaB = self.mhp_service.get_bright_state_populations(self.node)
-
-        # Get the probability of a dark count at the midpoint
-        pdark = self.mhp_service.calculate_dark_count_probability(self.node)
-
-        # Get the dephasing photon parameter from the quantum memory device at our node
-        dp_photon = (1 - getattr(self.node.qmem.photon_emission_noise, '_dp_photon', 0))
-
-        return etaA, etaB, alphaA, alphaB, pdark, dp_photon
-
     def _calculate_estimated_state(self, alphaA=None, alphaB=None):
         """
         Calculates an estimated state based on the provided parameters.  See eq (8) in
@@ -237,11 +209,12 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         :return: obj `~numpy.matrix`
             A density matrix of the estimated entangled state
         """
-        if self._estimate_success_probability(alphaA, alphaB) == 0:
-            raise LinkLayerException("Cannot estimate state when success probability is zero")
         p_uu, p_ud, p_du, p_dd = self._compute_conditional_detection_probabilities(alphaA, alphaB)
+        if (p_uu + p_ud + p_du + p_dd) == 0:
+            raise LinkLayerException("Cannot estimate state when success probability is zero")
 
-        visibility = self.mhp_service.conn.midpoint.visibility
+        mhp_conn = self.mhp_service.get_mhp_conn(self.node)
+        visibility = mhp_conn.midPoint.visibility
 
         ent_state = (p_ud * dm10 +  # |10><10| part
                      p_du * dm01 +  # |01><01| part
