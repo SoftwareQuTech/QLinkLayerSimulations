@@ -629,6 +629,9 @@ class NodeCentricEGP(EGP):
         if there are any requests and to receive a request to process
         """
         try:
+            if not self.scheduler.other_has_resources():
+                self.request_other_free_memory()
+
             # Get scheduler's next gen task
             gen = self.scheduler.next()
             self.scheduler.inc_cycle()

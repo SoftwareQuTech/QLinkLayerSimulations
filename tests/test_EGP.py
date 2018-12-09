@@ -4,6 +4,7 @@ from collections import defaultdict
 from functools import partial
 from math import ceil
 import logging
+import random
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easynetwork import EasyNetwork
 from easysquid.entanglementGenerator import NV_PairPreparation
@@ -937,6 +938,46 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
         self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
+    def test_egp_comm_loss(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        self.p_loss = 1
+        def alice_faulty_request():
+            if random.random() < self.p_loss:
+                pass
+            else:
+                p_loss = max(self.p_loss - 0.1, 0)
+                alice_free_mem = egpA.qmm.get_free_mem_ad()
+                egpA.conn.put_from(alice.nodeID, [(egpA.CMD_REQ_E, alice_free_mem)])
+
+        egpA.request_other_free_memory = alice_faulty_request
+
+        # Schedule egp CREATE commands mid simulation
+        sim_scheduler = SimulationScheduler()
+        alice_pairs = 3
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=0,
+                                                                        purpose_id=1, priority=10)
+
+        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
+
+        # Schedule a sequence of various create requests
+        sim_scheduler.schedule_function(func=alice_scheduled_create, t=0)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(10)
+
+        # Verify both nodes have all results
+        self.assertEqual(len(self.alice_results), alice_pairs)
+        self.assertEqual(self.alice_results, self.bob_results)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.check_memories(alice.qmem, bob.qmem, range(alice_pairs))
 
     def test_request_timeout(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
