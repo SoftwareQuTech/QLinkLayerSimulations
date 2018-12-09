@@ -17,8 +17,8 @@ SchedulerRequest.__new__.__defaults__ = (0,) * 7 + (True, False, False, True)
 
 WFQSchedulerRequest = namedtuple("WFQ_Scheduler_request",
                                  ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
-                                  "priority", "virtual_finish", "store", "atomic", "measure_directly", "master_request"])
-WFQSchedulerRequest.__new__.__defaults__ = (0,) * 8 + (True, False, False, True)
+                                  "priority", "init_virtual_finish", "est_cycles_per_pair", "store", "atomic", "measure_directly", "master_request"])
+WFQSchedulerRequest.__new__.__defaults__ = (0,) * 9 + (True, False, False, True)
 
 SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"])
 SchedulerGen.__new__.__defaults__ = (False,) + (None,) * 4
@@ -287,17 +287,30 @@ class StrictPriorityRequestScheduler(Scheduler):
         timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
         return timeout_mhp_cycle
 
-    def suspend_generation(self, t):
+    def _get_num_suspend_cycles(self, t):
         """
-        Instructs the scheduler to suspend generation for some specified time.
+        Returns number of cycles to suspend, given a suspend time
         :param t: float
-            The amount of simulation time to suspend entanglement generation for
+            Time to suspend (ns)
+        :return: int
+            Number of MHP cycles
         """
         # Compute the number of suspended cycles
         if not self.mhp_cycle_period:
             num_suspended_cycles = 1
         else:
             num_suspended_cycles = ceil(t / self.mhp_cycle_period)
+
+        return num_suspended_cycles
+
+    def suspend_generation(self, t):
+        """
+        Instructs the scheduler to suspend generation for some specified time.
+        :param t: float
+            The amount of simulation time to suspend entanglement generation for
+        """
+
+        num_suspended_cycles = self._get_num_suspend_cycles(t)
 
         # Update the number of suspended cycles if it exceeds the amount we are currently suspended for
         if num_suspended_cycles > self.num_suspended_cycles:
@@ -498,7 +511,7 @@ class StrictPriorityRequestScheduler(Scheduler):
         Marks a generation performed by the EGP as completed and cleans up any remaining state.
         :param aid: tuple of  int, int
             Contains the aid used for the generation
-        :return:
+        :return: None
         """
         logger.debug("Marking aid {} as completed".format(aid))
         if self.is_generating_aid(aid):
@@ -510,14 +523,21 @@ class StrictPriorityRequestScheduler(Scheduler):
 
             self.curr_gen = None
 
-            # Update number of remaining pairs on request, remove if completed
-            self.decrement_num_pairs(aid)
-
         else:
             request = self.get_request(aid)
             if not request.measure_directly:
                 logger.warning("Marking gen completed for inactive request")
-            self.decrement_num_pairs(aid)
+
+        self._post_process_success(aid)
+
+    def _post_process_success(self, aid):
+        """
+        Updates information of the a request after success
+        :param aid: tuple of  int, int
+            Contains the aid used for the generation
+        :return: None
+        """
+        self.decrement_num_pairs(aid)
 
     def free_gen_resources(self, aid):
         """
@@ -872,8 +892,8 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
                     # This queue has infinite weight so just take this queue_item directly
                     queue_item_to_use = queue_item
                     break
-                if self._compare_mhp_cycle(queue_item.request.virtual_finish, min_virtual_finish) == -1:
-                    min_virtual_finish = queue_item.request.virtual_finish
+                if self._compare_mhp_cycle(queue_item.virtual_finish, min_virtual_finish) == -1:
+                    min_virtual_finish = queue_item.virtual_finish
                     queue_item_to_use = queue_item
         if queue_item_to_use is None:
             return None, None
@@ -881,7 +901,7 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
             aid = queue_item_to_use.qid, queue_item_to_use.seq
             return aid, queue_item_to_use
 
-    def update_virtual_finish(self, scheduler_request, qid):
+    def set_virtual_finish(self, scheduler_request, qid):
         """
         Updates the virtual finish time of request
         :param wfq_scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
@@ -891,14 +911,42 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         # Virt start is the virtual start of the service (see https://en.wikipedia.org/wiki/Fair_queuing#Pseudo_code)
         # If queue has weight zero (seen as infinite) we put virtual finish to None
         if self.relative_weights[qid] == 0:
-            virt_finish = None
+            init_virt_finish = None
+            wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(), init_virtual_finish=init_virt_finish)
         else:
             virt_start = max(self.mhp_cycle_number, self.last_virt_finish[qid])
-            est_time = self.feu.estimate_time_to_process(scheduler_request, units="mhp_cycles")
-            virt_finish = virt_start + est_time / self.relative_weights[qid]
+            est_nr_cycles_per_pair = self._estimate_nr_of_cycles_per_pair(scheduler_request)
 
-        wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(), virtual_finish=virt_finish)
+            # Check if this is an atomic request
+            if scheduler_request.atomic:
+                virt_duration = est_nr_cycles_per_pair * scheduler_request.num_pairs
+            else:
+                virt_duration = est_nr_cycles_per_pair
+
+            # Compute initial virt finish (if non-atomic this will be updated per success)
+            init_virt_finish = virt_start + virt_duration / self.relative_weights[qid]
+            wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(), init_virtual_finish=init_virt_finish, est_cycles_per_pair=est_nr_cycles_per_pair)
+
         return wfq_scheduler_request
+
+    def _estimate_nr_of_cycles_per_pair(self, scheduler_request):
+        """
+        Returns an estimate for how many MHP cycles is needed to generate ONE pair in the given request
+        (assuming that this is the only request and it is ready)
+        :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :return: int
+            Nr of MHP cycles
+        """
+        # Get estimate of nr of attempts needed from FEU
+        est_nr_attempts = self.feu.estimate_nr_of_attempts(scheduler_request)
+
+        # Cycles per attempt
+        if scheduler_request.measure_directly:
+            cycles_per_attempt = 1
+        else:
+            cycles_per_attempt = self._get_num_suspend_cycles(self.mhp_full_cycle)
+
+        return cycles_per_attempt * est_nr_attempts
 
     def _add_to_queue(self, scheduler_request, qid):
         """
@@ -908,5 +956,32 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         :param qid: int
         :return: None
         """
-        wfq_scheduler_request = self.update_virtual_finish(scheduler_request, qid)
+        wfq_scheduler_request = self.set_virtual_finish(scheduler_request, qid)
         self.distQueue.add(wfq_scheduler_request, qid)
+
+    def _post_process_success(self, aid):
+        """
+        Updates information of the a request after success
+        :param aid: tuple of  int, int
+            Contains the aid used for the generation
+        :return: None
+        """
+        self._update_virtual_finish(aid)
+        self.decrement_num_pairs(aid)
+
+    def _update_virtual_finish(self, aid):
+        """
+        Updates the virtual finish upon success
+        :param aid: tuple of  int, int
+            Contains the aid used for the generation
+        :return: None
+        """
+        try:
+            queue_item = self.distQueue.local_peek(aid)
+        except LinkLayerException as err:
+            logger.warning(
+                "Could not find queue item with aid = {}, when trying to update virtual finish.".format(
+                    aid))
+            raise err
+
+        queue_item.update_virtual_finish()

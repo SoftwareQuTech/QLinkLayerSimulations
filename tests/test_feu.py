@@ -5,6 +5,8 @@ from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from qlinklayer.toolbox import LinkLayerException
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
+from easysquid.easynetwork import setup_physical_network
+from util.config_paths import ConfigPathStorage
 from netsquid.qubits import dm_fidelity
 from netsquid.qubits.ketstates import b00, b01, b10, b11
 from numpy import kron, isclose
@@ -48,6 +50,17 @@ class TestSingleClickFidelityEstimationUnit(unittest.TestCase):
         self.assertEqual(round(dm_fidelity(dm11, dm01, squared=True), ndigits=8), 0)
         self.assertEqual(round(dm_fidelity(dm11, dm10, squared=True), ndigits=8), 0)
         self.assertEqual(round(dm_fidelity(dm11, dm11, squared=True), ndigits=8), 1)
+
+    def test_success_prob_est(self):
+        # Setup MHP network and MHP service
+        network = setup_physical_network(ConfigPathStorage.NETWORK_NV_LAB_NOCAV_NOCONV)
+        alice = network.get_node_by_id(0)
+        bob = network.get_node_by_id(1)
+        mhp_conn = network.get_connection(alice, bob, "mhp_conn")
+        mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob, conn=mhp_conn)
+        feu = SingleClickFidelityEstimationUnit(alice, mhp_service)
+
+        print(feu._estimate_success_probability())
 
     def test_fidelity_estimation(self):
         # Check various parameters against the estimation

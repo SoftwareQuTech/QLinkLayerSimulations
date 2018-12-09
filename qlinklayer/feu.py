@@ -1,7 +1,6 @@
 import abc
-from numpy import kron, zeros
+from numpy import kron, sqrt
 from netsquid.qubits import dm_fidelity
-from easysquid.toolbox import EasySquidException
 from qlinklayer.toolbox import LinkLayerException
 from netsquid.qubits.ketstates import s00, s01, s10, s11, b01, b11
 
@@ -45,7 +44,6 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         """
         self.node = node
         self.mhp_service = mhp_service
-        self.estimated_fidelity = self._estimate_fidelity()
         self.achievable_fidelities = self._calculate_achievable_fidelities()
 
     def update_components(self, node=None, mhp_service=None):
@@ -82,11 +80,9 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
             raise LinkLayerException("A and B have different bright state sets!  Fidelity calculation unsupported")
 
         achievable = []
-        params = self._extract_params()
         for alphaA, alphaB in zip(bright_statesA, bright_statesB):
-            params = (params[0], params[1], alphaA, alphaB, params[4], params[5])
             ideal_state = kron(b01.H, b01)  # (|01> + |10>)(<01| + <10|)
-            estimated_state = self._calculate_estimated_state(*params)
+            estimated_state = self._calculate_estimated_state(alphaA, alphaB)
             fidelity = float(dm_fidelity(estimated_state, ideal_state, squared=True))
             achievable.append((alphaA, fidelity))
 
@@ -126,16 +122,15 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         self.estimated_fidelity = self._estimate_fidelity()
         return self.estimated_fidelity
 
-    def _estimate_fidelity(self):
+    def _estimate_fidelity(self, alphaA=None, alphaB=None):
         """
         Calculates the fidelity by extracting parameters from the mhp components, calculating an estimated state of
         the entangled qubit, and computing the fidelity with the ideal state.
         :return: float
             Estimated fidelity based on the component parameters
         """
-        params = self._extract_params()
         ideal_state = kron(b01.H, b01)  # (|01> + |10>)(<01| + <10|)
-        estimated_state = self._calculate_estimated_state(*params)
+        estimated_state = self._calculate_estimated_state(alphaA, alphaB)
         return float(dm_fidelity(estimated_state, ideal_state, squared=True))
 
     def _compute_total_detection_probabilities(self):
@@ -167,29 +162,51 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
 
         return total_detection_eff
 
-    def _compute_conditional_detection_probabilities(self, alpha):
+    def _compute_conditional_detection_probabilities(self, alphaA=None, alphaB=None):
         """
         Computes the probabilites p_uu, p_ud, pdu, pdd as given in eq (10) in https://arxiv.org/src/1712.07567v2/anc/SupplementaryInformation.pdf
         Note that this assumed low detection efficiencies
-        :return:
+        If either alphaA or alphaB is None, then alpha is assumed to be the same for the two nodes.
+
+        :return: tuple of floats
+            (p_uu, p_ud, pdu, pdd)
         """
+        if alphaA is None and alphaB is None:
+            raise LinkLayerException("alphaA or alphaB needs to be specified")
+        if alphaA is None:
+            alphaA = alphaB
+        if alphaB is None:
+            alphaB = alphaA
 
         p_det_A, p_det_B = self._compute_total_detection_probabilities()
         p_dc = self.mhp_service.conn.midpoint.pdark
+        # Dark count probabilities for both detectors
+        p_no_dc = (1 - p_dc)**2
+        p_at_least_one_dc = 1 - p_no_dc
 
-        # TODO I don't think this is correct
-        prob_click_given_two_photons = ((1 - p_dc)**2 * (p_det_A*(1-p_det_B) + p_det_B*(1-p_det_A) + p_det_A*p_det_B) +
-                                     2 * p_dc * (1-p_dc) * (1-p_det_A) * (1-p_det_B))
-        p_uu = alpha**2 * prob_click_given_two_photons
+        prob_click_given_two_photons = (p_no_dc * (p_det_A*(1-p_det_B) + p_det_B*(1-p_det_A) + p_det_A*p_det_B) +
+                                        p_at_least_one_dc * (1-p_det_A) * (1-p_det_B))
+        p_uu = alphaA * alphaB * prob_click_given_two_photons
 
-        prob_click_given_photon_A = (1-p_dc)**2*p_det_A + 2*p_dc*(1-p_dc)*(1-p_det_A)
-        prob_click_given_photon_B = (1-p_dc)**2*p_det_B + 2*p_dc*(1-p_dc)*(1-p_det_B)
-        p_ud = alpha * (1-alpha) * prob_click_given_photon_A
-        p_du = alpha * (1-alpha) * prob_click_given_photon_B
+        prob_click_given_photon_A = p_no_dc * p_det_A + p_at_least_one_dc * (1-p_det_A)
+        prob_click_given_photon_B = p_no_dc * p_det_B + p_at_least_one_dc * (1-p_det_B)
+        p_ud = alphaA * (1-alphaB) * prob_click_given_photon_A
+        p_du = alphaB * (1-alphaA) * prob_click_given_photon_B
 
-        prob_click_given_no_photons = 
+        prob_click_given_no_photons = p_at_least_one_dc
+        p_dd = (1 - alphaA) * (1 - alphaB) * prob_click_given_no_photons
 
-        # TODO NOT FINISHED!!!
+        return p_uu, p_ud, p_du, p_dd
+
+    def _estimate_success_probability(self, alphaA=None, alphaB=None):
+        """
+        Computes the success probability as the sum of p_uu, p_ud, p_du, p_dd as defined in eq (10) in
+        https://arxiv.org/src/1712.07567v2/anc/SupplementaryInformation.pdf
+        If either alphaA or alphaB is None, then alpha is assumed to be the same for the two nodes.
+        :return: float
+            The success probability
+        """
+        return sum(self._compute_conditional_detection_probabilities(alphaA, alphaB))
 
     def _extract_params(self):
         """
@@ -212,85 +229,29 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
 
         return etaA, etaB, alphaA, alphaB, pdark, dp_photon
 
-    @staticmethod
-    def _calculate_estimated_state(etaA, etaB, alphaA, alphaB, pdark, dp_photon):
+    def _calculate_estimated_state(self, alphaA=None, alphaB=None):
         """
-        Calculates an estimated state based on the provided parameters.  Adapted from "Near-term repeater experiments
-        with NV centers: overcoming the limitations of direct transmission"
-        :param etaA: float
-            Transmitivity of fibre from A to midpoint
-        :param etaB: float
-            Transmitivity of fibre from B to midpoint
-        :param alphaA: float
-            Bright state population of generated state at node A
-        :param alphaB: float
-            Bright state population of generated state at node B
-        :param pdark: float
-            Probability of a dark count occurrence at the midpoint
-        :param dp_photon: float
-            Dephasing parameter of photon
+        Calculates an estimated state based on the provided parameters.  See eq (8) in
+        https://arxiv.org/src/1712.07567v2/anc/SupplementaryInformation.pdf
+
         :return: obj `~numpy.matrix`
             A density matrix of the estimated entangled state
         """
-        if pdark == 1:
-            raise EasySquidException("Probability of dark count 1 does not allow for generating entanglement!")
+        if self._estimate_success_probability(alphaA, alphaB) == 0:
+            raise LinkLayerException("Cannot estimate state when success probability is zero")
+        p_uu, p_ud, p_du, p_dd = self._compute_conditional_detection_probabilities(alphaA, alphaB)
 
-        # Calculate the probability that the left or right detector click depending on the probability of emission
-        # Probability of click for photon from A
-        p0 = alphaA * (1 - alphaB) * etaA
+        visibility = self.mhp_service.conn.midpoint.visibility
 
-        # Probability of click for photon from B
-        p0 += (1 - alphaA) * alphaB * etaB
+        ent_state = (p_ud * dm10 +  # |10><10| part
+                     p_du * dm01 +  # |01><01| part
+                     sqrt(visibility * p_ud * p_du) * kron(s10.H, s01) +  # |10><01| part
+                     sqrt(visibility * p_ud * p_du) * kron(s01.H, s10))  # |01><10| part
 
-        # Probility of click for photons from both
-        p0 += alphaA * alphaB * (1 - (1 - etaA) * (1 - etaB))
-        p0 *= 0.5
+        unnormalised_state = ent_state + p_uu * dm11 + p_dd * dm00
 
-        # Due to symmetries the probability is the same for the other detector
-        p1 = p0
-
-        # Calculate the probability that neither detector clicks
-        p2 = (1 - etaA * alphaA) * (1 - etaB * alphaB)
-
-        if p2 == 1:
-            raise EasySquidException("Probability of photons reaching detectors is zero!")
-
-        # Calculate the probability of dark counts occuring within the detection window
-        # Time window in nanoseconds, dark rate in Hz
-
-        # Calculate the probability of entanglement (only one photon causes the detector to click)
-        pent = alphaA * (1 - alphaB) * etaA +\
-            (1 - alphaA) * alphaB * etaB
-
-        # Calculate the post-measurement state in the case that a detector clicks due to a photon from A or B
-        a = dp_photon
-        b = 1 - dp_photon
-        rho0 = (pent / (p0 + p1)) * (a * dm_psi_plus + b * dm_psi_minus) + (1 - pent / (p0 + p1)) * dm11
-
-        # Calculate the post-measurement state in the case that a dark count causes the detector to click
-        if p2 != 0:
-            # Probability that neither endpoint emits a photon
-            rho2 = (1 - alphaA) * (1 - alphaB) * dm00
-
-            # Probability that left endpoint emits a photon and it gets lost
-            rho2 += (alphaA * (1 - alphaB) * (1 - etaA)) * dm10
-
-            # Probability that right endpoint emits a photon and it gets lost
-            rho2 += ((1 - alphaA) * alphaB * (1 - etaB)) * dm01
-
-            # Probability that both endpoints emit a photon and both are lost
-            rho2 += (1 - etaA) * (1 - etaB) * alphaA * alphaB * dm11
-            rho2 *= (1 / p2)
-
-        # Probability of no clicks is zero then there is no influence
-        else:
-            rho2 = zeros((4, 4))
-
-        # Calculate the probability of registering a click in only one detector
-        Y = (p0 + p1) * (1 - pdark) + 2 * p2 * pdark * (1 - pdark)
-
-        # Calculate the effective accepted state if a click in one detector occurs
-        estimated_rho = (1 / Y) * ((p0 + p1) * (1 - pdark) * rho0 + 2 * p2 * pdark * (1 - pdark) * rho2)
+        # Normalise the state
+        estimated_rho = unnormalised_state / (p_uu + p_ud + p_du + p_dd)
 
         return estimated_rho
 
@@ -324,17 +285,19 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
 
         return bright_state_populations
 
-    def estimate_time_to_process(self, scheduler_request, units="seconds"):
+    def estimate_nr_of_attempts(self, scheduler_request):
         """
-        Computes the estimated time to process a request (assuming that this is the only request in the queues
-        and that its ready)
+        Computes the estimated number of entanglement generation attempts needed generate ONE pair in the given request
+        (assuming that this is the only request in the queues and that its ready)
 
-        The 'units' argument can be used to choose whether what is returned is in seconds or nr of mhp cycles
         :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
-        :param units: str (either "seconds" or "mhp_cycles")
-        :return: float or int
+        :return: float
         """
-        if not units in ["seconds", "mhp_cycles"]:
-            raise ValueError("'units' need to be 'seconds' or 'mhp_cycles'")
-        # TODO implement this
-        return 1
+        alpha = self.select_bright_state(scheduler_request.min_fidelity)
+        # Get success probability given alpha
+        p_succ = self._estimate_success_probability(alpha)
+
+        # Estimate number of attempts needed
+        est_nr_attempts = 1 / p_succ
+
+        return est_nr_attempts

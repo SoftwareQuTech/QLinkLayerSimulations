@@ -429,6 +429,23 @@ class _EGPLocalQueueItem(_LocalQueueItem):
                     logger.debug("Item is ready to be scheduled")
 
 
+class _WFQLocalQueueItem(_EGPLocalQueueItem):
+    def __init__(self, request, seq, qid, timeout_callback):
+        super().__init__(request, seq, qid, timeout_callback)
+
+        # Store virt finish and est nr of MHP cycles per pair (used to update the virt finish)
+        self.virtual_finish = request.init_virtual_finish
+        self.cycles_per_pair = request.est_cycles_per_pair
+
+    def update_virtual_finish(self):
+        """
+        Adds est_cycles_per_pair to virtual_finish
+        :return: None
+        """
+        if not self.request.atomic:
+            self.virtual_finish += self.cycles_per_pair
+
+
 class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):
     def __init__(self, request, seq, lifetime=0.0):
         """
