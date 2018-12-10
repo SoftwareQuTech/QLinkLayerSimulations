@@ -1,11 +1,13 @@
 import unittest
 import logging
+from util.config_paths import ConfigPathStorage
 from easysquid.easyfibre import ClassicalFibreConnection
-from easysquid.easynetwork import EasyNetwork
+from easysquid.easynetwork import EasyNetwork, setup_physical_network
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
+from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from netsquid.simutil import sim_run, sim_reset
 from qlinklayer.distQueue import EGPDistributedQueue, WFQDistributedQueue
 from qlinklayer.scheduler import StrictPriorityRequestScheduler, WFQRequestScheduler
@@ -155,23 +157,74 @@ class TestRequestScheduler(unittest.TestCase):
 
 class TestWFQRequestScheduler(unittest.TestCase):
     def setUp(self):
-        alice = QuantumNode("alice", 0)
-        bob = QuantumNode("bob", 0)
-        conn = ClassicalFibreConnection(alice, bob, length=0.001)
+        sim_reset()
 
-        distQueueA = WFQDistributedQueue(alice, numQueues=3, accept_all=True)
-        distQueueB = WFQDistributedQueue(bob, numQueues=3, accept_all=True)
-        distQueueA.connect_to_peer_protocol(distQueueB, conn=conn)
+        network = setup_physical_network(ConfigPathStorage.NETWORK_NV_LAB_NOCAV_NOCONV)
+        alice, bob = network.all_nodes()
+        dqp_conn = network.get_connection(alice, bob, "dqp_conn")
+        mhp_conn = network.get_connection(alice, bob, "mhp_conn")
 
-        qmmA = QuantumMemoryManagement(alice)
+        self.num_queues = 3
+
+        self.distQueueA = WFQDistributedQueue(alice, numQueues=self.num_queues, accept_all=True)
+        distQueueB = WFQDistributedQueue(bob, numQueues=self.num_queues, accept_all=True)
+        self.distQueueA.connect_to_peer_protocol(distQueueB, conn=dqp_conn)
+
+        self.qmmA = QuantumMemoryManagement(alice)
         qmmB = QuantumMemoryManagement(bob)
 
-        # mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob)
-        #
-        # feuA = SingleClickFidelityEstimationUnit(alice, )
-        # self.schedulerA = WFQRequestScheduler(distQueueA, qmmA, feuA)
+        mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob, conn=mhp_conn)
+
+        self.feuA = SingleClickFidelityEstimationUnit(alice, mhp_service)
+        feuB = SingleClickFidelityEstimationUnit(bob, mhp_service)
+
+        self.schedulerA = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
     def test_init(self):
+        # Test default
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        self.assertEqual(scheduler.relative_weights, [0] * self.num_queues)
+
+        # Test wrong type
+        with self.assertRaises(TypeError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, 0)
+        with self.assertRaises(TypeError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, {})
+
+        # Test wrong length
+        with self.assertRaises(ValueError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, [0] * (self.num_queues + 1))
+
+        # Test negative weights
+        with self.assertRaises(ValueError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, [0, 0, -1])
+
+        # Test non-comparable weights
+        with self.assertRaises(ValueError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, [0, [], False])
+
+        # Test non-trivial weights
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, [0, 5, 15])
+        self.assertEqual(scheduler.relative_weights, [0, 0.25, 0.75])
+
+    def test_compare_cycle_odd(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        scheduler.max_mhp_cycle_number = 5
+        scheduler.mhp_cycle_number = 0
+
+        cycle1 = 0
+        cycle2 = 1
+
+        for _ in range(scheduler.max_mhp_cycle_number):
+            print(scheduler._compare_mhp_cycle(cycle1, cycle2))
+            scheduler.mhp_cycle_number += 1
+
+    def test_set_virtual_finish(self):
         pass
+
+    def test_scheduling(self):
+        pass
+
 
 
 class TestTimings(unittest.TestCase):

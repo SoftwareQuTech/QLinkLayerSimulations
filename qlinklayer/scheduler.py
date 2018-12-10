@@ -52,7 +52,7 @@ class StrictPriorityRequestScheduler(Scheduler):
     # The scheduler request named tuple to use
     _scheduler_request_named_tuple = SchedulerRequest
 
-    def __init__(self, distQueue, qmm, feu=None):
+    def __init__(self, distQueue, qmm, feu):
         """
         Stub for a scheduler to decide how we assign and consume elements of the queue.
         This scheduler puts requests in queues depending on only their specified priority
@@ -797,7 +797,7 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
     # The scheduler request named tuple to use
     _scheduler_request_named_tuple = WFQSchedulerRequest
 
-    def __init__(self, distQueue, qmm, feu=None, weights=None):
+    def __init__(self, distQueue, qmm, feu, weights=None):
         """
         Stub for a scheduler to decide how we assign and consume elements of the queue.
         This weighted fair queue (WFQ) scheduler implements a weighted fair queue where queue i
@@ -810,7 +810,7 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         :param feu: :obj:`~qlinklayer.feu.FidelityEstimationUnit`
             (optional) The fidelity estimation unit
         :param weights: None, list of floats
-            * If None, a fair queue with equal weights will be used.
+            * If None, a strict priority queue will be used, with the queue IDs as priorities
             * If list of floats, the length of the list needs to equal the number of queues in the distributed queue.
               The floats need to be non-zero. If a weight is zero, this is seen as infinite weight and queues with zero
               weight will always be scheduled before other queues. If multiple queues have weight zero, then
@@ -820,7 +820,7 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
 
         self.relative_weights = self._get_relative_weights(weights)
 
-        self.last_virt_finish = [-1] * len(weights)
+        self.last_virt_finish = [-1] * len(self.relative_weights)
 
     def _compare_mhp_cycle(self, cycle1, cycle2):
         """
@@ -853,9 +853,9 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
 
     def _get_relative_weights(self, weights):
         if weights is None:
-            return
+            return [0] * len(self.distQueue.queueList)
         if not isinstance(weights, list) or isinstance(weights, tuple):
-            raise ValueError("Weights need to be None or list")
+            raise TypeError("Weights need to be None or list")
         if not len(weights) == len(self.distQueue.queueList):
             raise ValueError("Number of weights must equal number of queues")
         for weight in weights:
