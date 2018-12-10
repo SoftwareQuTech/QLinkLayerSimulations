@@ -545,9 +545,13 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
             for _, qubit in self.qubits.items():
                 if qubit:
                     self._drop_qubit(qubit)
+
             dataA, dataB = self._get_error_data(self.ERR_NO_CLASSICAL_OTHER)
-            self._send_to_node(self.nodeA, dataA)
-            self._send_to_node(self.nodeB, dataB)
+            if self.node_requests[self.nodeA.nodeID] is not None:
+                self._send_to_node(self.nodeA, dataA)
+            elif self.node_requests[self.nodeB.nodeID] is not None:
+                self._send_to_node(self.nodeB, dataB)
+
             logger.warning("Midpoint only received entanglement generation data from one node")
 
         else:

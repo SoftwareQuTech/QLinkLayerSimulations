@@ -18,7 +18,7 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.WARNING)
 
 
 def store_result(storage, result):
@@ -1189,7 +1189,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Verify number of messages
         self.assertEqual(len(self.alice_results), 5)  # 2 errors, 2 expires, 1 ok
-        self.assertEqual(len(self.bob_results), 7)    # 2 errors, 2 expires, 3 ok's
+        self.assertEqual(len(self.bob_results), 6)    # 2 errors, 2 expires, 3 ok's
 
         # Verify that alice received an ERR_QUEUE_MISMATCH
         self.assertEqual(self.alice_results[0], (egpA.mhp.conn.ERR_QUEUE_MISMATCH, 0))
@@ -1206,11 +1206,10 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Verify that alice received an ERR_NO_CLASSICAL_OTHER
         self.assertEqual(self.alice_results[3], (egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER, 0))
-        self.assertEqual(self.bob_results[5], (egpB.mhp.conn.ERR_NO_CLASSICAL_OTHER, 0))
 
         # Verify that expire message propagated to both nodes
         self.assertEqual(self.alice_results[4], (egpA.ERR_EXPIRE, (create_idB2, bob.nodeID)))
-        self.assertEqual(self.bob_results[6], (egpB.ERR_EXPIRE, (create_idB2, bob.nodeID)))
+        self.assertEqual(self.bob_results[5], (egpB.ERR_EXPIRE, (create_idB2, bob.nodeID)))
 
         # Verify that egp states synchronized
         self.assertEqual(egpA.expected_seq, egpB.expected_seq)
@@ -1244,7 +1243,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)
         network.start()
-        sim_run(40)
+
+        sim_run(10)
 
         # Verify that when both detect MHP Sequence number skip then results are the same
         self.assertEqual(len(self.alice_results), 2)
@@ -1284,8 +1284,29 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
-        def faulty_send_expire(node, data, conn):
-            pass
+        def faulty_send(node, data, conn):
+            logger.debug("Faulty send, MHP Seq {}".format(conn.mhp_seq))
+            if node.nodeID == alice.nodeID:
+                if not conn.mhp_seq == 0 and not conn.mhp_seq == 2:
+                    logger.debug("Sending to {}".format(node.nodeID))
+                    conn.channel_M_to_A.send(data)
+
+            elif node.nodeID == bob.nodeID:
+                logger.debug("Sending to {}".format(node.nodeID))
+                conn.channel_M_to_B.send(data)
+
+        egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
+
+        self.lost_messages = 0
+
+        # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
+        def faulty_send_expire(aid, createID, originID, new_seq):
+            if self.lost_messages >= 2:
+                egpA.conn.put_from(alice.nodeID, [(egpA.CMD_EXPIRE, (aid, createID, originID, new_seq))])
+            else:
+                self.lost_messages += 1
+
+        egpA._send_exp_msg = faulty_send_expire
 
         alice_pairs = 1
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
@@ -1299,7 +1320,19 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
 
         sim_run(5)
-        raise Exception()
+        self.assertEqual(len(self.alice_results), 2)
+        self.assertEqual(len(self.bob_results), 2)
+
+        # Check that the request completed for bob
+        expected_ok_data = (EntInfoCreateKeepHeader.type, create_idA, (alice.nodeID, bob.nodeID, 0))
+        self.assertEqual(self.bob_results[0][0:3], expected_ok_data)
+        
+        # Check that alice received an error from the midpoint and expired the request
+        self.assertEqual(self.alice_results[0], (egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER, 0))
+        self.assertEqual(self.alice_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
+
+        # Check that bob also received an error from the midpoint
+        self.assertEqual(self.bob_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
 
     def test_lost_expire_ack(self):
         alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
@@ -1312,8 +1345,29 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
-        def faulty_send_expire_ack(node, data, conn):
-            pass
+        def faulty_send(node, data, conn):
+            logger.debug("Faulty send, MHP Seq {}".format(conn.mhp_seq))
+            if node.nodeID == alice.nodeID:
+                if not conn.mhp_seq == 0 and not conn.mhp_seq == 2:
+                    logger.debug("Sending to {}".format(node.nodeID))
+                    conn.channel_M_to_A.send(data)
+
+            elif node.nodeID == bob.nodeID:
+                logger.debug("Sending to {}".format(node.nodeID))
+                conn.channel_M_to_B.send(data)
+
+        egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
+
+        self.lost_messages = 0
+
+        # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
+        def faulty_send_expire_ack(aid):
+            if self.lost_messages >= 2:
+                egpB.conn.put_from(bob.nodeID, [(egpB.CMD_EXPIRE_ACK, (aid, egpB.expected_seq))])
+            else:
+                self.lost_messages += 1
+
+        egpB._send_exp_ack = faulty_send_expire_ack
 
         alice_pairs = 1
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
@@ -1327,7 +1381,21 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
 
         sim_run(5)
-        raise Exception()
+        self.assertEqual(len(self.alice_results), 2)
+        self.assertEqual(len(self.bob_results), 4)
+
+        # Check that the request completed for bob
+        expected_ok_data = (EntInfoCreateKeepHeader.type, create_idA, (alice.nodeID, bob.nodeID, 0))
+        self.assertEqual(self.bob_results[0][0:3], expected_ok_data)
+
+        # Check that alice received an error from the midpoint and expired the request
+        self.assertEqual(self.alice_results[0], (egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER, 0))
+        self.assertEqual(self.alice_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
+
+        # Check that bob also received an error from the midpoint
+        self.assertEqual(self.bob_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
+        self.assertEqual(self.bob_results[2], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
+        self.assertEqual(self.bob_results[3], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
 
     def test_creation_failure(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)

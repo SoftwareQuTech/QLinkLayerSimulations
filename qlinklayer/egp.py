@@ -1,7 +1,7 @@
 import abc
 from collections import namedtuple
 import random
-
+from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
 from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_MEASURE
@@ -226,6 +226,9 @@ class NodeCentricEGP(EGP):
         # Request tracking
         self.expected_seq = 0
 
+        self.waitExpireAcks = {}
+        self.comm_delay = 0
+
         # Communication handlers
         self.commandHandlers = {
             self.CMD_REQ_E: self.cmd_REQ_E,
@@ -244,6 +247,7 @@ class NodeCentricEGP(EGP):
         self.scheduler.set_timeout_callback(self.request_timeout_handler)
 
         # Pydynaa events
+        self._EVT_EXPIRE_ACK_TIMEOUT = EventType("EXPIRE COMM TIMEOUT", "Communication timeout for expire message")
         self._EVT_CREATE = EventType("CREATE", "Call to create has completed")
         self._EVT_BIT_COMPLETED = EventType("BIT COMPLETE", "Successfully generated a bit from entangled pair")
         self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
@@ -346,6 +350,8 @@ class NodeCentricEGP(EGP):
 
         self.setConnection(egp_conn)
         other_egp.setConnection(egp_conn)
+        self.comm_delay = self.conn.channel_from_A.delay_mean + egp_conn.channel_from_B.delay_mean
+        other_egp.comm_delay = self.comm_delay
 
         # Store the peer's delay information
         # TODO: assuming that the ID of the communication qubit is 0
@@ -422,8 +428,24 @@ class NodeCentricEGP(EGP):
         :param new_seq: int
             The new sequence number of the local node to be informed to peer
         """
-        logger.error("Sending EXPIRE notification to peer")
+        if aid not in self.waitExpireAcks:
+            logger.error("Sending EXPIRE notification to peer")
+            self._send_exp_msg(aid, createID, originID, new_seq)
+            evt = self._schedule_after(2 * self.comm_delay, self._EVT_EXPIRE_ACK_TIMEOUT)
+            timeout_handler = EventHandler(partial(self.expire_ack_timeout, aid=aid))
+            self._wait_once(timeout_handler, event=evt)
+            self.waitExpireAcks[aid] = (createID, originID, new_seq)
+
+    def _send_exp_msg(self, aid, createID, originID, new_seq):
         self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE, (aid, createID, originID, new_seq))])
+
+    def expire_ack_timeout(self, evt, aid):
+        if aid in self.waitExpireAcks:
+            logger.warning("Did not receive expire ACK in time, retransmitting")
+            createID, originID, expire_seq = self.waitExpireAcks.pop(aid)
+            new_seq = self.expected_seq
+            self.send_expire_notification(aid, createID, originID, new_seq)
+            self.waitExpireAcks[aid] = (createID, originID, new_seq)
 
     def cmd_EXPIRE(self, data):
         """
@@ -445,14 +467,18 @@ class NodeCentricEGP(EGP):
             logger.debug("Updated expected sequence to {}".format(new_seq))
             self.expected_seq = new_seq
 
-        # If we are still processing the expired request clear it
-        self.scheduler.clear_request(aid)
-
-        # Let our peer know we expired
-        self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE_ACK, self.expected_seq)])
+        if self.scheduler.get_request(aid):
+            # If we are still processing the expired request clear it
+            self.scheduler.clear_request(aid)
 
         # Alert higher layer protocols
         self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
+
+        # Let our peer know we expired
+        self._send_exp_ack(aid)
+
+    def _send_exp_ack(self, aid):
+        self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE_ACK, (aid, self.expected_seq))])
 
     def cmd_EXPIRE_ACK(self, data):
         """
@@ -465,10 +491,13 @@ class NodeCentricEGP(EGP):
         logger.error("Got EXPIRE ACK command from peer")
 
         # Check if our peer was ahead and we need to update
-        other_expected_seq = data
+        aid, other_expected_seq = data
         if other_expected_seq > self.expected_seq:
             logger.debug("Updated expected sequence to {}".format(other_expected_seq))
             self.expected_seq = other_expected_seq
+
+        if aid in self.waitExpireAcks:
+            self.waitExpireAcks.pop(aid)
 
     def cmd_REQ_E(self, data):
         """
