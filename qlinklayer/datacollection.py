@@ -224,11 +224,11 @@ class EGPOKSequence(EGPDataSequence):
             create_id, ent_id, _, _, _, _ = MeasureAfterSuccessScenario.unpack_cqc_ok(ok)
             ok_type = EntInfoCreateKeepHeader.type
         # TODO the bitstring.ReadError should occur but this needs to be fixed in SimulaQron
-        except (ValueError, bitstring.ReadError):
+        except ValueError:
             try:
                 create_id, ent_id, _, _, _, _ = MeasureBeforeSuccessScenario.unpack_cqc_ok(ok)
                 ok_type = EntInfoMeasDirectHeader.type
-            except (ValueError, bitstring.ReadError):
+            except ValueError:
                 raise ValueError("Unknown OK type")
         origin_id = ent_id[0]
 
