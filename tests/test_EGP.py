@@ -944,11 +944,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
 
         self.p_loss = 1
+
         def alice_faulty_request():
             if random.random() < self.p_loss:
                 pass
             else:
-                p_loss = max(self.p_loss - 0.1, 0)
+                self.p_loss = max(self.p_loss - 0.1, 0)
                 alice_free_mem = egpA.qmm.get_free_mem_ad()
                 egpA.conn.put_from(alice.nodeID, [(egpA.CMD_REQ_E, alice_free_mem)])
 
@@ -1138,6 +1139,82 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
         self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
 
+    def test_lost_last_success(self):
+        alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
+
+        # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
+        def faulty_send(node, data, conn):
+            logger.debug("Faulty send, MHP Seq {}".format(conn.mhp_seq))
+            if node.nodeID == alice.nodeID:
+                if not conn.mhp_seq == 0 and not conn.mhp_seq == 2:
+                    logger.debug("Sending to {}".format(node.nodeID))
+                    conn.channel_M_to_A.send(data)
+
+            elif node.nodeID == bob.nodeID:
+                logger.debug("Sending to {}".format(node.nodeID))
+                conn.channel_M_to_B.send(data)
+
+        egpA.mhp.conn._send_to_node = partial(faulty_send, conn=egpA.mhp.conn)
+
+        alice_pairs = 1
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=0, purpose_id=1,
+                                                                        priority=10)
+
+        bob_pairs = 1
+        bob_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                      min_fidelity=0.5, max_time=0, purpose_id=1,
+                                                                      priority=10)
+
+        bob_request2 = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_pairs,
+                                                                       min_fidelity=0.5, max_time=0, purpose_id=1,
+                                                                       priority=10)
+
+        create_idA = egpA.create(alice_request)
+        create_idB = egpB.create(bob_request)
+        create_idB2 = egpB.create(bob_request2)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(5)
+
+        # Verify number of messages
+        self.assertEqual(len(self.alice_results), 5)  # 2 errors, 2 expires, 1 ok
+        self.assertEqual(len(self.bob_results), 7)    # 2 errors, 2 expires, 3 ok's
+
+        # Verify that alice received an ERR_QUEUE_MISMATCH
+        self.assertEqual(self.alice_results[0], (egpA.mhp.conn.ERR_QUEUE_MISMATCH, 0))
+        self.assertEqual(self.bob_results[1], (egpB.mhp.conn.ERR_QUEUE_MISMATCH, 0))
+
+        # Verify that an expire message propagated to both nodes
+        self.assertEqual(self.alice_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
+        self.assertEqual(self.bob_results[2], (egpB.ERR_EXPIRE, (create_idA, alice.nodeID)))
+
+        # Verify that bobs first request was successfully completed
+        expected_okay_data = (EntInfoCreateKeepHeader.type, create_idB, (bob.nodeID, alice.nodeID, 1))
+        self.assertEqual(self.alice_results[2][0:3], expected_okay_data)
+        self.assertEqual(self.bob_results[3][0:3], expected_okay_data)
+
+        # Verify that alice received an ERR_NO_CLASSICAL_OTHER
+        self.assertEqual(self.alice_results[3], (egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER, 0))
+        self.assertEqual(self.bob_results[5], (egpB.mhp.conn.ERR_NO_CLASSICAL_OTHER, 0))
+
+        # Verify that expire message propagated to both nodes
+        self.assertEqual(self.alice_results[4], (egpA.ERR_EXPIRE, (create_idB2, bob.nodeID)))
+        self.assertEqual(self.bob_results[6], (egpB.ERR_EXPIRE, (create_idB2, bob.nodeID)))
+
+        # Verify that egp states synchronized
+        self.assertEqual(egpA.expected_seq, egpB.expected_seq)
+
     def test_both_nodes_expire(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
 
@@ -1186,7 +1263,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Verify we have ERR_EXPIRE messages for individual generation requests
         expiry_message = self.alice_results[1]
-        error_code, (seq_start, seq_end) = expiry_message
+        error_code, _ = expiry_message
         expired_create_id, expired_origin_id = expiry_message[1]
         self.assertEqual(expired_create_id, create_id)
         self.assertEqual(expired_origin_id, alice.nodeID)
@@ -1195,6 +1272,62 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
         self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
+
+    def test_lost_expire(self):
+        alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
+
+        # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
+        def faulty_send_expire(node, data, conn):
+            pass
+
+        alice_pairs = 1
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=0, purpose_id=1,
+                                                                        priority=10)
+
+        create_idA = egpA.create(alice_request)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(5)
+        raise Exception()
+
+    def test_lost_expire_ack(self):
+        alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
+
+        pm = PM_Controller()
+        alice_error_counter = PM_Test_Counter(name="AliceErrorCounter")
+        bob_error_counter = PM_Test_Counter(name="BobErrorCounter")
+        pm.addEvent(source=egpA, evtType=egpA._EVT_ERROR, ds=alice_error_counter)
+        pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
+
+        # Make the heralding station "drop" message containing MHP Seq = 2 to nodeA
+        def faulty_send_expire_ack(node, data, conn):
+            pass
+
+        alice_pairs = 1
+        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
+                                                                        min_fidelity=0.5, max_time=0, purpose_id=1,
+                                                                        priority=10)
+
+        create_idA = egpA.create(alice_request)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(5)
+        raise Exception()
 
     def test_creation_failure(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)

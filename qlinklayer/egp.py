@@ -662,10 +662,17 @@ class NodeCentricEGP(EGP):
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
 
-            # If no absolute queue id is included then info was passed or an error occurred
-            if aid is None:
-                logger.debug("Handling reply that does not contain an absolute queue id")
-                self._handle_reply_without_aid(proto_err)
+            # # If no absolute queue id is included then info was passed or an error occurred
+            # if aid is None:
+            #     logger.debug("Handling reply that does not contain an absolute queue id")
+            #     self._handle_reply_without_aid(proto_err)
+
+            # Check if an error occurred while processing a request
+            if proto_err:
+                logger.error("Protocol error occured in MHP: {}".format(proto_err))
+                self.issue_err(err=proto_err)
+                self._handle_mhp_err(result)
+                return
 
             # Check if this aid may have been expired or timed out while awaiting reply
             elif not self.scheduler.has_request(aid=aid):
@@ -687,10 +694,6 @@ class NodeCentricEGP(EGP):
 
             # Otherwise this response is associated with a generation attempt
             else:
-                # Check if an error occurred while processing a request
-                if proto_err:
-                    logger.error("Protocol error occured in MHP: {}".format(proto_err))
-                    self.issue_err(err=proto_err)
 
                 # No entanglement generated
                 if midpoint_outcome == 0:
@@ -751,6 +754,49 @@ class NodeCentricEGP(EGP):
         if proto_err:
             logger.error("Protocol error occured in MHP: {}".format(proto_err))
             self.issue_err(err=proto_err)
+
+    def _handle_mhp_err(self, result):
+        midpoint_outcome, mhp_seq, aid, proto_err = result
+        if proto_err == self.mhp.conn.ERR_QUEUE_MISMATCH:
+            aidA, aidB = aid
+            local_aid = aidA if self.node.nodeID == self.mhp.conn.nodeA.nodeID else aidB
+            if mhp_seq >= self.expected_seq:
+                self.expected_seq = mhp_seq
+                request = self.scheduler.get_request(local_aid)
+                if self.dqp.master ^ request.master_request:
+                    originID = self.get_otherID()
+                else:
+                    originID = self.node.nodeID
+                createID = request.create_id
+                self.send_expire_notification(aid=local_aid, createID=createID, originID=originID,
+                                              new_seq=self.expected_seq)
+
+                # Clear the request
+                self.scheduler.clear_request(aid=local_aid)
+
+                # Alert higher layer protocols
+                self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
+
+        elif proto_err == self.mhp.conn.ERR_NO_CLASSICAL_OTHER:
+            local_aid = aid
+            if mhp_seq >= self.expected_seq:
+                self.expected_seq = mhp_seq
+                request = self.scheduler.get_request(local_aid)
+                if self.dqp.master ^ request.master_request:
+                    originID = self.get_otherID()
+                else:
+                    originID = self.node.nodeID
+                createID = request.create_id
+                self.send_expire_notification(aid=local_aid, createID=createID, originID=originID,
+                                              new_seq=self.expected_seq)
+
+                # Clear the request
+                self.scheduler.clear_request(aid=local_aid)
+
+                # Alert higher layer protocols
+                self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
+
+        return
 
     def _handle_generation_reply(self, r, mhp_seq, aid):
         """
