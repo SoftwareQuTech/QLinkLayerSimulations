@@ -10,7 +10,7 @@ from easysquid.toolbox import logger
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from netsquid.simutil import sim_run, sim_reset
 from qlinklayer.distQueue import EGPDistributedQueue, WFQDistributedQueue
-from qlinklayer.scheduler import StrictPriorityRequestScheduler, WFQRequestScheduler
+from qlinklayer.scheduler import StrictPriorityRequestScheduler, WFQRequestScheduler, SchedulerRequest
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.egp import EGPRequest
 from qlinklayer.scenario import EGPSimulationScenario
@@ -183,7 +183,7 @@ class TestWFQRequestScheduler(unittest.TestCase):
     def test_init(self):
         # Test default
         scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
-        self.assertEqual(scheduler.relative_weights, [0] * self.num_queues)
+        self.assertEqual(scheduler.relative_weights, [1] * self.num_queues)
 
         # Test wrong type
         with self.assertRaises(TypeError):
@@ -215,12 +215,65 @@ class TestWFQRequestScheduler(unittest.TestCase):
         cycle1 = 0
         cycle2 = 1
 
-        for _ in range(scheduler.max_mhp_cycle_number):
-            print(scheduler._compare_mhp_cycle(cycle1, cycle2))
+        for i in range(scheduler.max_mhp_cycle_number):
+            if i == 3:
+                self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle2), 1)
+            else:
+                self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle2), -1)
+            self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle1), 0)
+            self.assertEqual(scheduler._compare_mhp_cycle(cycle2, cycle2), 0)
             scheduler.mhp_cycle_number += 1
 
-    def test_set_virtual_finish(self):
-        pass
+    def test_compare_cycle_even(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        scheduler.max_mhp_cycle_number = 6
+        scheduler.mhp_cycle_number = 0
+
+        cycle1 = 0
+        cycle2 = 1
+
+        for i in range(scheduler.max_mhp_cycle_number):
+            if i == 4:
+                self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle2), 1)
+            else:
+                self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle2), -1)
+            self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle1), 0)
+            self.assertEqual(scheduler._compare_mhp_cycle(cycle2, cycle2), 0)
+            scheduler.mhp_cycle_number += 1
+
+    def test_set_virtual_finish_same_queue_same_req(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Compare high and low min_fidelity
+        requests = [SchedulerRequest(), SchedulerRequest()]
+        wfq_requests = []
+        for req in requests:
+            wfq_requests.append(scheduler.set_virtual_finish(req, 0))
+        self.assertGreater(wfq_requests[0].init_virtual_finish, wfq_requests[1].init_virtual_finish)
+        self.assertEqual(wfq_requests[0].est_cycles_per_pair, wfq_requests[1].est_cycles_per_pair)
+        self.assertEqual(wfq_requests[0].init_virtual_finish + wfq_requests[0].est_cycles_per_pair, wfq_requests[1].init_virtual_finish)
+
+    def test_set_virtual_finish_fidelity(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Compare high and low min_fidelity
+        requests = [SchedulerRequest(min_fidelity=0.8), SchedulerRequest(min_fidelity=0.6)]
+        wfq_requests = []
+        for qid, req in enumerate(requests):
+            wfq_requests.append(scheduler.set_virtual_finish(req, qid))
+        self.assertGreater(wfq_requests[0].init_virtual_finish, wfq_requests[1].init_virtual_finish)
+        self.assertGreater(wfq_requests[0].est_cycles_per_pair, wfq_requests[1].est_cycles_per_pair)
+
+    def test_set_virtual_finish_num_pairs(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Compare high and low num pairs (non atomic)
+        requests = [SchedulerRequest(num_pairs=2), SchedulerRequest(num_pairs=10)]
+        wfq_requests = []
+        for qid, req in enumerate(requests):
+            wfq_requests.append(scheduler.set_virtual_finish(req, qid))
+        self.assertEqual(wfq_requests[0].init_virtual_finish, wfq_requests[1].init_virtual_finish)
+        self.assertEqual(wfq_requests[0].est_cycles_per_pair, wfq_requests[1].est_cycles_per_pair)
 
     def test_scheduling(self):
         pass

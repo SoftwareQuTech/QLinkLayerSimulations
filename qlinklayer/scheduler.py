@@ -810,7 +810,7 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         :param feu: :obj:`~qlinklayer.feu.FidelityEstimationUnit`
             (optional) The fidelity estimation unit
         :param weights: None, list of floats
-            * If None, a strict priority queue will be used, with the queue IDs as priorities
+            * If None, a unweighted fair queue will be used, (i.e. equal weights)
             * If list of floats, the length of the list needs to equal the number of queues in the distributed queue.
               The floats need to be non-zero. If a weight is zero, this is seen as infinite weight and queues with zero
               weight will always be scheduled before other queues. If multiple queues have weight zero, then
@@ -853,7 +853,7 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
 
     def _get_relative_weights(self, weights):
         if weights is None:
-            return [0] * len(self.distQueue.queueList)
+            return [1] * len(self.distQueue.queueList)
         if not isinstance(weights, list) or isinstance(weights, tuple):
             raise TypeError("Weights need to be None or list")
         if not len(weights) == len(self.distQueue.queueList):
@@ -918,10 +918,13 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
             est_nr_cycles_per_pair = self._estimate_nr_of_cycles_per_pair(scheduler_request)
 
             # Check if this is an atomic request
+            # Compute initial virt finish (if non-atomic this will be updated per success)
             if scheduler_request.atomic:
                 virt_duration = est_nr_cycles_per_pair * scheduler_request.num_pairs
+                self.last_virt_finish[qid] = virt_start + virt_duration / self.relative_weights[qid]
             else:
                 virt_duration = est_nr_cycles_per_pair
+                self.last_virt_finish[qid] = virt_start + virt_duration * scheduler_request.num_pairs /self.relative_weights[qid]
 
             # Compute initial virt finish (if non-atomic this will be updated per success)
             init_virt_finish = virt_start + virt_duration / self.relative_weights[qid]
