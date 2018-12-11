@@ -110,7 +110,7 @@ import os
 import importlib.util
 
 
-def main():
+def main(ask_for_input=True):
     abspath_to_this_file = os.path.abspath(__file__)
     abspath_to_create_file = "/".join(
         abspath_to_this_file.split("/")[:-2]) + "/readonly/create_simdetails_and_paramcombinations.py"
@@ -123,12 +123,14 @@ def main():
         paramcombinations
     except NameError:
         create_module.setup_sim_parameters(opt_params, description_string, number_of_runs, outputdirname,
-                                           make_paramcombinations=True, QLINKLAYERDIR=path_to_qlinklayer,
+                                           make_paramcombinations=True, ask_for_input=ask_for_input,
+                                           QLINKLAYERDIR=path_to_qlinklayer,
                                            SIMULAQRONDIR=path_to_SimulaQron)
         return
 
     create_module.setup_sim_parameters(paramcombinations, description_string, number_of_runs, outputdirname,
-                                       make_paramcombinations=False, QLINKLAYERDIR=path_to_qlinklayer,
+                                       make_paramcombinations=False, ask_for_input=ask_for_input,
+                                       QLINKLAYERDIR=path_to_qlinklayer,
                                        SIMULAQRONDIR=path_to_SimulaQron)
 
 

@@ -3,12 +3,18 @@ import os
 import shutil
 import json
 import glob
+import logging
+import subprocess
 
+from easysquid.toolbox import logger
 from simulations import _get_configs_from_easysquid
 from simulations.create_measure_simulation.readonly import create_simdetails_and_paramcombinations
 from simulations import create_measure_simulation
 from simulations.create_measure_simulation.setupsim import perform_single_simulation_run
 from simulations import analysis_sql_data
+from simulations.create_measure_simulation.setupsim import set_simdetails_and_paramcombinations
+
+logger.setLevel(logging.CRITICAL)
 
 
 class TestSimulations(unittest.TestCase):
@@ -17,7 +23,7 @@ class TestSimulations(unittest.TestCase):
         sim_dir = os.path.dirname(create_measure_simulation.__file__)
         os.environ["SIMULATION_DIR"] = sim_dir
         cls.sim_name = "Test_NoNoise"
-        cls.results_folder = os.path.join(os.path.dirname(__file__), "test_simulation_tmp")
+        cls.results_folder = os.path.join(os.path.abspath(os.path.dirname(__file__)), "test_simulation_tmp")
         cls.alpha = 0.1
         cls.create_probA = 1
         cls.create_probB = 0
@@ -25,14 +31,32 @@ class TestSimulations(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(cls.results_folder):
-            shutil.rmtree(cls.results_folder)
+        cls._reset_folder(cls.results_folder, make_new=False)
 
-    def test_simulations_1(self):
+        # Reset files
+        set_simdetails_and_paramcombinations.main(ask_for_input=False)
+
+    @staticmethod
+    def _reset_folder(folder, make_new=True):
+        if os.path.exists(folder):
+            for f in os.listdir(folder):
+                f_path = os.path.join(folder, f)
+                if os.path.isfile(f_path):
+                    if not f.startswith("."):
+                        os.remove(f_path)
+            try:
+                os.rmdir(folder)
+            except OSError:
+                pass
+        if not os.path.exists(folder):
+            if make_new:
+                os.mkdir(folder)
+
+    def test1_grab_config_files(self):
         # Test grabbing files from easysquid
         _get_configs_from_easysquid.main()
 
-    def test_simulations_2(self):
+    def test2_create_details_and_params(self):
         paramcombinations = {
             self.sim_name: {
                 "create_probA": self.create_probA,
@@ -63,13 +87,11 @@ class TestSimulations(unittest.TestCase):
                                                                      number_of_runs=1, outputdirname="test_simulations",
                                                                      make_paramcombinations=False, ask_for_input=False)
 
-        if os.path.exists(self.results_folder):
-            shutil.rmtree(self.results_folder)
-        os.mkdir(self.results_folder)
+        self._reset_folder(self.results_folder)
         paramfile = os.path.join(os.environ["SIMULATION_DIR"], "setupsim/paramcombinations.json")
         shutil.copy(paramfile, self.results_folder)
 
-    def test_simulations_3(self):
+    def test3_run_single_case(self):
         timestamp = "TEST_SIMULATION"
         runindex = 0
         paramfile = os.path.join(os.environ["SIMULATION_DIR"], "setupsim/paramcombinations.json")
@@ -77,7 +99,7 @@ class TestSimulations(unittest.TestCase):
         params_for_simulation = [timestamp, self.results_folder, runindex, paramfile, actualkey]
         perform_single_simulation_run.main(params_for_simulation)
 
-    def test_simulations_4(self):
+    def test4_analyse_single_case(self):
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
 
         add_data_file_path = glob.glob("{}/*additional_data.json".format(self.results_folder))[0]
@@ -103,10 +125,8 @@ class TestSimulations(unittest.TestCase):
 
         self.assertAlmostEqual(p_succ, 2 * self.alpha * (1 - self.alpha) + self.alpha ** 2, places=1)
 
-    def test_simulations_5(self):
-        if os.path.exists(self.results_folder):
-            shutil.rmtree(self.results_folder)
-        os.mkdir(self.results_folder)
+    def test5_run_multi_case(self):
+        self._reset_folder(self.results_folder)
         paramfile = os.path.join(os.path.dirname(__file__), "resources/paramcombinations.json")
         shutil.copy(paramfile, self.results_folder)
 
@@ -120,19 +140,17 @@ class TestSimulations(unittest.TestCase):
             params_for_simulation = [timestamp, self.results_folder, runindex, paramfile, actualkey]
             perform_single_simulation_run.main(params_for_simulation)
 
-    def test_simulations_6(self):
-        nr_of_add_data_files = len(
-            glob.glob("{}/test_simulation_tmp/*additional_data.json".format(os.path.dirname(__file__))))
+    def test6_analyse_multi_case(self):
+        nr_of_add_data_files = len(glob.glob(os.path.join(os.path.dirname(__file__),"test_simulation_tmp/*additional_data.json")))
         self.assertEqual(nr_of_add_data_files, 20)
 
-        nr_of_data_files = len(glob.glob("{}/test_simulation_tmp/*.db".format(os.path.dirname(__file__))))
+        nr_of_data_files = len(glob.glob(os.path.join(os.path.dirname(__file__),"test_simulation_tmp/*.db")))
         self.assertEqual(nr_of_data_files, 20)
 
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
 
-        nr_of_data_files = len(
-            glob.glob("{}/test_simulation_tmp/*analysis_output.txt".format(os.path.dirname(__file__))))
-        self.assertEqual(nr_of_data_files, 20)
+        nr_of_analysis_files = len(glob.glob(os.path.join(os.path.dirname(__file__),"test_simulation_tmp/*analysis_output.txt")))
+        self.assertEqual(nr_of_analysis_files, 20)
 
 
 if __name__ == '__main__':

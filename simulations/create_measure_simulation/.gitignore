@@ -8,5 +8,10 @@
 # all cached python files
 *.pyc 
 
+# Config files
+*setupsim/paramset.csv
+*setupsim/paramcombinations.json
+*setupsim/simdetails.ini
+
 # Files from Cartesius
 slurm*.out
