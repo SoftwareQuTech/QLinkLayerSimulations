@@ -4,7 +4,6 @@ import shutil
 import json
 import glob
 import logging
-import subprocess
 
 from easysquid.toolbox import logger
 from simulations import _get_configs_from_easysquid
@@ -141,15 +140,17 @@ class TestSimulations(unittest.TestCase):
             perform_single_simulation_run.main(params_for_simulation)
 
     def test6_analyse_multi_case(self):
-        nr_of_add_data_files = len(glob.glob(os.path.join(os.path.dirname(__file__),"test_simulation_tmp/*additional_data.json")))
+        nr_of_add_data_files = len(
+            glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*additional_data.json")))
         self.assertEqual(nr_of_add_data_files, 20)
 
-        nr_of_data_files = len(glob.glob(os.path.join(os.path.dirname(__file__),"test_simulation_tmp/*.db")))
+        nr_of_data_files = len(glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*.db")))
         self.assertEqual(nr_of_data_files, 20)
 
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
 
-        nr_of_analysis_files = len(glob.glob(os.path.join(os.path.dirname(__file__),"test_simulation_tmp/*analysis_output.txt")))
+        nr_of_analysis_files = len(
+            glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*analysis_output.txt")))
         self.assertEqual(nr_of_analysis_files, 20)
 
 

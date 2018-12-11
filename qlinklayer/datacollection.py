@@ -1,6 +1,5 @@
 import abc
 import numpy as np
-import bitstring
 from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler

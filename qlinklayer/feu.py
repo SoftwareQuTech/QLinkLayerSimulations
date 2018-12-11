@@ -99,7 +99,7 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
 
         return max([f[1] for f in self.achievable_fidelities])
 
-    def select_bright_state(self, min_fidelity):
+    def select_bright_state(self, min_fidelity, return_fidelity=False):
         """
         Given a minimum desired fidelity returns the largest bright state population that achieves this fidelity
         :param min_fidelity: float
@@ -109,9 +109,22 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         """
         for bright_state, fidelity in reversed(self.achievable_fidelities):
             if fidelity >= min_fidelity:
-                return bright_state
+                if return_fidelity:
+                    return bright_state, fidelity
+                else:
+                    return bright_state
 
         return None
+
+    def estimate_fidelity_of_request(self, request):
+        """
+        Estimates the fidelity of a given request
+        The request object must have an attribute 'min_fidelity'.
+        :param request:
+        :return: float
+        """
+        _, fidelity = self.select_bright_state(request.min_fidelity, return_fidelity=True)
+        return fidelity
 
     def _estimate_fidelity(self, alphaA=None, alphaB=None):
         """
@@ -141,8 +154,13 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         what is the probability that a detector clicks at the midpoint. (assuming no dark counts)
         :return: float
         """
-        p_zero_phonon = node.qmem.photon_emission_noise.p_zero_phonon
-        collection_eff = node.qmem.photon_emission_noise.collection_eff
+        photon_emission_noise = node.qmem.photon_emission_noise
+        if photon_emission_noise is None:
+            p_zero_phonon = 1
+            collection_eff = 1
+        else:
+            p_zero_phonon = node.qmem.photon_emission_noise.p_zero_phonon
+            collection_eff = node.qmem.photon_emission_noise.collection_eff
         mhp_conn = self.mhp_service.get_mhp_conn(node)
         if node == mhp_conn.nodeA:
             p_no_loss = self.mhp_service.get_fibre_transmissivities(node)[0]
@@ -156,7 +174,8 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
 
     def _compute_conditional_detection_probabilities(self, alphaA=None, alphaB=None):
         """
-        Computes the probabilites p_uu, p_ud, pdu, pdd as given in eq (10) in https://arxiv.org/src/1712.07567v2/anc/SupplementaryInformation.pdf
+        Computes the probabilites p_uu, p_ud, pdu, pdd as given in eq (10) in
+        https://arxiv.org/src/1712.07567v2/anc/SupplementaryInformation.pdf
         Note that this assumed low detection efficiencies
         If either alphaA or alphaB is None, then alpha is assumed to be the same for the two nodes.
 
@@ -174,17 +193,18 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         mhp_conn = self.mhp_service.get_mhp_conn(self.node)
         p_dc = mhp_conn.midPoint.pdark
         # Dark count probabilities for both detectors
-        p_no_dc = (1 - p_dc)**2
+        p_no_dc = (1 - p_dc) ** 2
         p_at_least_one_dc = 1 - p_no_dc
 
-        prob_click_given_two_photons = (p_no_dc * (p_det_A*(1-p_det_B) + p_det_B*(1-p_det_A) + p_det_A*p_det_B) +
-                                        p_at_least_one_dc * (1-p_det_A) * (1-p_det_B))
+        prob_click_given_two_photons = (
+            p_no_dc * (p_det_A * (1 - p_det_B) + p_det_B * (1 - p_det_A) + p_det_A * p_det_B)
+            + p_at_least_one_dc * (1 - p_det_A) * (1 - p_det_B))
         p_uu = alphaA * alphaB * prob_click_given_two_photons
 
-        prob_click_given_photon_A = p_no_dc * p_det_A + p_at_least_one_dc * (1-p_det_A)
-        prob_click_given_photon_B = p_no_dc * p_det_B + p_at_least_one_dc * (1-p_det_B)
-        p_ud = alphaA * (1-alphaB) * prob_click_given_photon_A
-        p_du = alphaB * (1-alphaA) * prob_click_given_photon_B
+        prob_click_given_photon_A = p_no_dc * p_det_A + p_at_least_one_dc * (1 - p_det_A)
+        prob_click_given_photon_B = p_no_dc * p_det_B + p_at_least_one_dc * (1 - p_det_B)
+        p_ud = alphaA * (1 - alphaB) * prob_click_given_photon_A
+        p_du = alphaB * (1 - alphaA) * prob_click_given_photon_B
 
         prob_click_given_no_photons = p_at_least_one_dc
         p_dd = (1 - alphaA) * (1 - alphaB) * prob_click_given_no_photons

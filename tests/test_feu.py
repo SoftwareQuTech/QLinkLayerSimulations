@@ -1,10 +1,7 @@
 import unittest
-from easysquid.toolbox import EasySquidException
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from qlinklayer.toolbox import LinkLayerException
-from easysquid.qnode import QuantumNode
-from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from easysquid.easynetwork import setup_physical_network
 from util.config_paths import ConfigPathStorage
 from netsquid.qubits import dm_fidelity
@@ -65,7 +62,7 @@ class TestSingleClickFidelityEstimationUnit(unittest.TestCase):
 
         # Test linearity in alpha
         for i in range(11):
-            alpha = i/20
+            alpha = i / 20
             p_succ = self.feuA._estimate_success_probability(alpha)
             self.assertAlmostEqual(p_succ, 2 * alpha * (4e-4), places=4)
 
@@ -78,7 +75,7 @@ class TestSingleClickFidelityEstimationUnit(unittest.TestCase):
 
         # Check linearity in alpha (for high enough alpha due to dark counts)
         for i in range(40, 100):
-            alpha = i/200
+            alpha = i / 200
             F = self.feuA._estimate_fidelity(alpha)
             self.assertAlmostEqual(F, 1 - alpha, places=1)
 

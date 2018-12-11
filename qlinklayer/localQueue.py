@@ -425,7 +425,7 @@ class _EGPLocalQueueItem(_LocalQueueItem):
             The max MHP cycle
         """
         logger.debug("Updating to MHP cycle {}".format(current_cycle))
-        if self.timeout_cycle is not None and self.timeout_cycle > 0:
+        if self.timeout_cycle is not None:
             if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
                 logger.debug("Item timed out, calling callback")
                 if not self.acked:
@@ -433,7 +433,7 @@ class _EGPLocalQueueItem(_LocalQueueItem):
                 self.timeout_callback(self)
         if self.acked:
             if not self.ready:
-                if self.schedule_cycle > 0:
+                if self.schedule_cycle is not None:
                     if check_schedule_cycle_bounds(current_cycle, max_cycle, self.schedule_cycle):
                         self.ready = True
                         logger.debug("Item is ready to be scheduled")
@@ -456,7 +456,8 @@ class _WFQLocalQueueItem(_EGPLocalQueueItem):
         :return: None
         """
         if not self.request.atomic:
-            self.virtual_finish += self.cycles_per_pair
+            if self.virtual_finish is not None:
+                self.virtual_finish += self.cycles_per_pair
 
 
 class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):

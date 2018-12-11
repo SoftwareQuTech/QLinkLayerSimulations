@@ -1003,7 +1003,7 @@ class NodeCentricEGP(EGP):
         """
         # Get the fidelity estimate from FEU
         logger.debug("Estimating fidelity")
-        fidelity_estimate = self.feu.estimated_fidelity
+        fidelity_estimate = self.feu.estimate_fidelity_of_request(creq)
 
         # Create entanglement identifier
         logical_id = self.scheduler.curr_storage_id()

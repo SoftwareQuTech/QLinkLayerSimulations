@@ -13,12 +13,14 @@ from qlinklayer.toolbox import LinkLayerException
 SchedulerRequest = namedtuple("Scheduler_request",
                               ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
                                "priority", "store", "atomic", "measure_directly", "master_request"])
-SchedulerRequest.__new__.__defaults__ = (0,) * 7 + (True, False, False, True)
+SchedulerRequest.__new__.__defaults__ = (0,) * 5 + (1,) + (0,) + (True, False, False, True)
 
 WFQSchedulerRequest = namedtuple("WFQ_Scheduler_request",
-                                 ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
-                                  "priority", "init_virtual_finish", "est_cycles_per_pair", "store", "atomic", "measure_directly", "master_request"])
-WFQSchedulerRequest.__new__.__defaults__ = (0,) * 9 + (True, False, False, True)
+                                 ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id",
+                                  "num_pairs",
+                                  "priority", "init_virtual_finish", "est_cycles_per_pair", "store", "atomic",
+                                  "measure_directly", "master_request"])
+WFQSchedulerRequest.__new__.__defaults__ = (0,) * 5 + (1,) + (0,) * 3 + (True, False, False, True)
 
 SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"])
 SchedulerGen.__new__.__defaults__ = (False,) + (None,) * 4
@@ -48,11 +50,10 @@ class Scheduler(metaclass=abc.ABCMeta):
 
 
 class StrictPriorityRequestScheduler(Scheduler):
-
     # The scheduler request named tuple to use
     _scheduler_request_named_tuple = SchedulerRequest
 
-    def __init__(self, distQueue, qmm, feu):
+    def __init__(self, distQueue, qmm, feu=None):
         """
         Stub for a scheduler to decide how we assign and consume elements of the queue.
         This scheduler puts requests in queues depending on only their specified priority
@@ -199,11 +200,13 @@ class StrictPriorityRequestScheduler(Scheduler):
         :return: :obj:`~qlinklayer.scheduler.SchedulerRequest`
         """
         scheduler_request = cls._scheduler_request_named_tuple(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle,
-                                             min_fidelity=egp_request.min_fidelity, purpose_id=egp_request.purpose_id,
-                                             create_id=create_id, num_pairs=egp_request.num_pairs,
-                                             priority=egp_request.priority, store=egp_request.store,
-                                             atomic=egp_request.atomic, measure_directly=egp_request.measure_directly,
-                                             master_request=master_request)
+                                                               min_fidelity=egp_request.min_fidelity,
+                                                               purpose_id=egp_request.purpose_id,
+                                                               create_id=create_id, num_pairs=egp_request.num_pairs,
+                                                               priority=egp_request.priority, store=egp_request.store,
+                                                               atomic=egp_request.atomic,
+                                                               measure_directly=egp_request.measure_directly,
+                                                               master_request=master_request)
 
         return scheduler_request
 
@@ -793,11 +796,10 @@ class StrictPriorityRequestScheduler(Scheduler):
 
 
 class WFQRequestScheduler(StrictPriorityRequestScheduler):
-
     # The scheduler request named tuple to use
     _scheduler_request_named_tuple = WFQSchedulerRequest
 
-    def __init__(self, distQueue, qmm, feu, weights=None):
+    def __init__(self, distQueue, qmm, feu=None, weights=None):
         """
         Stub for a scheduler to decide how we assign and consume elements of the queue.
         This weighted fair queue (WFQ) scheduler implements a weighted fair queue where queue i
@@ -851,6 +853,17 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         else:
             return 1
 
+    def _get_largest_mhp_cycle(self):
+        """
+        Return the MHP which is considered largest, which comparison of MHP cycles is defined
+        in self._compare_mhp_cycle
+        :return: int
+        """
+        # Compute opposite of current
+        opposite = self.mhp_cycle_number - int(self.max_mhp_cycle_number / 2)
+
+        return (opposite - 1) % self.max_mhp_cycle_number
+
     def _get_relative_weights(self, weights):
         if weights is None:
             return [1] * len(self.distQueue.queueList)
@@ -863,7 +876,8 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
                 if weight < 0:
                     raise ValueError("All weights need to be non-zero")
             except TypeError:
-                raise ValueError("Weights need to be comparable, got TypeError when comparing weight={} to 0".format(weight))
+                raise ValueError(
+                    "Weights need to be comparable, got TypeError when comparing weight={} to 0".format(weight))
 
         # Compute relative weights
         total_sum = sum(weights)
@@ -883,16 +897,18 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         # Virt start is the virtual start of the service (see https://en.wikipedia.org/wiki/Fair_queuing#Pseudo_code)
         # Look through the head of each queue and pick the one with the smallest virtual_finish
         # unless a queue has infinite (0) weight.
-        min_virtual_finish = float('inf')
+        min_virtual_finish = self._get_largest_mhp_cycle()
         queue_item_to_use = None
-        for local_queue in self.distQueue.queueList:
+
+        # Go in reverse such that if two items have the same virt finish, take the one with the lowest qid
+        for local_queue in reversed(self.distQueue.queueList):
             queue_item = local_queue.peek()
             if queue_item is not None and queue_item.ready:
-                if queue_item.request.virtual_finish is None:
+                if queue_item.request.init_virtual_finish is None:
                     # This queue has infinite weight so just take this queue_item directly
                     queue_item_to_use = queue_item
                     break
-                if self._compare_mhp_cycle(queue_item.virtual_finish, min_virtual_finish) == -1:
+                if self._compare_mhp_cycle(queue_item.virtual_finish, min_virtual_finish) < 1:
                     min_virtual_finish = queue_item.virtual_finish
                     queue_item_to_use = queue_item
         if queue_item_to_use is None:
@@ -912,7 +928,8 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         # If queue has weight zero (seen as infinite) we put virtual finish to None
         if self.relative_weights[qid] == 0:
             init_virt_finish = None
-            wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(), init_virtual_finish=init_virt_finish)
+            wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(),
+                                                        init_virtual_finish=init_virt_finish)
         else:
             virt_start = max(self.mhp_cycle_number, self.last_virt_finish[qid])
             est_nr_cycles_per_pair = self._estimate_nr_of_cycles_per_pair(scheduler_request)
@@ -924,11 +941,14 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
                 self.last_virt_finish[qid] = virt_start + virt_duration / self.relative_weights[qid]
             else:
                 virt_duration = est_nr_cycles_per_pair
-                self.last_virt_finish[qid] = virt_start + virt_duration * scheduler_request.num_pairs /self.relative_weights[qid]
+                self.last_virt_finish[qid] = (
+                    virt_start + virt_duration * scheduler_request.num_pairs / self.relative_weights[qid])
 
             # Compute initial virt finish (if non-atomic this will be updated per success)
             init_virt_finish = virt_start + virt_duration / self.relative_weights[qid]
-            wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(), init_virtual_finish=init_virt_finish, est_cycles_per_pair=est_nr_cycles_per_pair)
+            wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(),
+                                                        init_virtual_finish=init_virt_finish,
+                                                        est_cycles_per_pair=est_nr_cycles_per_pair)
 
         return wfq_scheduler_request
 
