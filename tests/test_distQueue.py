@@ -288,6 +288,146 @@ class TestDistributedQueue(unittest.TestCase):
         # Check that we incremented the comms_seq
         self.assertEqual(aliceDQ.comms_seq, num_adds)
 
+    def test_lost_add_master(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=0.0001)
+
+        dq = DistributedQueue(node, conn, numQueues=3)
+        dq2 = DistributedQueue(node2, conn, numQueues=3)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        self.lost_messages = defaultdict(int)
+
+        def faulty_send_add(cmd, data):
+            if cmd == dq.CMD_ADD:
+                nodeID, cseq, qid, qseq, request = data
+                if self.lost_messages[(cseq, qid, qseq)] >= 1:
+                    dq.conn.put_from(node.nodeID, (cmd, data))
+                else:
+                    self.lost_messages[(cseq, qid, qseq)] += 1
+            else:
+                dq.conn.put_from(node.nodeID, (cmd, data))
+
+        def faulty_send_ack(cmd, data):
+            if cmd == dq2.CMD_ADD_ACK:
+                nodeID, ackd_id, qseq = data
+                if self.lost_messages[(ackd_id, qseq)] >= 1:
+                    dq2.conn.put_from(node2.nodeID, (cmd, data))
+                else:
+                    self.lost_messages[(ackd_id, qseq)] += 1
+            else:
+                dq2.conn.put_from(node2.nodeID, (cmd, data))
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        dq.send_msg = faulty_send_add
+        dq2.send_msg = faulty_send_ack
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        reqs = []
+        num_reqs = 10
+        for i in range(num_reqs):
+            req = [node.nodeID, i]
+            reqs.append(req)
+            dq.add(req)
+            sim_run(0.1 * (i + 1))
+
+        sim_run(200)
+
+        # Check that all add and add_ack messages were lost once
+        for v in self.lost_messages.values():
+            self.assertEqual(v, 1)
+
+        # Check that the item successfully got added
+        self.assertEqual(len(dq.queueList[0].queue), 10)
+        self.assertEqual(len(dq2.queueList[0].queue), 10)
+
+        for i, expected_req in zip(range(num_reqs), reqs):
+            item1 = dq.queueList[0].queue[i]
+            item2 = dq2.queueList[0].queue[i]
+            self.assertEqual(item1.request, expected_req)
+            self.assertEqual(item2.request, expected_req)
+
+    def test_lost_add_slave(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=0.0001)
+
+        dq = DistributedQueue(node, conn, numQueues=3)
+        dq2 = DistributedQueue(node2, conn, numQueues=3)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        self.lost_messages = defaultdict(int)
+
+        def faulty_send_add(cmd, data):
+            if cmd == dq2.CMD_ADD:
+                nodeID, cseq, qid, qseq, request = data
+                if self.lost_messages[(cseq, qid, qseq)] >= 1:
+                    dq2.conn.put_from(node2.nodeID, (cmd, data))
+                else:
+                    self.lost_messages[(cseq, qid, qseq)] += 1
+            else:
+                dq2.conn.put_from(node2.nodeID, (cmd, data))
+
+        def faulty_send_ack(cmd, data):
+            if cmd == dq.CMD_ADD_ACK:
+                nodeID, ackd_id, qseq = data
+                if self.lost_messages[(ackd_id, qseq)] >= 1:
+                    dq.conn.put_from(node.nodeID, (cmd, data))
+                else:
+                    self.lost_messages[(ackd_id, qseq)] += 1
+            else:
+                dq.conn.put_from(node.nodeID, (cmd, data))
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        dq2.send_msg = faulty_send_add
+        dq.send_msg = faulty_send_ack
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        reqs = []
+        num_reqs = 10
+        for i in range(num_reqs):
+            req = [node2.nodeID, i]
+            reqs.append(req)
+            dq2.add(req)
+            sim_run(0.1 * (i + 1))
+
+        sim_run(200)
+
+        # Check that all add and add_ack messages were lost once
+        for v in self.lost_messages.values():
+            self.assertEqual(v, 1)
+
+        # Check that the item successfully got added
+        self.assertEqual(len(dq.queueList[0].queue), 10)
+        self.assertEqual(len(dq2.queueList[0].queue), 10)
+
+        for i, expected_req in zip(range(num_reqs), reqs):
+            item1 = dq.queueList[0].queue[i]
+            item2 = dq2.queueList[0].queue[i]
+            self.assertEqual(item1.request, expected_req)
+            self.assertEqual(item2.request, expected_req)
+
     def test_remove(self):
         # Set up two nodes and run a simulation in which items
         # are randomly added at specific time intervals

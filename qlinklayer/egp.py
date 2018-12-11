@@ -1,7 +1,7 @@
 import abc
 from collections import namedtuple
 import random
-
+from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
 from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_MEASURE
@@ -226,6 +226,10 @@ class NodeCentricEGP(EGP):
         # Request tracking
         self.expected_seq = 0
 
+        # Store information about expire messages sent to remote peer
+        self.waitExpireAcks = {}
+        self.comm_delay = 0
+
         # Communication handlers
         self.commandHandlers = {
             self.CMD_REQ_E: self.cmd_REQ_E,
@@ -244,6 +248,7 @@ class NodeCentricEGP(EGP):
         self.scheduler.set_timeout_callback(self.request_timeout_handler)
 
         # Pydynaa events
+        self._EVT_EXPIRE_ACK_TIMEOUT = EventType("EXPIRE COMM TIMEOUT", "Communication timeout for expire message")
         self._EVT_CREATE = EventType("CREATE", "Call to create has completed")
         self._EVT_BIT_COMPLETED = EventType("BIT COMPLETE", "Successfully generated a bit from entangled pair")
         self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
@@ -347,6 +352,10 @@ class NodeCentricEGP(EGP):
         self.setConnection(egp_conn)
         other_egp.setConnection(egp_conn)
 
+        # Store information about communication delays
+        self.comm_delay = self.conn.channel_from_A.delay_mean + egp_conn.channel_from_B.delay_mean
+        other_egp.comm_delay = self.comm_delay
+
         # Store the peer's delay information
         # TODO: assuming that the ID of the communication qubit is 0
         this_move_delays = self.qmm.get_move_delays(0)
@@ -422,8 +431,50 @@ class NodeCentricEGP(EGP):
         :param new_seq: int
             The new sequence number of the local node to be informed to peer
         """
-        logger.error("Sending EXPIRE notification to peer")
+        # Check if we are waiting for an acknowledgement for this expiry
+        if aid not in self.waitExpireAcks:
+            logger.error("Sending EXPIRE notification to peer")
+            self._send_exp_msg(aid, createID, originID, new_seq)
+
+            # Schedule communication timeout to make sure we alert peer of expired request
+            evt = self._schedule_after(2 * self.comm_delay, self._EVT_EXPIRE_ACK_TIMEOUT)
+            timeout_handler = EventHandler(partial(self.expire_ack_timeout, aid=aid))
+            self._wait_once(timeout_handler, event=evt)
+
+            # Store information about expired request
+            self.waitExpireAcks[aid] = (createID, originID, new_seq)
+
+    def _send_exp_msg(self, aid, createID, originID, new_seq):
+        """
+        Sends an expire message to our peer
+        :param aid: tuple of (int, int)
+            The absolute queue id of the request to be expired
+        :param createID: int
+            The create id of the request being expired
+        :param originID: int
+            The nodeID of the creator of the request
+        :param new_seq: int
+            The local sequence number we have
+        """
         self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE, (aid, createID, originID, new_seq))])
+
+    def expire_ack_timeout(self, evt, aid):
+        """
+        Timeout handler that checks if we received an ACK for the expire message we sent
+        :param evt: obj `~netsquid.pydynaa.Event`
+            The event triggering this handler
+        :param aid: tuple of (int, int)
+            The absolute queue id of the request we tried to tell remote peer about
+        """
+        # Check if we are still waiting for the ack
+        if aid in self.waitExpireAcks:
+            logger.warning("Did not receive expire ACK in time, retransmitting")
+
+            # Remove local information of the expire message
+            createID, originID, expire_seq = self.waitExpireAcks.pop(aid)
+
+            # Reattempt expiration and include up to date sequence info
+            self.send_expire_notification(aid, createID, originID, self.expected_seq)
 
     def cmd_EXPIRE(self, data):
         """
@@ -445,30 +496,44 @@ class NodeCentricEGP(EGP):
             logger.debug("Updated expected sequence to {}".format(new_seq))
             self.expected_seq = new_seq
 
-        # If we are still processing the expired request clear it
-        self.scheduler.clear_request(aid)
-
-        # Let our peer know we expired
-        self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE_ACK, self.expected_seq)])
+        # May receive expire multiple times if ack lost, clear only if we have the request locally
+        if self.scheduler.get_request(aid):
+            # If we are still processing the expired request clear it
+            self.scheduler.clear_request(aid)
 
         # Alert higher layer protocols
         self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
+
+        # Let our peer know we expired
+        self._send_exp_ack(aid)
+
+    def _send_exp_ack(self, aid):
+        """
+        Sends an expire acknowledgement to the remote peer
+        :param aid: tuple of (int, int)
+            The expired absolute queue id we are acknowledging
+        """
+        self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE_ACK, (aid, self.expected_seq))])
 
     def cmd_EXPIRE_ACK(self, data):
         """
         Process acknowledgement of expiration.  Update our local expected mhp sequence number if our peer was ahead
         of us
-        :param data: int
-            Expected mhp sequence number of our peer
+        :param data: tuple of (aid, int)
+            The absolute queue id and expected mhp sequence number of our peer
         :return:
         """
         logger.error("Got EXPIRE ACK command from peer")
 
         # Check if our peer was ahead and we need to update
-        other_expected_seq = data
+        aid, other_expected_seq = data
         if other_expected_seq > self.expected_seq:
             logger.debug("Updated expected sequence to {}".format(other_expected_seq))
             self.expected_seq = other_expected_seq
+
+        # Remove so that we don't retransmit the expire message
+        if aid in self.waitExpireAcks:
+            self.waitExpireAcks.pop(aid)
 
     def cmd_REQ_E(self, data):
         """
@@ -629,6 +694,10 @@ class NodeCentricEGP(EGP):
         if there are any requests and to receive a request to process
         """
         try:
+            # Request memory update when out of resources
+            if not self.scheduler.other_has_resources():
+                self.request_other_free_memory()
+
             # Get scheduler's next gen task
             gen = self.scheduler.next()
             self.scheduler.inc_cycle()
@@ -659,10 +728,12 @@ class NodeCentricEGP(EGP):
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
 
-            # If no absolute queue id is included then info was passed or an error occurred
-            if aid is None:
-                logger.debug("Handling reply that does not contain an absolute queue id")
-                self._handle_reply_without_aid(proto_err)
+            # Check if an error occurred while processing a request
+            if proto_err:
+                logger.error("Protocol error occured in MHP: {}".format(proto_err))
+                self.issue_err(err=proto_err)
+                self._handle_mhp_err(result)
+                return
 
             # Check if this aid may have been expired or timed out while awaiting reply
             elif not self.scheduler.has_request(aid=aid):
@@ -684,10 +755,6 @@ class NodeCentricEGP(EGP):
 
             # Otherwise this response is associated with a generation attempt
             else:
-                # Check if an error occurred while processing a request
-                if proto_err:
-                    logger.error("Protocol error occured in MHP: {}".format(proto_err))
-                    self.issue_err(err=proto_err)
 
                 # No entanglement generated
                 if midpoint_outcome == 0:
@@ -735,19 +802,44 @@ class NodeCentricEGP(EGP):
             self.issue_err(err=self.ERR_OTHER)
             raise LinkLayerException("Malformed MHP reply received: {}".format(result))
 
-    def _handle_reply_without_aid(self, proto_err):
+    def _handle_mhp_err(self, result):
         """
-        If a request doesn't have an absolute queue ID it may be that an error occurred in the MHP or that we received
-        a pass through of information from our peer node in which case our only action was to update our memory size.
-        We should check if any errors occurred in the MHP
-        :param proto_err: int
-            Error number corresponding to the error in the MHP (if nonzero)
-        :return:
+        Handles errors from the MHP
+        :param result: tuple
+            Result data returned by MHP
         """
-        # Check if an error occurred while processing a request
-        if proto_err:
-            logger.error("Protocol error occured in MHP: {}".format(proto_err))
-            self.issue_err(err=proto_err)
+        # Unpack the results
+        midpoint_outcome, mhp_seq, aid, proto_err = result
+
+        if proto_err == self.mhp.conn.ERR_QUEUE_MISMATCH or proto_err == self.mhp.conn.ERR_NO_CLASSICAL_OTHER:
+            # Get our absolute queue id based on error
+            if proto_err == self.mhp.conn.ERR_QUEUE_MISMATCH:
+                aidA, aidB = aid
+                local_aid = aidA if self.node.nodeID == self.mhp.conn.nodeA.nodeID else aidB
+            else:
+                local_aid = aid
+
+            # Check if we may have lost a message
+            if mhp_seq >= self.expected_seq:
+                # Update our expected seq
+                self.expected_seq = mhp_seq
+
+                # Issue an expire for the request
+                request = self.scheduler.get_request(local_aid)
+                if self.dqp.master ^ request.master_request:
+                    originID = self.get_otherID()
+                else:
+                    originID = self.node.nodeID
+
+                createID = request.create_id
+                self.send_expire_notification(aid=local_aid, createID=createID, originID=originID,
+                                              new_seq=self.expected_seq)
+
+                # Clear the request
+                self.scheduler.clear_request(aid=local_aid)
+
+                # Alert higher layer protocols
+                self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
 
     def _handle_generation_reply(self, r, mhp_seq, aid):
         """

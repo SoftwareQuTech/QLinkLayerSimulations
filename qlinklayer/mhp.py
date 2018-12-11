@@ -377,14 +377,23 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         # Check if we need to analyze the station's state to discover the error
         if err == self.ERR_GENERAL:
             proto_err = self._discover_error()
-
-        # Otherwise pass whatever was discovered
         else:
             proto_err = err
 
+        # If a queue mismatch occurs share both queue ids
+        if proto_err == self.ERR_QUEUE_MISMATCH:
+            aidA, aidB = self.get_current_aids()
+            passA = (self.mhp_seq - 1, aidA, aidB)
+            passB = (self.mhp_seq - 1, aidA, aidB)
+
+        # Otherwise pass whatever was discovered
+        else:
+            passA = (self.mhp_seq - 1, self.classical_data[self.idA])
+            passB = (self.mhp_seq - 1, self.classical_data[self.idB])
+
         # Construct the reply
-        dataA = MHPReply(response_data=proto_err, pass_data=self.classical_data[self.idA]).channel_data()
-        dataB = MHPReply(response_data=proto_err, pass_data=self.classical_data[self.idB]).channel_data()
+        dataA = MHPReply(response_data=proto_err, pass_data=passA).channel_data()
+        dataB = MHPReply(response_data=proto_err, pass_data=passB).channel_data()
 
         # Return the data that should go on the channel
         logger.debug("Sending error messages to A ({}) and B ({})".format(dataA, dataB))
@@ -461,9 +470,9 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
             # Check the absolute queue id's from both ends of the connection
             if not self._has_same_aid():
                 logger.debug("Absolute queue IDs don't match!")
+                self._send_notification_to_both(self.ERR_QUEUE_MISMATCH)
                 self._drop_qubit(qubit)
                 self._reset_incoming()
-                self._send_notification_to_both(self.ERR_QUEUE_MISMATCH)
                 return
 
     def _has_both_qubits(self):
@@ -537,9 +546,13 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
             for _, qubit in self.qubits.items():
                 if qubit:
                     self._drop_qubit(qubit)
+
             dataA, dataB = self._get_error_data(self.ERR_NO_CLASSICAL_OTHER)
-            self._send_to_node(self.nodeA, dataA)
-            self._send_to_node(self.nodeB, dataB)
+            if self.node_requests[self.nodeA.nodeID] is not None:
+                self._send_to_node(self.nodeA, dataA)
+            elif self.node_requests[self.nodeB.nodeID] is not None:
+                self._send_to_node(self.nodeB, dataB)
+
             logger.warning("Midpoint only received entanglement generation data from one node")
 
         else:
@@ -794,9 +807,22 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         result = self._construct_error_result(err_code=respM, err_data=passM)
         self.callback(result=result)
 
-    def _extract_aid_from_err_data(self, err_data):
-        if isinstance(err_data, tuple):
-            return err_data
+    def _extract_info_from_err_data(self, err_code, err_data):
+        """
+        Extracts error code and aid information from the error reply from the midpoint
+        :param err_code: int
+            The error that occurred at the midpoint
+        :param err_data: tuple
+            Information provided by the midpoint for diagnosing the error
+        :return: tuple
+            Error code, information
+        """
+        if err_code == self.conn.ERR_QUEUE_MISMATCH:
+            return err_data[0], err_data[1:]
+        elif err_code == self.conn.ERR_NO_CLASSICAL_OTHER:
+            return err_data[0], err_data[1]
+        elif isinstance(err_data, tuple):
+            return -1, err_data
         return None
 
     def _construct_error_result(self, err_code, err_data, **kwargs):
@@ -808,8 +834,8 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return: tuple
             Result information to be interpretted by higher layers
         """
-        aid = self._extract_aid_from_err_data(err_data)
-        result = (self.NO_GENERATION, -1, aid, err_code)
+        mhp_seq, aid = self._extract_info_from_err_data(err_code, err_data)
+        result = (self.NO_GENERATION, mhp_seq, aid, err_code)
         return result
 
     def _handle_production_reply(self, respM, passM):
