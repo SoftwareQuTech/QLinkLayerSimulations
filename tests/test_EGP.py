@@ -1139,6 +1139,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
         self.assertEqual(bob_error_counter.num_tested_items, count_errors(self.bob_results))
 
+        # Verify that egp states synchronized
+        self.assertEqual(egpA.mhp.conn.mhp_seq, egpA.expected_seq)
+        self.assertEqual(egpA.expected_seq, egpB.expected_seq)
+
     def test_lost_last_success(self):
         alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
         egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
@@ -1212,6 +1216,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(self.bob_results[5], (egpB.ERR_EXPIRE, (create_idB2, bob.nodeID)))
 
         # Verify that egp states synchronized
+        self.assertEqual(egpA.mhp.conn.mhp_seq, egpA.expected_seq)
         self.assertEqual(egpA.expected_seq, egpB.expected_seq)
 
     def test_both_nodes_expire(self):
@@ -1268,6 +1273,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(expired_create_id, create_id)
         self.assertEqual(expired_origin_id, alice.nodeID)
         self.assertEqual(error_code, egpA.ERR_EXPIRE)
+
+        # Verify that egp states synchronized
+        self.assertEqual(egpA.mhp.conn.mhp_seq, egpA.expected_seq)
+        self.assertEqual(egpA.expected_seq, egpB.expected_seq)
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
@@ -1334,6 +1343,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Check that bob also received an error from the midpoint
         self.assertEqual(self.bob_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
 
+        # Verify that egp states synchronized
+        self.assertEqual(egpA.mhp.conn.mhp_seq, egpA.expected_seq)
+        self.assertEqual(egpA.expected_seq, egpB.expected_seq)
+
     def test_lost_expire_ack(self):
         alice, bob = self.create_nodes(alice_device_positions=10, bob_device_positions=10)
         egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True)
@@ -1396,6 +1409,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(self.bob_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
         self.assertEqual(self.bob_results[2], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
         self.assertEqual(self.bob_results[3], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID)))
+
+        # Verify that egp states synchronized
+        self.assertEqual(egpA.mhp.conn.mhp_seq, egpA.expected_seq)
+        self.assertEqual(egpA.expected_seq, egpB.expected_seq)
 
     def test_creation_failure(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)

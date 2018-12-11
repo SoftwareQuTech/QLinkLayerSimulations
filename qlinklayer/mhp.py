@@ -380,6 +380,7 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
         else:
             proto_err = err
 
+        # If a queue mismatch occurs share both queue ids
         if proto_err == self.ERR_QUEUE_MISMATCH:
             aidA, aidB = self.get_current_aids()
             passA = (self.mhp_seq - 1, aidA, aidB)
@@ -807,6 +808,15 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         self.callback(result=result)
 
     def _extract_info_from_err_data(self, err_code, err_data):
+        """
+        Extracts error code and aid information from the error reply from the midpoint
+        :param err_code: int
+            The error that occurred at the midpoint
+        :param err_data: tuple
+            Information provided by the midpoint for diagnosing the error
+        :return: tuple
+            Error code, information
+        """
         if err_code == self.conn.ERR_QUEUE_MISMATCH:
             return err_data[0], err_data[1:]
         elif err_code == self.conn.ERR_NO_CLASSICAL_OTHER:
