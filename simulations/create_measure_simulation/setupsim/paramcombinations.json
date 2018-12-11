@@ -1,23 +1,23 @@
 {
     "Test_NoNoise": {
-        "create_probA": 1,
-        "min_pairs": 1,
-        "create_probB": 0,
         "wall_time_per_timestep": 1,
-        "measure_directly": true,
-        "tmax_pair": 0,
+        "create_probB": 0,
         "max_mhp_cycle": 10000,
-        "num_requests": 500,
-        "max_sim_time": 0,
+        "measure_directly": true,
         "collect_queue_data": true,
-        "alphaA": 0.1,
-        "alphaB": 0.1,
         "t0": 0,
-        "max_wall_time": 345600,
-        "max_pairs": 1,
+        "min_pairs": 1,
+        "max_sim_time": 0,
+        "tmax_pair": 0,
+        "create_probA": 1,
+        "alphaB": 0.1,
+        "enable_pdb": false,
         "config": "setupsim/config/no_noise/no_noise.json",
+        "max_pairs": 1,
         "save_additional_data": true,
+        "alphaA": 0.1,
+        "num_requests": 500,
         "request_cycle": 0,
-        "enable_pdb": false
+        "max_wall_time": 345600
     }
 }

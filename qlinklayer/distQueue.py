@@ -105,6 +105,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.comm_delay = 0
 
         # Waiting for acks
+        self.transmitted_aid = {}
+        self.max_add_attempts = 3
         self.waitAddAcks = {}
         self.addAckBacklog = [deque() for i in range(numQueues)]
         self.acksWaiting = 0
@@ -205,18 +207,28 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if ack_id in self.waitAddAcks:
             logger.warning("Timed out waiting for communication response for comms_seq {}!".format(ack_id))
 
-            # Remove the item from the local queue
-            qid, queue_seq, request = self.waitAddAcks.pop(ack_id)
-            self.queueList[qid].remove_item(queue_seq)
+            qid, queue_seq, request, num_attempts = self.waitAddAcks.get(ack_id)
+            if num_attempts >= self.max_add_attempts:
+                logger.warning("Exceeded maximum number of add attempts, removing item")
+                # Remove the item from the local queue
+                self.waitAddAcks.pop(ack_id)
+                self.queueList[qid].remove_item(queue_seq)
 
-            # If our peer failed to add our item we should remove any Acks we should provide for
-            # subsequent items they attempted to add
-            if self.has_subsequent_acks(qid=qid, qseq=queue_seq):
-                self.reject_outstanding_acks(qid)
+                # If our peer failed to add our item we should remove any Acks we should provide for
+                # subsequent items they attempted to add
+                if self.has_subsequent_acks(qid=qid, qseq=queue_seq):
+                    self.reject_outstanding_acks(qid)
 
-            # Pass error information upwards
-            if self.add_callback:
-                self.add_callback(result=(self.DQ_TIMEOUT, qid, queue_seq, request))
+                # Pass error information upwards
+                if self.add_callback:
+                    self.add_callback(result=(self.DQ_TIMEOUT, qid, queue_seq, request))
+
+            else:
+                logger.debug("Retransmitting ADD for comms seq {} qid {} qseq {}".format(ack_id, qid, queue_seq))
+                self.waitAddAcks[ack_id] = [qid, queue_seq, request, num_attempts + 1]
+                add_msg = [self.myID, ack_id, qid, queue_seq, request]
+                self.send_msg(self.CMD_ADD, add_msg)
+                self.schedule_comm_timeout(ack_id=ack_id)
 
     def process_data(self):
         """
@@ -396,25 +408,29 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             If data passes validation
         """
         [nodeID, cseq, qid, qseq, request] = data
-        if cseq > self.expectedSeq:
-            # We seem to have missed some packets, for now just declare an error
-            # TODO is this what we want?
-            logger.debug("ADD ERROR Skipped sequence number from {} comms seq {} queue ID {} queue seq {}"
-                         .format(nodeID, cseq, qid, qseq))
-            self.send_error(self.CMD_ERR_MISSED_SEQ)
-            return False
+        if cseq >= self.expectedSeq:
+            # Increment next sequence number expected
+            self.expectedSeq = (cseq + 1) % self.maxSeq
+            return True
 
         elif cseq < self.expectedSeq:
+            if not self.contains_item(qid, qseq) or self.master and cseq not in self.transmitted_aid:
+                return True
 
-            # We have already seen this number
-            # TODO is this what we want?
-            logger.debug("ADD ERROR Duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
-                         .format(nodeID, cseq, qid, qseq))
-            self.send_error(self.CMD_ERR_DUPLICATE_SEQ)
-            return False
+            elif cseq in self.transmitted_aid:
+                tqseq, tqid = self.transmitted_aid[cseq]
+                logger.debug("Retransmitting ADD ACK for comms seq {} queue ID {} queue seq {}"
+                             .format(cseq, tqid, tqseq))
+                self.send_ADD_ACK(cseq, tqseq, tqid)
+                return False
 
-        # Increment next sequence number expected
-        self.expectedSeq = (self.expectedSeq + 1) % self.maxSeq
+            else:
+                # We have already seen this number
+                # TODO is this what we want?
+                logger.debug("ADD ERROR Duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
+                             .format(nodeID, cseq, qid, qseq))
+                self.send_error(self.CMD_ERR_DUPLICATE_SEQ)
+                return False
 
         return True
 
@@ -485,9 +501,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if not self.validate_ADD(data):
             return
 
-        # Received valid ADD: Process add request
-        logger.debug("ADD from {} comms seq {} queue ID {} queue seq {}".format(nodeID, cseq, qid, qseq))
-
         if self.master:
             # We are the node in control of the queue
             qseq = self._master_remote_add(nodeID, cseq, qid, request)
@@ -499,10 +512,22 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Send ack
             self.send_ADD_ACK(cseq, qseq, qid)
 
+        # Received valid ADD: Process add request
+        logger.debug("ADD from {} comms seq {} queue ID {} queue seq {}".format(nodeID, cseq, qid, qseq))
+
+        self.transmitted_aid[cseq] = (qseq, qid)
+        evt = self._schedule_after(10 * self.comm_delay, self._EVT_COMM_TIMEOUT)
+        from functools import partial
+        handler = EventHandler(partial(self.clear_transmitted_info, cseq=cseq))
+        self._wait_once(handler, event=evt)
         self._post_process_cmd_ADD(qid, qseq)
 
         if self.add_callback:
             self.add_callback((self.DQ_OK, qid, qseq, copy(request)))
+
+    def clear_transmitted_info(self, evt, cseq):
+        if cseq in self.transmitted_aid:
+            self.transmitted_aid.pop(cseq)
 
     def _post_process_cmd_ADD(self, qid, qseq):
         """
@@ -518,7 +543,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         Handle incoming ack of an add request.
         """
-
         # Parse data
         [nodeID, ackd_id, qseq] = data
 
@@ -540,7 +564,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Check which queue id and which queue seq was ackd hereby
         # Note that if we are not the master node then we hold no prior queue id
-        [qid, rec_qseq, request] = self.waitAddAcks[ackd_id]
+        [qid, rec_qseq, request, num_attempts] = self.waitAddAcks[ackd_id]
 
         # Check whether we are in control of the queue
         if self.master:
@@ -877,7 +901,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         logger.debug("{} Communicated absolute queue id ({}, {}) to slave".format(self.node.nodeID, qid, queue_seq))
 
         # Mark that we are waiting for an ack for this
-        self.waitAddAcks[self.comms_seq] = [qid, queue_seq, request]
+        self.waitAddAcks[self.comms_seq] = [qid, queue_seq, request, 1]
         self.schedule_comm_timeout(ack_id=self.comms_seq)
         logger.debug("{} Added waiting item in ADD ACKS list: {}".format(self.node.nodeID, [qid, queue_seq, request]))
 
@@ -900,7 +924,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         logger.debug("{} Sent ADD request to master".format(self.node.nodeID))
 
         # Mark that we are waiting for an ack for this
-        self.waitAddAcks[self.comms_seq] = [qid, 0, request]
+        self.waitAddAcks[self.comms_seq] = [qid, 0, request, 1]
         self.schedule_comm_timeout(ack_id=self.comms_seq)
         logger.debug("{} Added waiting item in ADD ACKS list: {}".format(self.node.nodeID, [qid, 0, request]))
 

@@ -18,7 +18,7 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.CRITICAL)
 
 
 def store_result(storage, result):
