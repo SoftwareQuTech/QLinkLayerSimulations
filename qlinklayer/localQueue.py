@@ -64,6 +64,14 @@ class LocalQueue(Entity):
         """
         return self.num_items() >= self.maxSeq
 
+    def is_empty(self):
+        """
+        Checks whether the local queue is empty
+        :return: bool
+            True/False
+        """
+        return self.num_items() == 0
+
     def num_items(self):
         return len(self.queue)
 
@@ -298,6 +306,19 @@ class EGPLocalQueue(LocalQueue):
         return _EGPLocalQueueItem(request, seq, self.qid, self.timeout_callback)
 
 
+class WFQLocalQueue(EGPLocalQueue):
+    def get_new_queue_item(self, request, seq):
+        """
+        Returns a fresh queue item instance
+        :param request: :obj:`qlinklayer.EGP.EGPRequest`
+            The request
+        :param seq: int
+            The queue item sequence number
+        :return: :obj:`qlinklayer.localQueue._EGPLocalQueueItem`
+        """
+        return _WFQLocalQueueItem(request, seq, self.qid, self.timeout_callback)
+
+
 class TimeoutLocalQueue(LocalQueue):
     def __init__(self, qid=None, wsize=None, maxSeq=None, throw_events=False):
         """
@@ -404,7 +425,7 @@ class _EGPLocalQueueItem(_LocalQueueItem):
             The max MHP cycle
         """
         logger.debug("Updating to MHP cycle {}".format(current_cycle))
-        if self.timeout_cycle is not None and self.timeout_cycle > 0:
+        if self.timeout_cycle is not None:
             if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
                 logger.debug("Item timed out, calling callback")
                 if not self.acked:
@@ -412,13 +433,31 @@ class _EGPLocalQueueItem(_LocalQueueItem):
                 self.timeout_callback(self)
         if self.acked:
             if not self.ready:
-                if self.schedule_cycle > 0:
+                if self.schedule_cycle is not None:
                     if check_schedule_cycle_bounds(current_cycle, max_cycle, self.schedule_cycle):
                         self.ready = True
                         logger.debug("Item is ready to be scheduled")
                 else:
                     self.ready = True
                     logger.debug("Item is ready to be scheduled")
+
+
+class _WFQLocalQueueItem(_EGPLocalQueueItem):
+    def __init__(self, request, seq, qid, timeout_callback):
+        super().__init__(request, seq, qid, timeout_callback)
+
+        # Store virt finish and est nr of MHP cycles per pair (used to update the virt finish)
+        self.virtual_finish = request.init_virtual_finish
+        self.cycles_per_pair = request.est_cycles_per_pair
+
+    def update_virtual_finish(self):
+        """
+        Adds est_cycles_per_pair to virtual_finish
+        :return: None
+        """
+        if not self.request.atomic:
+            if self.virtual_finish is not None:
+                self.virtual_finish += self.cycles_per_pair
 
 
 class _TimeoutLocalQueueItem(_LocalQueueItem, Entity):

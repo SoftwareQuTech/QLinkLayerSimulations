@@ -13,7 +13,14 @@ from qlinklayer.toolbox import LinkLayerException
 SchedulerRequest = namedtuple("Scheduler_request",
                               ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
                                "priority", "store", "atomic", "measure_directly", "master_request"])
-SchedulerRequest.__new__.__defaults__ = (0,) * 7 + (True, False, False, True)
+SchedulerRequest.__new__.__defaults__ = (0,) * 5 + (1,) + (0,) + (True, False, False, True)
+
+WFQSchedulerRequest = namedtuple("WFQ_Scheduler_request",
+                                 ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id",
+                                  "num_pairs",
+                                  "priority", "init_virtual_finish", "est_cycles_per_pair", "store", "atomic",
+                                  "measure_directly", "master_request"])
+WFQSchedulerRequest.__new__.__defaults__ = (0,) * 5 + (1,) + (0,) * 3 + (True, False, False, True)
 
 SchedulerGen = namedtuple("Scheduler_gen", ["flag", "aid", "comm_q", "storage_q", "param"])
 SchedulerGen.__new__.__defaults__ = (False,) + (None,) * 4
@@ -42,12 +49,23 @@ class Scheduler(metaclass=abc.ABCMeta):
         pass
 
 
-class RequestScheduler(Scheduler):
-    """
-    Stub for a scheduler to decide how we assign and consume elements of the queue.
-    """
+class StrictPriorityRequestScheduler(Scheduler):
+    # The scheduler request named tuple to use
+    _scheduler_request_named_tuple = SchedulerRequest
 
     def __init__(self, distQueue, qmm, feu=None):
+        """
+        Stub for a scheduler to decide how we assign and consume elements of the queue.
+        This scheduler puts requests in queues depending on only their specified priority
+        and always serves the highest priority queue first.
+
+        :param distQueue: :obj:`~qlinklayer.distQueue.DistributedQueue`
+            The distributed queue
+        :param qmm: :obj:`~qlinklayer.qmm.QuantumMemoryManagement`
+            The quantum memory management
+        :param feu: :obj:`~qlinklayer.feu.FidelityEstimationUnit`
+            (optional) The fidelity estimation unit
+        """
         # Distributed Queue to schedule from
         self.distQueue = distQueue
         self.feu = feu
@@ -169,8 +187,8 @@ class RequestScheduler(Scheduler):
 
         return cycle_number
 
-    @staticmethod
-    def _get_scheduler_request(egp_request, create_id, sched_cycle, timeout_cycle, master_request):
+    @classmethod
+    def _get_scheduler_request(cls, egp_request, create_id, sched_cycle, timeout_cycle, master_request):
         """
         Creates a Scheduler request from a EGP request plus additional arguments.
 
@@ -181,12 +199,14 @@ class RequestScheduler(Scheduler):
         :param master_request: bool
         :return: :obj:`~qlinklayer.scheduler.SchedulerRequest`
         """
-        scheduler_request = SchedulerRequest(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle,
-                                             min_fidelity=egp_request.min_fidelity, purpose_id=egp_request.purpose_id,
-                                             create_id=create_id, num_pairs=egp_request.num_pairs,
-                                             priority=egp_request.priority, store=egp_request.store,
-                                             atomic=egp_request.atomic, measure_directly=egp_request.measure_directly,
-                                             master_request=master_request)
+        scheduler_request = cls._scheduler_request_named_tuple(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle,
+                                                               min_fidelity=egp_request.min_fidelity,
+                                                               purpose_id=egp_request.purpose_id,
+                                                               create_id=create_id, num_pairs=egp_request.num_pairs,
+                                                               priority=egp_request.priority, store=egp_request.store,
+                                                               atomic=egp_request.atomic,
+                                                               measure_directly=egp_request.measure_directly,
+                                                               master_request=master_request)
 
         return scheduler_request
 
@@ -203,7 +223,7 @@ class RequestScheduler(Scheduler):
 
         # Store the request into the queue
         try:
-            qid = self.get_queue(egp_request)
+            qid = self.choose_queue(egp_request)
         except LinkLayerException:
             logger.warning("Scheduler could not get a valid queue ID for request.")
             return False
@@ -220,12 +240,20 @@ class RequestScheduler(Scheduler):
                                                         master_request=self.distQueue.master)
 
         try:
-            self.distQueue.add(scheduler_request, qid)
+            self._add_to_queue(scheduler_request, qid)
         except LinkLayerException:
             logger.warning("Could not add request to queue.")
             return False
 
         return True
+
+    def _add_to_queue(self, scheduler_request, qid):
+        """
+        Adds request to queue
+        :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :param qid: int
+        """
+        self.distQueue.add(scheduler_request, qid)
 
     def get_timeout_cycle(self, request):
         """
@@ -262,17 +290,30 @@ class RequestScheduler(Scheduler):
         timeout_mhp_cycle = self.mhp_cycle_number + (mhp_cycles % self.max_mhp_cycle_number)
         return timeout_mhp_cycle
 
-    def suspend_generation(self, t):
+    def _get_num_suspend_cycles(self, t):
         """
-        Instructs the scheduler to suspend generation for some specified time.
+        Returns number of cycles to suspend, given a suspend time
         :param t: float
-            The amount of simulation time to suspend entanglement generation for
+            Time to suspend (ns)
+        :return: int
+            Number of MHP cycles
         """
         # Compute the number of suspended cycles
         if not self.mhp_cycle_period:
             num_suspended_cycles = 1
         else:
             num_suspended_cycles = ceil(t / self.mhp_cycle_period)
+
+        return num_suspended_cycles
+
+    def suspend_generation(self, t):
+        """
+        Instructs the scheduler to suspend generation for some specified time.
+        :param t: float
+            The amount of simulation time to suspend entanglement generation for
+        """
+
+        num_suspended_cycles = self._get_num_suspend_cycles(t)
 
         # Update the number of suspended cycles if it exceeds the amount we are currently suspended for
         if num_suspended_cycles > self.num_suspended_cycles:
@@ -311,7 +352,7 @@ class RequestScheduler(Scheduler):
         """
         return range(0, len(self.distQueue.queueList))
 
-    def get_queue(self, request):
+    def choose_queue(self, request):
         """
         Determines which queue id to add the next request to.
         """
@@ -473,7 +514,7 @@ class RequestScheduler(Scheduler):
         Marks a generation performed by the EGP as completed and cleans up any remaining state.
         :param aid: tuple of  int, int
             Contains the aid used for the generation
-        :return:
+        :return: None
         """
         logger.debug("Marking aid {} as completed".format(aid))
         if self.is_generating_aid(aid):
@@ -485,14 +526,21 @@ class RequestScheduler(Scheduler):
 
             self.curr_gen = None
 
-            # Update number of remaining pairs on request, remove if completed
-            self.decrement_num_pairs(aid)
-
         else:
             request = self.get_request(aid)
             if not request.measure_directly:
                 logger.warning("Marking gen completed for inactive request")
-            self.decrement_num_pairs(aid)
+
+        self._post_process_success(aid)
+
+    def _post_process_success(self, aid):
+        """
+        Updates information of the a request after success
+        :param aid: tuple of  int, int
+            Contains the aid used for the generation
+        :return: None
+        """
+        self.decrement_num_pairs(aid)
 
     def free_gen_resources(self, aid):
         """
@@ -666,6 +714,14 @@ class RequestScheduler(Scheduler):
         if self.curr_aid and self.distQueue.local_peek(self.curr_aid).request.atomic:
             return self.curr_aid, self.distQueue.local_peek(self.curr_aid).request
 
+        return self.select_queue()
+
+    def select_queue(self):
+        """
+        Selects the next queue from which the next request should be popped
+        :return: tuple of (tuple, request)
+            The absolute queue ID and request (if any)
+        """
         for local_queue in self.distQueue.queueList:
             queue_item = local_queue.peek()
             if queue_item and queue_item.ready:
@@ -737,3 +793,218 @@ class RequestScheduler(Scheduler):
         """
         self._last_aid_added = None
         self._last_aid_removed = None
+
+
+class WFQRequestScheduler(StrictPriorityRequestScheduler):
+    # The scheduler request named tuple to use
+    _scheduler_request_named_tuple = WFQSchedulerRequest
+
+    def __init__(self, distQueue, qmm, feu=None, weights=None):
+        """
+        Stub for a scheduler to decide how we assign and consume elements of the queue.
+        This weighted fair queue (WFQ) scheduler implements a weighted fair queue where queue i
+        gets a share of the rate depending on its weight, see https://en.wikipedia.org/wiki/Weighted_fair_queueing.
+
+        :param distQueue: :obj:`~qlinklayer.distQueue.DistributedQueue`
+            The distributed queue
+        :param qmm: :obj:`~qlinklayer.qmm.QuantumMemoryManagement`
+            The quantum memory management
+        :param feu: :obj:`~qlinklayer.feu.FidelityEstimationUnit`
+            (optional) The fidelity estimation unit
+        :param weights: None, list of floats
+            * If None, a unweighted fair queue will be used, (i.e. equal weights)
+            * If list of floats, the length of the list needs to equal the number of queues in the distributed queue.
+              The floats need to be non-zero. If a weight is zero, this is seen as infinite weight and queues with zero
+              weight will always be scheduled before other queues. If multiple queues have weight zero, then
+              these will always be satisfied in the order of their queue IDs.
+        """
+        super().__init__(distQueue=distQueue, qmm=qmm, feu=feu)
+
+        self.relative_weights = self._get_relative_weights(weights)
+
+        self.last_virt_finish = [-1] * len(self.relative_weights)
+
+    def _compare_mhp_cycle(self, cycle1, cycle2):
+        """
+        Returns -1 if cycle1 is considered earlier than cycle two.
+        Returns  0 if cycle1 is considered equal than cycle two.
+        Returns +1 if cycle1 is considered later than cycle two.
+        When is a cycle considered earlier than another?
+        Call 'opposite' the opposite number of the current cycle number i.e.
+            'opposite' = 'current_cycle_number' - int(nr_mhp_cycles / 2)
+        The 'opposite' is considered the smallest cycle and the others are ordered consecutively
+        :param cycle1: int
+        :param cycle2: int
+        :return: int
+            -1, 0 or +1
+        """
+        if cycle1 == cycle2:
+            return 0
+
+        # Compute opposite of current
+        opposite = self.mhp_cycle_number - int(self.max_mhp_cycle_number / 2)
+
+        # Shift numbers such that opposite is effectively 0
+        cycle1_shifted = (cycle1 - opposite) % self.max_mhp_cycle_number
+        cycle2_shifted = (cycle2 - opposite) % self.max_mhp_cycle_number
+
+        if cycle1_shifted < cycle2_shifted:
+            return -1
+        else:
+            return 1
+
+    def _get_largest_mhp_cycle(self):
+        """
+        Return the MHP which is considered largest, which comparison of MHP cycles is defined
+        in self._compare_mhp_cycle
+        :return: int
+        """
+        # Compute opposite of current
+        opposite = self.mhp_cycle_number - int(self.max_mhp_cycle_number / 2)
+
+        return (opposite - 1) % self.max_mhp_cycle_number
+
+    def _get_relative_weights(self, weights):
+        if weights is None:
+            return [1] * len(self.distQueue.queueList)
+        if not isinstance(weights, list) or isinstance(weights, tuple):
+            raise TypeError("Weights need to be None or list")
+        if not len(weights) == len(self.distQueue.queueList):
+            raise ValueError("Number of weights must equal number of queues")
+        for weight in weights:
+            try:
+                if weight < 0:
+                    raise ValueError("All weights need to be non-zero")
+            except TypeError:
+                raise ValueError(
+                    "Weights need to be comparable, got TypeError when comparing weight={} to 0".format(weight))
+
+        # Compute relative weights
+        total_sum = sum(weights)
+        if total_sum == 0:
+            # All weights are zero
+            return weights
+        relative_weights = [weight / total_sum for weight in weights]
+
+        return relative_weights
+
+    def select_queue(self):
+        """
+        Selects the next queue from which the next request should be popped
+        :return: tuple of (tuple, request)
+            The absolute queue ID and request (if any)
+        """
+        # Virt start is the virtual start of the service (see https://en.wikipedia.org/wiki/Fair_queuing#Pseudo_code)
+        # Look through the head of each queue and pick the one with the smallest virtual_finish
+        # unless a queue has infinite (0) weight.
+        min_virtual_finish = self._get_largest_mhp_cycle()
+        queue_item_to_use = None
+
+        # Go in reverse such that if two items have the same virt finish, take the one with the lowest qid
+        for local_queue in reversed(self.distQueue.queueList):
+            queue_item = local_queue.peek()
+            if queue_item is not None and queue_item.ready:
+                if queue_item.request.init_virtual_finish is None:
+                    # This queue has infinite weight so just take this queue_item directly
+                    queue_item_to_use = queue_item
+                    break
+                if self._compare_mhp_cycle(queue_item.virtual_finish, min_virtual_finish) < 1:
+                    min_virtual_finish = queue_item.virtual_finish
+                    queue_item_to_use = queue_item
+        if queue_item_to_use is None:
+            return None, None
+        else:
+            aid = queue_item_to_use.qid, queue_item_to_use.seq
+            return aid, queue_item_to_use
+
+    def set_virtual_finish(self, scheduler_request, qid):
+        """
+        Updates the virtual finish time of request
+        :param wfq_scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :param qid: int
+        :return: :obj:`~qlinklayer.scheduler.WFQSchedulerRequest`
+        """
+        # Virt start is the virtual start of the service (see https://en.wikipedia.org/wiki/Fair_queuing#Pseudo_code)
+        # If queue has weight zero (seen as infinite) we put virtual finish to None
+        if self.relative_weights[qid] == 0:
+            init_virt_finish = None
+            wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(),
+                                                        init_virtual_finish=init_virt_finish)
+        else:
+            virt_start = max(self.mhp_cycle_number, self.last_virt_finish[qid])
+            est_nr_cycles_per_pair = self._estimate_nr_of_cycles_per_pair(scheduler_request)
+
+            # Check if this is an atomic request
+            # Compute initial virt finish (if non-atomic this will be updated per success)
+            if scheduler_request.atomic:
+                virt_duration = est_nr_cycles_per_pair * scheduler_request.num_pairs
+                self.last_virt_finish[qid] = virt_start + virt_duration / self.relative_weights[qid]
+            else:
+                virt_duration = est_nr_cycles_per_pair
+                self.last_virt_finish[qid] = (
+                    virt_start + virt_duration * scheduler_request.num_pairs / self.relative_weights[qid])
+
+            # Compute initial virt finish (if non-atomic this will be updated per success)
+            init_virt_finish = virt_start + virt_duration / self.relative_weights[qid]
+            wfq_scheduler_request = WFQSchedulerRequest(**scheduler_request._asdict(),
+                                                        init_virtual_finish=init_virt_finish,
+                                                        est_cycles_per_pair=est_nr_cycles_per_pair)
+
+        return wfq_scheduler_request
+
+    def _estimate_nr_of_cycles_per_pair(self, scheduler_request):
+        """
+        Returns an estimate for how many MHP cycles is needed to generate ONE pair in the given request
+        (assuming that this is the only request and it is ready)
+        :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :return: int
+            Nr of MHP cycles
+        """
+        # Get estimate of nr of attempts needed from FEU
+        est_nr_attempts = self.feu.estimate_nr_of_attempts(scheduler_request)
+
+        # Cycles per attempt
+        if scheduler_request.measure_directly:
+            cycles_per_attempt = 1
+        else:
+            cycles_per_attempt = self._get_num_suspend_cycles(self.mhp_full_cycle)
+
+        return cycles_per_attempt * est_nr_attempts
+
+    def _add_to_queue(self, scheduler_request, qid):
+        """
+        Adds request to queue
+        and updates the virtual finish cycle
+        :param scheduler_request: :obj:`~qlinklayer.scheduler.SchedulerRequest`
+        :param qid: int
+        :return: None
+        """
+        wfq_scheduler_request = self.set_virtual_finish(scheduler_request, qid)
+        self.distQueue.add(wfq_scheduler_request, qid)
+
+    def _post_process_success(self, aid):
+        """
+        Updates information of the a request after success
+        :param aid: tuple of  int, int
+            Contains the aid used for the generation
+        :return: None
+        """
+        self._update_virtual_finish(aid)
+        self.decrement_num_pairs(aid)
+
+    def _update_virtual_finish(self, aid):
+        """
+        Updates the virtual finish upon success
+        :param aid: tuple of  int, int
+            Contains the aid used for the generation
+        :return: None
+        """
+        try:
+            queue_item = self.distQueue.local_peek(aid)
+        except LinkLayerException as err:
+            logger.warning(
+                "Could not find queue item with aid = {}, when trying to update virtual finish.".format(
+                    aid))
+            raise err
+
+        queue_item.update_virtual_finish()

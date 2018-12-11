@@ -10,7 +10,7 @@ from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid import qProgramLibrary as qprgms
 from qlinklayer.toolbox import LinkLayerException
-from qlinklayer.scheduler import RequestScheduler
+from qlinklayer.scheduler import StrictPriorityRequestScheduler
 from qlinklayer.distQueue import EGPDistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
@@ -240,7 +240,7 @@ class NodeCentricEGP(EGP):
         self.dqp.add_callback = self._add_to_queue_callback
 
         # Create the request scheduler
-        self.scheduler = RequestScheduler(distQueue=self.dqp, qmm=self.qmm)
+        self.scheduler = StrictPriorityRequestScheduler(distQueue=self.dqp, qmm=self.qmm)
         self.scheduler.set_timeout_callback(self.request_timeout_handler)
 
         # Pydynaa events
@@ -1003,7 +1003,7 @@ class NodeCentricEGP(EGP):
         """
         # Get the fidelity estimate from FEU
         logger.debug("Estimating fidelity")
-        fidelity_estimate = self.feu.estimated_fidelity
+        fidelity_estimate = self.feu.estimate_fidelity_of_request(creq)
 
         # Create entanglement identifier
         logical_id = self.scheduler.curr_storage_id()

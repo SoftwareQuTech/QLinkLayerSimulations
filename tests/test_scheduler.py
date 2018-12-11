@@ -1,16 +1,19 @@
 import unittest
 import logging
-from easysquid.easynetwork import EasyNetwork
+from util.config_paths import ConfigPathStorage
+from easysquid.easynetwork import EasyNetwork, setup_physical_network
 from easysquid.qnode import QuantumNode
-from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
+from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from netsquid.simutil import sim_run, sim_reset
-from qlinklayer.distQueue import EGPDistributedQueue
-from qlinklayer.scheduler import RequestScheduler
+from qlinklayer.distQueue import EGPDistributedQueue, WFQDistributedQueue
+from qlinklayer.scheduler import StrictPriorityRequestScheduler, WFQRequestScheduler, SchedulerRequest
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.egp import EGPRequest
 from qlinklayer.scenario import EGPSimulationScenario
+from qlinklayer.feu import SingleClickFidelityEstimationUnit
+from qlinklayer.mhp import SimulatedNodeCentricMHPService
 
 logger.setLevel(logging.CRITICAL)
 
@@ -38,31 +41,31 @@ class TestRequestScheduler(unittest.TestCase):
     def test_init(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
         with self.assertRaises(TypeError):
-            RequestScheduler()
+            StrictPriorityRequestScheduler()
 
         with self.assertRaises(TypeError):
-            RequestScheduler(distQueue=self.dqpA)
+            StrictPriorityRequestScheduler(distQueue=self.dqpA)
 
         with self.assertRaises(TypeError):
-            RequestScheduler(qmm=qmm)
+            StrictPriorityRequestScheduler(qmm=qmm)
 
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=self.dqpA, qmm=qmm)
         self.assertEqual(test_scheduler.distQueue, self.dqpA)
         self.assertEqual(test_scheduler.qmm, qmm)
         self.assertEqual(test_scheduler.my_free_memory, qmm.get_free_mem_ad())
         self.assertEqual(test_scheduler.other_mem, (0, 0))
 
-    def test_get_queue(self):
+    def test_choose_queue(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
         request = EGPRequest(EGPSimulationScenario.construct_cqc_epr_request(otherID=self.nodeB.nodeID, num_pairs=1,
                                                                              min_fidelity=1, max_time=1, purpose_id=0,
                                                                              priority=0))
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
-        self.assertEqual(test_scheduler.get_queue(request), 0)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=self.dqpA, qmm=qmm)
+        self.assertEqual(test_scheduler.choose_queue(request), 0)
 
     def test_update_other_mem_size(self):
         qmm = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=self.dqpA, qmm=qmm)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=self.dqpA, qmm=qmm)
 
         test_size = 3
         test_scheduler.update_other_mem_size(mem=test_size)
@@ -73,7 +76,7 @@ class TestRequestScheduler(unittest.TestCase):
         dqpB = EGPDistributedQueue(node=self.nodeB, accept_all=True)
         dqpA.connect_to_peer_protocol(dqpB)
         qmmA = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=dqpA, qmm=qmmA)
         test_scheduler.configure_mhp_timings(1, 2, 0, 0)
 
         request = EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0,
@@ -125,7 +128,7 @@ class TestRequestScheduler(unittest.TestCase):
         dqpB = EGPDistributedQueue(node=self.nodeB, accept_all=True, numQueues=num_priorities)
         dqpA.connect_to_peer_protocol(dqpB)
         qmmA = QuantumMemoryManagement(node=self.nodeA)
-        test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmmA)
+        test_scheduler = StrictPriorityRequestScheduler(distQueue=dqpA, qmm=qmmA)
         test_scheduler.configure_mhp_timings(1, 2, 0, 0)
 
         requests = [EGPRequest(other_id=self.nodeB.nodeID, num_pairs=1, min_fidelity=1, max_time=0, purpose_id=0,
@@ -150,6 +153,394 @@ class TestRequestScheduler(unittest.TestCase):
             test_scheduler.clear_request(next_aid)
 
 
+class TestWFQRequestScheduler(unittest.TestCase):
+    def setUp(self):
+        sim_reset()
+
+        network = setup_physical_network(ConfigPathStorage.NETWORK_NV_LAB_NOCAV_NOCONV)
+        alice, bob = network.all_nodes()
+        dqp_conn = network.get_connection(alice, bob, "dqp_conn")
+        mhp_conn = network.get_connection(alice, bob, "mhp_conn")
+
+        self.num_queues = 3
+
+        self.distQueueA = WFQDistributedQueue(alice, numQueues=self.num_queues, accept_all=True)
+        self.distQueueB = WFQDistributedQueue(bob, numQueues=self.num_queues, accept_all=True)
+        self.distQueueA.connect_to_peer_protocol(self.distQueueB, conn=dqp_conn)
+        network.add_network_protocol(self.distQueueA, alice, dqp_conn)
+        network.add_network_protocol(self.distQueueB, bob, dqp_conn)
+
+        self.qmmA = QuantumMemoryManagement(alice)
+
+        mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob, conn=mhp_conn)
+
+        self.feuA = SingleClickFidelityEstimationUnit(alice, mhp_service)
+
+        self.schedulerA = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        network.start()
+
+    def test_init(self):
+        # Test default
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        self.assertEqual(scheduler.relative_weights, [1] * self.num_queues)
+
+        # Test wrong type
+        with self.assertRaises(TypeError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, 0)
+        with self.assertRaises(TypeError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, {})
+
+        # Test wrong length
+        with self.assertRaises(ValueError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, [0] * (self.num_queues + 1))
+
+        # Test negative weights
+        with self.assertRaises(ValueError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, [0, 0, -1])
+
+        # Test non-comparable weights
+        with self.assertRaises(ValueError):
+            WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, [0, [], False])
+
+        # Test non-trivial weights
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, [0, 5, 15])
+        self.assertEqual(scheduler.relative_weights, [0, 0.25, 0.75])
+
+    def test__get_largest_mhp_cycle_odd(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        max_mhp = 5
+        scheduler.max_mhp_cycle_number = max_mhp
+        scheduler.mhp_cycle_number = 0
+
+        for i in range(scheduler.max_mhp_cycle_number):
+            self.assertEqual(scheduler._get_largest_mhp_cycle(), (i + int((max_mhp - 1) / 2)) % max_mhp)
+            scheduler.mhp_cycle_number += 1
+
+    def test__get_largest_mhp_cycle_even(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        max_mhp = 6
+        scheduler.max_mhp_cycle_number = max_mhp
+        scheduler.mhp_cycle_number = 0
+
+        for i in range(scheduler.max_mhp_cycle_number):
+            self.assertEqual(scheduler._get_largest_mhp_cycle(), (i + int((max_mhp - 1) / 2)) % max_mhp)
+            scheduler.mhp_cycle_number += 1
+
+    def test_compare_cycle_odd(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        scheduler.max_mhp_cycle_number = 5
+        scheduler.mhp_cycle_number = 0
+
+        cycle1 = 0
+        cycle2 = 1
+
+        for i in range(scheduler.max_mhp_cycle_number):
+            if i == 3:
+                self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle2), 1)
+            else:
+                self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle2), -1)
+            self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle1), 0)
+            self.assertEqual(scheduler._compare_mhp_cycle(cycle2, cycle2), 0)
+            scheduler.mhp_cycle_number += 1
+
+    def test_compare_cycle_even(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        scheduler.max_mhp_cycle_number = 6
+        scheduler.mhp_cycle_number = 0
+
+        cycle1 = 0
+        cycle2 = 1
+
+        for i in range(scheduler.max_mhp_cycle_number):
+            if i == 4:
+                self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle2), 1)
+            else:
+                self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle2), -1)
+            self.assertEqual(scheduler._compare_mhp_cycle(cycle1, cycle1), 0)
+            self.assertEqual(scheduler._compare_mhp_cycle(cycle2, cycle2), 0)
+            scheduler.mhp_cycle_number += 1
+
+    def test_set_virtual_finish_same_queue_same_req(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Same req to same queue
+        requests = [SchedulerRequest(), SchedulerRequest()]
+        wfq_requests = []
+        for req in requests:
+            wfq_requests.append(scheduler.set_virtual_finish(req, 0))
+        self.assertLess(wfq_requests[0].init_virtual_finish, wfq_requests[1].init_virtual_finish)
+        self.assertEqual(wfq_requests[0].est_cycles_per_pair, wfq_requests[1].est_cycles_per_pair)
+        self.assertEqual(wfq_requests[0].init_virtual_finish + wfq_requests[0].est_cycles_per_pair,
+                         wfq_requests[1].init_virtual_finish)
+
+    def test_set_virtual_finish_fidelity(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Compare high and low min_fidelity
+        requests = [SchedulerRequest(min_fidelity=0.8), SchedulerRequest(min_fidelity=0.6)]
+        wfq_requests = []
+        for qid, req in enumerate(requests):
+            wfq_requests.append(scheduler.set_virtual_finish(req, qid))
+        self.assertGreater(wfq_requests[0].init_virtual_finish, wfq_requests[1].init_virtual_finish)
+        self.assertGreater(wfq_requests[0].est_cycles_per_pair, wfq_requests[1].est_cycles_per_pair)
+
+    def test_set_virtual_finish_num_pairs(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Compare high and low num pairs (non atomic)
+        requests = [SchedulerRequest(num_pairs=2), SchedulerRequest(num_pairs=10)]
+        wfq_requests = []
+        for qid, req in enumerate(requests):
+            wfq_requests.append(scheduler.set_virtual_finish(req, qid))
+        self.assertEqual(wfq_requests[0].init_virtual_finish, wfq_requests[1].init_virtual_finish)
+        self.assertEqual(wfq_requests[0].est_cycles_per_pair, wfq_requests[1].est_cycles_per_pair)
+
+    def test_set_virtual_finish_measure_directly(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        scheduler.mhp_cycle_period = 1
+        scheduler.mhp_full_cycle = 3 * scheduler.mhp_cycle_period
+
+        # Compare create and keep and measure direclty
+        requests = [SchedulerRequest(), SchedulerRequest(measure_directly=True)]
+        wfq_requests = []
+        for qid, req in enumerate(requests):
+            wfq_requests.append(scheduler.set_virtual_finish(req, qid))
+        self.assertGreater(wfq_requests[0].init_virtual_finish, wfq_requests[1].init_virtual_finish)
+        self.assertGreater(wfq_requests[0].est_cycles_per_pair, wfq_requests[1].est_cycles_per_pair)
+
+    def test_set_virtual_finish_atomic(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        scheduler.mhp_cycle_period = 1
+        scheduler.mhp_full_cycle = 3 * scheduler.mhp_cycle_period
+
+        # Compare compare non-atomic and atomic
+        requests = [SchedulerRequest(num_pairs=3), SchedulerRequest(num_pairs=3, atomic=3)]
+        wfq_requests = []
+        for qid, req in enumerate(requests):
+            wfq_requests.append(scheduler.set_virtual_finish(req, qid))
+        self.assertLess(wfq_requests[0].init_virtual_finish, wfq_requests[1].init_virtual_finish)
+        self.assertEqual(wfq_requests[0].est_cycles_per_pair, wfq_requests[1].est_cycles_per_pair)
+        self.assertAlmostEqual(wfq_requests[1].init_virtual_finish - wfq_requests[0].init_virtual_finish,
+                               2 * wfq_requests[0].est_cycles_per_pair)
+
+    def test_set_virtual_finish_weights_same_req(self):
+        weights = [0, 15, 5]
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, weights=weights)
+
+        # Compare different weights, same requests
+        requests = [SchedulerRequest(), SchedulerRequest(), SchedulerRequest()]
+        wfq_requests = []
+        for qid, req in enumerate(requests):
+            wfq_requests.append(scheduler.set_virtual_finish(req, qid))
+        self.assertIs(wfq_requests[0].init_virtual_finish, None)
+        self.assertLess(wfq_requests[1].init_virtual_finish, wfq_requests[2].init_virtual_finish)
+        self.assertEqual(wfq_requests[1].est_cycles_per_pair, wfq_requests[2].est_cycles_per_pair)
+        inv_weight_diff = (weights[1] + weights[2]) * (1 / weights[2] - 1 / weights[1])
+        self.assertAlmostEqual(wfq_requests[2].init_virtual_finish - wfq_requests[1].init_virtual_finish,
+                               inv_weight_diff * wfq_requests[1].est_cycles_per_pair)
+
+    def test_set_virtual_finish_weights_diff_req(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # First we will find the estimated times for constructing a high and low fidelity pair
+        high_fid = self.feuA.achievable_fidelities[-1][1]
+        low_fid = self.feuA.achievable_fidelities[-2][1]
+        cycles_high = scheduler._estimate_nr_of_cycles_per_pair(SchedulerRequest(min_fidelity=high_fid))
+        cycles_low = scheduler._estimate_nr_of_cycles_per_pair(SchedulerRequest(min_fidelity=low_fid))
+
+        # Weights such that high fid should be scheduled earlier than low fid
+        weight_fraction = cycles_high / cycles_low
+        weight_fraction_below = weight_fraction * 9 / 10
+        weight_fraction_above = weight_fraction * 11 / 10
+
+        # Construct scheduler with the computed weights
+        weights = [weight_fraction_above, weight_fraction_below, 1]
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, weights=weights)
+
+        # Compare different weights, diff requests
+        requests = [SchedulerRequest(min_fidelity=high_fid), SchedulerRequest(min_fidelity=high_fid),
+                    SchedulerRequest(min_fidelity=low_fid)]
+        wfq_requests = []
+        for qid, req in enumerate(requests):
+            wfq_requests.append(scheduler.set_virtual_finish(req, qid))
+        self.assertLess(wfq_requests[0].init_virtual_finish, wfq_requests[2].init_virtual_finish)
+        self.assertGreater(wfq_requests[1].init_virtual_finish, wfq_requests[2].init_virtual_finish)
+
+    def test_scheduling_same_queue_same_req(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Same req to same queue
+        num_req = 3
+        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, create_id=i) for i in range(num_req)]
+        for req in requests:
+            scheduler._add_to_queue(req, 0)
+
+        sim_run(1000)
+
+        scheduler.inc_cycle()
+
+        for i in range(3):
+            aid, queue_item = scheduler.select_queue()
+            self.assertEqual(queue_item.request.create_id, i)
+            scheduler._post_process_success(aid)
+            # scheduler.clear_request(aid)
+
+        aid, queue_item = scheduler.select_queue()
+        self.assertIs(aid, None)
+
+    def test_scheduling_fidelity(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Compare high and low min_fidelity
+        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, min_fidelity=0.8, create_id=0),
+                    SchedulerRequest(timeout_cycle=None, sched_cycle=None, min_fidelity=0.6, create_id=1)]
+        for qid, req in enumerate(requests):
+            scheduler._add_to_queue(req, qid)
+
+        sim_run(1000)
+
+        scheduler.inc_cycle()
+
+        for create_id in [1, 0]:
+            aid, queue_item = scheduler.select_queue()
+            self.assertEqual(queue_item.request.create_id, create_id)
+            scheduler._post_process_success(aid)
+
+        aid, queue_item = scheduler.select_queue()
+        self.assertIs(aid, None)
+
+    def test_scheduling_num_pairs_iterate(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # Compare high and low num pairs (non atomic)
+        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=3, create_id=0),
+                    SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=6, create_id=1)]
+        for qid, req in enumerate(requests):
+            scheduler._add_to_queue(req, qid)
+
+        sim_run(1000)
+
+        scheduler.inc_cycle()
+
+        for create_id in ([0, 1] * 3 + [1] * 3):
+            aid, queue_item = scheduler.select_queue()
+            self.assertEqual(queue_item.request.create_id, create_id)
+            scheduler._post_process_success(aid)
+
+        aid, queue_item = scheduler.select_queue()
+        self.assertIs(aid, None)
+
+    def test_scheduling_measure_directly(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        scheduler.mhp_cycle_period = 1
+        scheduler.mhp_full_cycle = 3 * scheduler.mhp_cycle_period
+
+        # Compare create and keep and measure direclty
+        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, create_id=0),
+                    SchedulerRequest(timeout_cycle=None, sched_cycle=None, measure_directly=True, create_id=1)]
+        for qid, req in enumerate(requests):
+            scheduler._add_to_queue(req, qid)
+
+        sim_run(1000)
+
+        scheduler.inc_cycle()
+
+        for create_id in [1, 0]:
+            aid, queue_item = scheduler.select_queue()
+            self.assertEqual(queue_item.request.create_id, create_id)
+            scheduler._post_process_success(aid)
+
+        aid, queue_item = scheduler.select_queue()
+        self.assertIs(aid, None)
+
+    def test_scheduling_atomic(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+        scheduler.mhp_cycle_period = 1
+        scheduler.mhp_full_cycle = 3 * scheduler.mhp_cycle_period
+
+        # Compare create and keep and measure direclty
+        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=3, atomic=True, create_id=0),
+                    SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=5, create_id=1)]
+        for qid, req in enumerate(requests):
+            scheduler._add_to_queue(req, qid)
+
+        sim_run(1000)
+
+        scheduler.inc_cycle()
+
+        for create_id in [1, 1, 0, 0, 0, 1, 1, 1]:
+            aid, queue_item = scheduler.select_queue()
+            self.assertEqual(queue_item.request.create_id, create_id)
+            scheduler._post_process_success(aid)
+
+        aid, queue_item = scheduler.select_queue()
+        self.assertIs(aid, None)
+
+    def test_scheduling_weights_same_req(self):
+        weights = [0, 15, 5]
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, weights=weights)
+        scheduler.mhp_cycle_period = 1
+        scheduler.mhp_full_cycle = 3 * scheduler.mhp_cycle_period
+
+        # Compare create and keep and measure direclty
+        scheduler._add_to_queue(SchedulerRequest(timeout_cycle=None, sched_cycle=None, create_id=2), 2)
+        scheduler.inc_cycle()
+        scheduler._add_to_queue(SchedulerRequest(timeout_cycle=None, sched_cycle=None, create_id=1), 1)
+        scheduler.inc_cycle()
+        scheduler._add_to_queue(SchedulerRequest(timeout_cycle=None, sched_cycle=None, create_id=0), 0)
+
+        sim_run(1000)
+
+        scheduler.inc_cycle()
+
+        for create_id in [0, 1, 2]:
+            aid, queue_item = scheduler.select_queue()
+            self.assertEqual(queue_item.request.create_id, create_id)
+            scheduler._post_process_success(aid)
+
+        aid, queue_item = scheduler.select_queue()
+        self.assertIs(aid, None)
+
+    def test_scheduling_weights_diff_req(self):
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
+
+        # First we will find the estimated times for constructing a high and low fidelity pair
+        high_fid = self.feuA.achievable_fidelities[-1][1]
+        low_fid = self.feuA.achievable_fidelities[-2][1]
+        cycles_high = scheduler._estimate_nr_of_cycles_per_pair(SchedulerRequest(min_fidelity=high_fid))
+        cycles_low = scheduler._estimate_nr_of_cycles_per_pair(SchedulerRequest(min_fidelity=low_fid))
+
+        # Weights such that high fid should be scheduled earlier than low fid
+        weight_fraction = cycles_high / cycles_low
+        weight_fraction_below = weight_fraction * 9 / 10
+        weight_fraction_above = weight_fraction * 11 / 10
+
+        # Construct scheduler with the computed weights
+        weights = [weight_fraction_below, 1, weight_fraction_above]
+        scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA, weights=weights)
+
+        # Compare different weights, diff requests
+        scheduler._add_to_queue(
+            SchedulerRequest(timeout_cycle=None, sched_cycle=None, min_fidelity=high_fid, create_id=0), 0)
+        scheduler._add_to_queue(
+            SchedulerRequest(timeout_cycle=None, sched_cycle=None, min_fidelity=low_fid, create_id=1), 1)
+        scheduler._add_to_queue(
+            SchedulerRequest(timeout_cycle=None, sched_cycle=None, min_fidelity=high_fid, create_id=2), 2)
+
+        sim_run(1000)
+
+        scheduler.inc_cycle()
+
+        for create_id in [2, 1, 0]:
+            aid, queue_item = scheduler.select_queue()
+            self.assertEqual(queue_item.request.create_id, create_id)
+            scheduler._post_process_success(aid)
+
+        aid, queue_item = scheduler.select_queue()
+        self.assertIs(aid, None)
+
+
 class TestTimings(unittest.TestCase):
     def setUp(self):
         def timeout_handler(request):
@@ -168,7 +559,7 @@ class TestTimings(unittest.TestCase):
         dqpB = EGPDistributedQueue(node=nodeB, accept_all=True)
         dqpA.connect_to_peer_protocol(dqpB)
         qmm = QuantumMemoryManagement(node=nodeA)
-        self.test_scheduler = RequestScheduler(distQueue=dqpA, qmm=qmm)
+        self.test_scheduler = StrictPriorityRequestScheduler(distQueue=dqpA, qmm=qmm)
 
         conn = dqpA.conn
         network = EasyNetwork(name="DQPNetwork",
