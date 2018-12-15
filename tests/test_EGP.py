@@ -343,8 +343,6 @@ class TestNodeCentricEGP(unittest.TestCase):
         for resA, resB in zip(self.alice_results, self.bob_results):
             _, a_create, a_id, a_m, a_basis, _, a_t = resA
             _, b_create, b_id, b_m, b_basis, _, b_t = resB
-            # self.assertEqual(a_ok_type, egpA.MD_OK)
-            # self.assertEqual(b_ok_type, egpB.MD_OK)
             self.assertEqual(a_create, b_create)
             self.assertEqual(a_id, b_id)
             self.assertEqual(a_t, b_t)
@@ -361,11 +359,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         actual_z = correlated_measurements[0] / total_measurements[0]
         expected_x = (8 - 7 * alpha) / (8 - 6 * alpha)
         actual_x = correlated_measurements[1] / total_measurements[1]
+        expected_y = (8 - 7 * alpha) / (8 - 6 * alpha)
+        actual_y = correlated_measurements[2] / total_measurements[1]
 
         # Allow a tolerance of 10%
         tolerance = 0.1
         self.assertGreaterEqual(actual_z, expected_z - tolerance)
         self.assertGreaterEqual(actual_x, expected_x - tolerance)
+        self.assertGreaterEqual(actual_y, expected_y - tolerance)
 
     def test_successful_mixed_requests(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
@@ -437,11 +438,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         actual_z = correlated_measurements[0] / total_measurements[0]
         expected_x = (8 - 7 * alpha) / (8 - 6 * alpha)
         actual_x = correlated_measurements[1] / total_measurements[1]
+        expected_y = (8 - 7 * alpha) / (8 - 6 * alpha)
+        actual_y = correlated_measurements[2] / total_measurements[1]
 
-        # Allow a tolerance of 5%
-        tolerance = 0.05
+        # Allow a tolerance of 10%
+        tolerance = 0.1
         self.assertGreaterEqual(actual_z, expected_z - tolerance)
         self.assertGreaterEqual(actual_x, expected_x - tolerance)
+        self.assertGreaterEqual(actual_y, expected_y - tolerance)
 
         # Check the entangled pairs, ignore communication qubit
         self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))

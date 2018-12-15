@@ -4,7 +4,7 @@ import random
 from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
-from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_MEASURE
+from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_S, INSTR_MEASURE
 from netsquid.components.qprogram import QuantumProgram
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
@@ -881,8 +881,8 @@ class NodeCentricEGP(EGP):
                 if basis == 0:
                     m ^= 1
 
-                # Measurements in hadamard basis are only anti-correlated when r == 2
-                elif basis == 1 and r == 2:
+                # Measurements in hadamard and Y basis are only anti-correlated when r == 2
+                elif (basis == 1 or basis == 2) and r == 2:
                     m ^= 1
 
             # Pass up the meaurement info to higher layers
@@ -935,13 +935,20 @@ class NodeCentricEGP(EGP):
             q = prgm.get_qubit_indices(1)[0]
 
             # Make a random basis choice
-            basis = random.randint(0, 1)
+            possible_bases = [0, 1, 2]
+            basis = possible_bases[self.scheduler.mhp_cycle_number % len(possible_bases)]
 
-            if basis:
+            if basis == 0:
+                logger.debug("Measuring comm_q {} in Standard basis".format(comm_q))
+            elif basis == 1:
                 logger.debug("Measuring comm_q {} in Hadamard basis".format(comm_q))
                 prgm.apply(INSTR_H, q)
             else:
-                logger.debug("Measuring comm_q {} in Standard basis".format(comm_q))
+                logger.debug("Measuring comm_q {} in Y basis".format(comm_q))
+                prgm.apply(INSTR_S, q)
+                prgm.apply(INSTR_S, q)
+                prgm.apply(INSTR_S, q)
+                prgm.apply(INSTR_H, q)
 
             self.basis_choice.append(basis)
 
