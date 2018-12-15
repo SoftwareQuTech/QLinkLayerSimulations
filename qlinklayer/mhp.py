@@ -875,7 +875,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             logger.debug("Sending pass info: {}".format(pass_info))
 
             # Send info to the heralding station
-            self.conn.put_from(self.node.nodeID, [(self.conn.CMD_PRODUCE, pass_info), photon])
+            self.send_msg(self.node.nodeID, self.conn.CMD_PRODUCE, pass_info, photon)
             logger.debug("Scheduling entanglement event now.")
             self._schedule_now(self._EVT_ENTANGLE_ATTEMPT)
 
@@ -886,6 +886,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
 
         finally:
             self.reset_protocol()
+
+    def send_msg(self, nodeID, cmd, classical, quantum):
+        self.conn.put_from(nodeID, [(cmd, classical), quantum])
 
 
 class SimulatedNodeCentricMHPService(Service):

@@ -173,7 +173,8 @@ class StrictPriorityRequestScheduler(Scheduler):
         """
         # The bottleneck on how early we can start the request depends on how frequent the cycles occur and the time
         # it may take to propagate the request to the remote queue
-        bottleneck = max(self.mhp_cycle_period, 2 * self.distQueue.comm_delay)
+        bottleneck = max(self.mhp_cycle_period, self.distQueue.max_add_attempts * self.distQueue.timeout_factor
+                         * self.distQueue.comm_delay)
 
         # Provide some extra buffer room to accompany variance in communication time
         cycle_delay = self.mhp_cycle_offset
@@ -476,6 +477,10 @@ class StrictPriorityRequestScheduler(Scheduler):
         if aid is None and request is None:
             return self.get_default_gen()
 
+        min_cycles = ceil(self.mhp_full_cycle / self.mhp_cycle_period)
+        if not request.measure_directly and (self.mhp_cycle_number % min_cycles != 0):
+            return self.get_default_gen()
+
         # Check if we have the resources to fulfill this generation
         if self._has_resources_for_gen(request):
             logger.debug("Filling next available gen template")
@@ -616,14 +621,14 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         # If this item timed out need to remove from the queue
         qid, qseq = aid
+        if self.curr_aid == aid:
+            self.curr_aid = None
+
         if self.distQueue.contains_item(qid, qseq):
             queue_item = self.distQueue.remove_item(qid, qseq)
             if queue_item is None:
                 logger.error("Attempted to remove nonexistent item {} from local queue {}!".format(qseq, qid))
             else:
-                if self.curr_aid == aid:
-                    self.curr_aid = None
-
                 # Remove queue item from pydynaa
                 if isinstance(queue_item, Entity):
                     logger.debug("Removing local queue item from pydynaa")
@@ -667,11 +672,11 @@ class StrictPriorityRequestScheduler(Scheduler):
         if self.curr_aid is None:
             return False
 
-        # Check if current request is measure directly
-        if self.distQueue.local_peek(self.curr_aid).request.measure_directly:
-            return True
-        else:
+        if self.distQueue.local_peek(self.curr_aid) is None:
             return False
+
+        else:
+            return self.distQueue.local_peek(self.curr_aid).request.measure_directly
 
     def is_measure_directly(self, aid):
         """
@@ -710,6 +715,9 @@ class StrictPriorityRequestScheduler(Scheduler):
         """
         # Simply process the requests in FIFO order (for now...)
         self.remove_unfulfillable_requests()
+
+        if self.curr_aid and self.distQueue.local_peek(self.curr_aid) is None:
+            return self.select_queue()
 
         if self.curr_aid and self.distQueue.local_peek(self.curr_aid).request.atomic:
             return self.curr_aid, self.distQueue.local_peek(self.curr_aid).request

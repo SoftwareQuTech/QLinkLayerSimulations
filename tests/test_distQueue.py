@@ -302,23 +302,23 @@ class TestDistributedQueue(unittest.TestCase):
 
         def faulty_send_add(cmd, data):
             if cmd == dq.CMD_ADD:
-                nodeID, cseq, qid, qseq, request = data
+                _, cseq, qid, qseq, request = data
                 if self.lost_messages[(cseq, qid, qseq)] >= 1:
-                    dq.conn.put_from(node.nodeID, (cmd, data))
+                    dq.conn.put_from(dq.myID, (cmd, data))
                 else:
                     self.lost_messages[(cseq, qid, qseq)] += 1
             else:
-                dq.conn.put_from(node.nodeID, (cmd, data))
+                dq.conn.put_from(dq.myID, (cmd, data))
 
         def faulty_send_ack(cmd, data):
             if cmd == dq2.CMD_ADD_ACK:
-                nodeID, ackd_id, qseq = data
+                _, ackd_id, qseq = data
                 if self.lost_messages[(ackd_id, qseq)] >= 1:
-                    dq2.conn.put_from(node2.nodeID, (cmd, data))
+                    dq2.conn.put_from(dq2.myID, (cmd, data))
                 else:
                     self.lost_messages[(ackd_id, qseq)] += 1
             else:
-                dq2.conn.put_from(node2.nodeID, (cmd, data))
+                dq2.conn.put_from(dq2.myID, (cmd, data))
 
         nodes = [
             (node, [dq]),
@@ -372,23 +372,23 @@ class TestDistributedQueue(unittest.TestCase):
 
         def faulty_send_add(cmd, data):
             if cmd == dq2.CMD_ADD:
-                nodeID, cseq, qid, qseq, request = data
+                _, cseq, qid, qseq, request = data
                 if self.lost_messages[(cseq, qid, qseq)] >= 1:
-                    dq2.conn.put_from(node2.nodeID, (cmd, data))
+                    dq2.conn.put_from(dq2.myID, (cmd, data))
                 else:
                     self.lost_messages[(cseq, qid, qseq)] += 1
             else:
-                dq2.conn.put_from(node2.nodeID, (cmd, data))
+                dq2.conn.put_from(dq2.myID, (cmd, data))
 
         def faulty_send_ack(cmd, data):
             if cmd == dq.CMD_ADD_ACK:
-                nodeID, ackd_id, qseq = data
+                _, ackd_id, qseq = data
                 if self.lost_messages[(ackd_id, qseq)] >= 1:
-                    dq.conn.put_from(node.nodeID, (cmd, data))
+                    dq.conn.put_from(dq.myID, (cmd, data))
                 else:
                     self.lost_messages[(ackd_id, qseq)] += 1
             else:
-                dq.conn.put_from(node.nodeID, (cmd, data))
+                dq.conn.put_from(dq.myID, (cmd, data))
 
         nodes = [
             (node, [dq]),

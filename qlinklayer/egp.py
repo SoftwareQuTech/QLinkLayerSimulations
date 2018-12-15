@@ -411,13 +411,23 @@ class NodeCentricEGP(EGP):
         """
         self.dqp.load_accept_rules(queue_config)
 
+    def send_msg(self, cmd, data):
+        """
+        Sends a message to the remote node on our connection
+        :param cmd: int
+            The command we want the peer to execute
+        :param data: obj any
+            The associated data with the command
+        """
+        self.conn.put_from(self.node.nodeID, [(cmd, data)])
+
     def request_other_free_memory(self):
         """
         Requests our peer for their QMM's free memory
         """
         logger.debug("Requesting other node's free memory advertisement")
         my_free_mem = self.qmm.get_free_mem_ad()
-        self.conn.put_from(self.node.nodeID, [(self.CMD_REQ_E, my_free_mem)])
+        self.send_msg(self.CMD_REQ_E, my_free_mem)
 
     def send_expire_notification(self, aid, createID, originID, new_seq):
         """
@@ -456,7 +466,7 @@ class NodeCentricEGP(EGP):
         :param new_seq: int
             The local sequence number we have
         """
-        self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE, (aid, createID, originID, new_seq))])
+        self.send_msg(self.CMD_EXPIRE, (aid, createID, originID, new_seq))
 
     def expire_ack_timeout(self, evt, aid):
         """
@@ -513,7 +523,7 @@ class NodeCentricEGP(EGP):
         :param aid: tuple of (int, int)
             The expired absolute queue id we are acknowledging
         """
-        self.conn.put_from(self.node.nodeID, [(self.CMD_EXPIRE_ACK, (aid, self.expected_seq))])
+        self.send_msg(self.CMD_EXPIRE_ACK, (aid, self.expected_seq))
 
     def cmd_EXPIRE_ACK(self, data):
         """
@@ -546,7 +556,7 @@ class NodeCentricEGP(EGP):
         free_memory_size = self.qmm.get_free_mem_ad()
         logger.debug("{} Got request for free memory advertisement, sending: {}".format(self.node.nodeID,
                                                                                         free_memory_size))
-        self.conn.put_from(self.node.nodeID, [(self.CMD_ACK_E, free_memory_size)])
+        self.send_msg(self.CMD_ACK_E, free_memory_size)
 
     def cmd_ACK_E(self, data):
         """
@@ -826,20 +836,21 @@ class NodeCentricEGP(EGP):
 
                 # Issue an expire for the request
                 request = self.scheduler.get_request(local_aid)
-                if self.dqp.master ^ request.master_request:
-                    originID = self.get_otherID()
-                else:
-                    originID = self.node.nodeID
+                if request is not None:
+                    if self.dqp.master ^ request.master_request:
+                        originID = self.get_otherID()
+                    else:
+                        originID = self.node.nodeID
 
-                createID = request.create_id
-                self.send_expire_notification(aid=local_aid, createID=createID, originID=originID,
-                                              new_seq=self.expected_seq)
+                    createID = request.create_id
+                    self.send_expire_notification(aid=local_aid, createID=createID, originID=originID,
+                                                  new_seq=self.expected_seq)
 
-                # Clear the request
-                self.scheduler.clear_request(aid=local_aid)
+                    # Clear the request
+                    self.scheduler.clear_request(aid=local_aid)
 
-                # Alert higher layer protocols
-                self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
+                    # Alert higher layer protocols
+                    self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
 
     def _handle_generation_reply(self, r, mhp_seq, aid):
         """
@@ -986,14 +997,15 @@ class NodeCentricEGP(EGP):
             # Collect expiration information to send to our peer
             new_mhp_seq = (mhp_seq + 1) % self.mhp_service.get_max_mhp_seq(self.node)
             request = self.scheduler.get_request(aid)
-            if self.dqp.master ^ request.master_request:
-                creatorID = self.get_otherID()
-            else:
-                creatorID = self.node.nodeID
-            self.send_expire_notification(aid=aid, createID=request.create_id, originID=creatorID, new_seq=new_mhp_seq)
+            if request is not None:
+                if self.dqp.master ^ request.master_request:
+                    creatorID = self.get_otherID()
+                else:
+                    creatorID = self.node.nodeID
+                self.send_expire_notification(aid=aid, createID=request.create_id, originID=creatorID, new_seq=new_mhp_seq)
 
-            # Clear the request
-            self.scheduler.clear_request(aid=aid)
+                # Clear the request
+                self.scheduler.clear_request(aid=aid)
 
             # Update expected sequence number
             self.expected_seq = new_mhp_seq
