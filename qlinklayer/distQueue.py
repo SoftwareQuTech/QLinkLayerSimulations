@@ -103,6 +103,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Current sequence number for making add requests (distinct from queue items)
         self.comms_seq = 0
         self.comm_delay = 0
+        self.timeout_factor = 2
         self.max_add_attempts = 3
 
         # Track the absolute queue ID we transmitted for the corresponding comms_seq
@@ -196,9 +197,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if not self.comm_delay:
             self.comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
 
-        logger.debug("Scheduling communication timeout event after {}.".format(10 * self.comm_delay))
-        self.comm_timeout_event = self._schedule_after(10 * self.comm_delay, self._EVT_COMM_TIMEOUT)
-        self._wait_once(self.comm_timeout_handler, event=self.comm_timeout_event)
+        logger.debug("Scheduling communication timeout event after {}.".format(self.timeout_factor * self.comm_delay))
+        evt = self._schedule_after(self.timeout_factor * self.comm_delay, self._EVT_COMM_TIMEOUT)
+        self._wait_once(self.comm_timeout_handler, event=evt)
 
     def _comm_timeout_handler(self, evt, ack_id):
         """
@@ -218,7 +219,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
                 # Remove the item from the local queue
                 self.waitAddAcks.pop(ack_id)
-                self.queueList[qid].remove_item(queue_seq)
+                if self.master:
+                    self.queueList[qid].remove_item(queue_seq)
 
                 # If our peer failed to add our item we should remove any Acks we should provide for
                 # subsequent items they attempted to add
@@ -424,14 +426,19 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # We got what we expected or a message may have been lost
         if cseq >= self.expectedSeq:
+            if cseq > self.expectedSeq:
+                logger.warning("Got comms seq {} ahead of expected seq, updating".format(cseq))
             # Update our expectedSeq as necessary
             self.expectedSeq = (cseq + 1) % self.maxSeq
             return True
 
         # A message was delayed or retransmitted upon loss
         elif cseq < self.expectedSeq:
+            logger.warning("Got comms seq {} behind our expected seq".format(cseq))
+
             # If we have not seen this before we should add the item to the queue normally
-            if not self.contains_item(qid, qseq) or self.master and cseq not in self.transmitted_aid:
+            if not self.contains_item(qid, qseq) and not self.master or self.master and cseq not in self.transmitted_aid:
+                logger.warning("Adding request")
                 return True
 
             # If we have seen this comms_seq before retransmit the absolute queue id
@@ -556,7 +563,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.transmitted_aid[cseq] = (qseq, qid)
 
         # Set up a handler to clear the stored data when we believe our peer got the ack
-        evt = self._schedule_after(10 * self.comm_delay, self._EVT_COMM_TIMEOUT)
+        evt = self._schedule_after(self.max_add_attempts * self.timeout_factor * self.comm_delay, self._EVT_COMM_TIMEOUT)
         handler = EventHandler(partial(self.clear_transmitted_info, cseq=cseq))
         self._wait_once(handler, event=evt)
 
@@ -603,6 +610,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             logger.debug("ADD ACK ERROR No such id from {} acking comms seq {} claiming queue seq {}"
                          .format(nodeID, ackd_id, qseq))
             self.send_error(self.CMD_ERR_UNKNOWN_ID)
+            return
 
         # Received valid ADD ACK
 
@@ -674,6 +682,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         Deletes an ACK we should provide and any subsequent ACKs
         """
+        logger.warning("Rejecting outstanding acks")
         # Grab item info, ack, and schedule
         cseq, qid, qseq, request = self.addAckBacklog[qid].popleft()
         self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
@@ -707,7 +716,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :param qseq: int
             Sequence number within local queue of item
         """
-        pass
+        self.queueList[qid].ack(qseq)
 
     def has_queue_id(self, qid):
         """
