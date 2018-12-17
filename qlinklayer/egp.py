@@ -1,6 +1,5 @@
 import abc
 from collections import namedtuple
-import random
 from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
@@ -945,10 +944,10 @@ class NodeCentricEGP(EGP):
                 prgm.apply(INSTR_H, q)
             else:
                 logger.debug("Measuring comm_q {} in Y basis".format(comm_q))
-                prgm.apply(INSTR_S, q)
-                prgm.apply(INSTR_S, q)
+                prgm.apply(INSTR_H, q)
                 prgm.apply(INSTR_S, q)
                 prgm.apply(INSTR_H, q)
+                prgm.apply(INSTR_Z, q)
 
             self.basis_choice.append(basis)
 
