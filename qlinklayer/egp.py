@@ -1006,7 +1006,8 @@ class NodeCentricEGP(EGP):
                     creatorID = self.get_otherID()
                 else:
                     creatorID = self.node.nodeID
-                self.send_expire_notification(aid=aid, createID=request.create_id, originID=creatorID, new_seq=new_mhp_seq)
+                self.send_expire_notification(aid=aid, createID=request.create_id, originID=creatorID,
+                                              new_seq=new_mhp_seq)
 
                 # Clear the request
                 self.scheduler.clear_request(aid=aid)
