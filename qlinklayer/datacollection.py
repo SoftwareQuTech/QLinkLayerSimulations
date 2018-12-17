@@ -440,14 +440,14 @@ class EGPQubErrSequence(EGPDataSequence):
         ent_id, meas_dataA = scenarioA.get_measurement(remove=False)
         if ent_id is None:
             # No data yet
-            return [[-1, -1], False]
+            return [[-1, -1, -1], False]
 
         # Check if B also got the measurement data yet
         _, meas_dataB = scenarioB.get_measurement(ent_id=ent_id, remove=True)
 
         if meas_dataB is None:
             # B hasn't received the corresponding OK yet, try next time
-            return [[-1, -1], False]
+            return [[-1, -1, -1], False]
 
         # Got measurement data from both A and B, delete entry from A
         scenarioA.get_measurement(ent_id=ent_id, remove=True)
@@ -462,13 +462,15 @@ class EGPQubErrSequence(EGPDataSequence):
 
         # Check if equal basis choices
         if basis_choiceA != basis_choiceB:
-            return [-1, -1], False
+            return [-1, -1, -1], False
 
         error = 1 if bit_choiceA != bit_choiceB else 0
         if basis_choiceA == 0:  # Standard basis
-            return [error, -1], True
-        else:  # Hadamard basis
-            return [-1, error], True
+            return [error, -1, -1], True
+        elif basis_choiceA == 1:  # Hadamard basis
+            return [-1, error, -1], True
+        else:
+            return [-1, -1, error], True
 
 
 class EGPQubErrDataPoint(EGPDataPoint):
@@ -482,6 +484,7 @@ class EGPQubErrDataPoint(EGPDataPoint):
             self.timestamp = None
             self.z_err = None
             self.x_err = None
+            self.y_err = None
             self.success = None
 
     def from_raw_data(self, data):
@@ -489,16 +492,18 @@ class EGPQubErrDataPoint(EGPDataPoint):
             self.timestamp = data[0]
             self.z_err = data[1]
             self.x_err = data[2]
-            self.success = data[3]
+            self.y_err = data[3]
+            self.success = data[4]
         except IndexError:
             raise ValueError("Cannot parse data")
 
     def from_data_point(self, data):
         if isinstance(data, EGPQubErrDataPoint):
-            self.timestamp = self.timestamp
-            self.z_err = self.z_err
-            self.x_err = self.x_err
-            self.success = self.success
+            self.timestamp = data.timestamp
+            self.z_err = data.z_err
+            self.x_err = data.x_err
+            self.y_err = data.y_err
+            self.success = data.success
         else:
             raise ValueError("'data' is not an instance of this class")
 
@@ -507,6 +512,7 @@ class EGPQubErrDataPoint(EGPDataPoint):
         to_print += "    Timestamp: {}\n".format(self.timestamp)
         to_print += "    Z Error: {}\n".format(self.z_err)
         to_print += "    X Error: {}\n".format(self.x_err)
+        to_print += "    Y Error: {}\n".format(self.y_err)
         to_print += "    Success: {}\n".format(self.success)
         return to_print
 

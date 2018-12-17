@@ -437,7 +437,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             logger.warning("Got comms seq {} behind our expected seq".format(cseq))
 
             # If we have not seen this before we should add the item to the queue normally
-            if not self.contains_item(qid, qseq) and not self.master or self.master and cseq not in self.transmitted_aid:
+            if (not self.contains_item(qid, qseq) and not self.master) or \
+                    (self.master and cseq not in self.transmitted_aid):
                 logger.warning("Adding request")
                 return True
 
@@ -563,7 +564,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.transmitted_aid[cseq] = (qseq, qid)
 
         # Set up a handler to clear the stored data when we believe our peer got the ack
-        evt = self._schedule_after(self.max_add_attempts * self.timeout_factor * self.comm_delay, self._EVT_COMM_TIMEOUT)
+        evt = self._schedule_after(self.max_add_attempts * self.timeout_factor * self.comm_delay,
+                                   self._EVT_COMM_TIMEOUT)
         handler = EventHandler(partial(self.clear_transmitted_info, cseq=cseq))
         self._wait_once(handler, event=evt)
 
