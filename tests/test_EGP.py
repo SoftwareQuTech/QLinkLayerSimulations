@@ -306,8 +306,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
-        alice_num_bits = 255
-        bob_num_bits = 255
+        alice_num_bits = 300
+        bob_num_bits = 300
         # Construct a request with higher priority
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_num_bits,
                                                                         min_fidelity=0.9, max_time=0,
@@ -375,9 +375,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
         alice_num_pairs = 1
-        alice_num_bits = 255
+        alice_num_bits = 300
         bob_num_pairs = 2
-        bob_num_bits = 255
+        bob_num_bits = 300
         alice_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
                                                                             num_pairs=alice_num_pairs, min_fidelity=0.5,
                                                                             max_time=0, purpose_id=1, priority=10)

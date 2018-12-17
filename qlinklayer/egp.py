@@ -1,9 +1,10 @@
 import abc
+import numpy as np
 from collections import namedtuple
 from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
-from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_S, INSTR_MEASURE
+from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_ROT_X, INSTR_MEASURE
 from netsquid.components.qprogram import QuantumProgram
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
@@ -944,10 +945,7 @@ class NodeCentricEGP(EGP):
                 prgm.apply(INSTR_H, q)
             else:
                 logger.debug("Measuring comm_q {} in Y basis".format(comm_q))
-                prgm.apply(INSTR_H, q)
-                prgm.apply(INSTR_S, q)
-                prgm.apply(INSTR_H, q)
-                prgm.apply(INSTR_Z, q)
+                prgm.apply(INSTR_ROT_X, q, angle=-np.pi / 2)
 
             self.basis_choice.append(basis)
 
