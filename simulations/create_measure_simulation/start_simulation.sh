@@ -1,6 +1,4 @@
 #!/bin/bash
-#SBATCH -p fat # requested parition (normal, short, fat, staging, ...)
-#SBATCH -t 5-0:00:00 # wall clock time
 # This script:
 # - creates a new folder <TIMESTAMP>_<OUTPUTDIRNAME>
 # - extracts information about the simulation setup and 
@@ -27,25 +25,6 @@
 # Author: Axel Dahlberg
 
 SIMULATION_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-# relevant files
-runsimulation="$SIMULATION_DIR"/setupsim/perform_single_simulation_run.py
-simdetailsfile="$SIMULATION_DIR"/setupsim/simdetails.ini
-paramcombinationsfile="$SIMULATION_DIR"/setupsim/paramcombinations.json
-configdir="$SIMULATION_DIR"/setupsim/config
-paramsetfile="$SIMULATION_DIR"/setupsim/paramset.csv
-archivejobfile="$SIMULATION_DIR"/readonly/archivejob.sh
-
-# Get simulation details
-# TODO Check that requiered arguments are set
-. "$simdetailsfile"
-
-# get the date and time as a single timestamp in ISO8601 format YYYY-MM-DDTHH:MM:SS+02:00
-timestamp=$(date '+%Y-%m-%dT%H:%M:%S%Z')
-
-# Set the Python Path
-# TODO should we set this here?
-# export PYTHONPATH=$PYTHONPATH:$SIMULATION_DIR
 
 ##################
 # Read arguments #
@@ -116,6 +95,11 @@ case $key in
     shift
     shift
     ;;
+    -sd|--simulation_dir)
+    SIMULATION_DIR="$2"
+    shift
+    shift
+    ;;
 	*)
 	echo "Unknown argument $key"
 	exit 1
@@ -152,6 +136,29 @@ NRCORES=${NRCORES:-'24'}
 MAXTIME=${MAXTIME:-'1:00:00'}
 PARTITION=${PARTITION:-'short'}
 
+
+################
+# Setup things #
+################
+
+# relevant files
+runsimulation="$SIMULATION_DIR"/setupsim/perform_single_simulation_run.py
+simdetailsfile="$SIMULATION_DIR"/setupsim/simdetails.ini
+paramcombinationsfile="$SIMULATION_DIR"/setupsim/paramcombinations.json
+configdir="$SIMULATION_DIR"/setupsim/config
+paramsetfile="$SIMULATION_DIR"/setupsim/paramset.csv
+archivejobfile="$SIMULATION_DIR"/readonly/archivejob.sh
+
+# Get simulation details
+# TODO Check that requiered arguments are set
+. "$simdetailsfile"
+
+# get the date and time as a single timestamp in ISO8601 format YYYY-MM-DDTHH:MM:SS+02:00
+timestamp=$(date '+%Y-%m-%dT%H:%M:%S%Z')
+
+# Set the Python Path
+# TODO should we set this here?
+# export PYTHONPATH=$PYTHONPATH:$SIMULATION_DIR
 
 # logging to the console
 echo $timestamp
