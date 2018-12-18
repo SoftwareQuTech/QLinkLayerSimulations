@@ -794,7 +794,8 @@ def get_data(results_path, max_real_time=None):
             raise ValueError("'results_path={} is not in correct format".format(results_path))
         data_dct = {}
         for entry in os.listdir(results_path):
-            data_dct[entry] = get_data(entry, max_real_time)
+            if entry.endswith(".db"):
+                data_dct[entry] = get_data(os.path.join(results_path, entry), max_real_time)
         return data_dct
 
 
@@ -1065,6 +1066,19 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
                                     save_figs=save_figs, save_output=save_output, analysis_folder=analysis_folder)
                 prnt.print("====================================")
                 prnt.print("")
+
+    # Save the data to json file
+    import pdb
+    pdb.set_trace()
+    data_dct = get_data(results_path=results_path)
+    if os.path.isfile(results_path):
+        data_filename = results_path[:results_path.rfind(".")] + "_all_data.json"
+    elif os.path.isdir(results_path):
+        data_filename = os.path.join(results_path, "all_data.json")
+    else:
+        raise ValueError("results_path {} is not a path to a folder or file")
+    with open(data_filename, 'w') as f:
+        json.dump(data_dct, f, indent=4)
 
 
 def parse_args():
