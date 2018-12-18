@@ -15,11 +15,11 @@ class QuantumMemoryManagement:
 
     def __init__(self, node):
         self.node = node
-        # self.reserved_qubits = [self.qubit_in_use(i) for i in range(self.node.qmem.num_positions)]
-        self.reserved_qubits = [False] * self.node.qmem.num_positions
+        # self.reserved_qubits = [self.qubit_in_use(i) for i in range(self.node.qmemory.num_positions)]
+        self.reserved_qubits = [False] * self.node.qmemory.num_positions
 
     def is_busy(self):
-        return self.node.qmem.busy
+        return self.node.qmemory.busy
 
     def reserve_qubit(self, qid):
         """
@@ -48,7 +48,7 @@ class QuantumMemoryManagement:
         :return: dict of float
             The key are where we're moving to and the entries are move time from qubit ID 'comm_id' to qubit ID 'key'.
         """
-        return self.node.qmem.get_move_times(comm_id=comm_id)
+        return self.node.qmemory.get_move_times(comm_id=comm_id)
 
     def get_correction_delay(self, comm_id):
         """
@@ -57,12 +57,10 @@ class QuantumMemoryManagement:
         :return: float
             The amount of time it takes to apply the z gate to the electron
         """
-        return self.node.qmem.get_instruction_duration(INSTR_Z, [comm_id])
-        # return self.node.qmem.get_operation_time(ZGate(), comm_id)
+        return self.node.qmemory.get_instruction_duration(INSTR_Z, [comm_id])
 
     def get_measurement_delay(self, qubit_id):
-        return self.node.qmem.get_instruction_duration(INSTR_MEASURE, [qubit_id])
-        # return self.node.qmem.get_operation_time(MeasurementOp(), qubit_id)
+        return self.node.qmemory.get_instruction_duration(INSTR_MEASURE, [qubit_id])
 
     def qubit_reserved(self, id):
         """
@@ -72,7 +70,7 @@ class QuantumMemoryManagement:
         :return: bool
             Whether the address is in use or not
         """
-        # return self.node.qmem.in_use(id)
+        # return self.node.qmemory.in_use(id)
         return self.reserved_qubits[id]
 
     def reserve_communication_qubit(self):
@@ -112,8 +110,8 @@ class QuantumMemoryManagement:
             Address of the qubit to free
         """
         self.vacate_qubit(qid=id)
-        if self.node.qmem.position_in_use(id):
-            q = self.node.qmem.pop(id)[0]
+        if self.node.qmemory.position_in_use(id):
+            q = self.node.qmemory.pop(id)[0]
             if q is not None:
                 qapi.discard(q)
             else:
@@ -170,7 +168,7 @@ class QuantumMemoryManagement:
         :return: list of ints
             List of the available communication qubits that can be used
         """
-        comm_qs = self.node.qmem.get_communication_qubit_ids()
+        comm_qs = self.node.qmemory.get_communication_qubit_ids()
         free_comms = []
         for qid in comm_qs:
             # if not self.reserved_qubits[qid] and not self.qubit_in_use(id=qid):
@@ -185,7 +183,7 @@ class QuantumMemoryManagement:
         :return: list of ints
             List of the available storage qubits that can be used
         """
-        storage_qs = self.node.qmem.get_storage_qubit_ids()
+        storage_qs = self.node.qmemory.get_storage_qubit_ids()
         free_storage = []
         for qid in storage_qs:
             # if not self.reserved_qubits[qid] and not self.qubit_in_use(id=qid):

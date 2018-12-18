@@ -429,7 +429,7 @@ class EGPQubErrSequence(EGPDataSequence):
     """
 
     def get_column_names(self):
-        return ["Timestamp", "Z_err", "X_err", "Success"]
+        return ["Timestamp", "Z_err", "X_err", "Y_err", "Success"]
 
     def getData(self, time, source=None):
         # Get scenarios

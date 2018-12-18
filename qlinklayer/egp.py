@@ -638,7 +638,8 @@ class NodeCentricEGP(EGP):
 
         # Check if we can achieve the minimum fidelity
         if self.feu.get_max_fidelity() < creq.min_fidelity:
-            logger.error("Requested fidelity is too high to be satisfied")
+            logger.error("Requested fidelity {} is too high to be satisfied, maximum achievable is {}"
+                         .format(creq.min_fidelity, self.feu.get_max_fidelity()))
             return self.ERR_UNSUPP
 
         # Check if we can satisfy the request within the given time frame
@@ -945,7 +946,7 @@ class NodeCentricEGP(EGP):
                 prgm.apply(INSTR_H, q)
             else:
                 logger.debug("Measuring comm_q {} in Y basis".format(comm_q))
-                prgm.apply(INSTR_ROT_X, q, angle=-np.pi / 2)
+                prgm.apply(INSTR_ROT_X, q, angle=np.pi / 2)
 
             self.basis_choice.append(basis)
 

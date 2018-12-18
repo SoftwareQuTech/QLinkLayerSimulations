@@ -875,12 +875,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpB.mhp.stop()
 
         # Get the start time of the generation attempts
-        mhp_start = egpA.scheduler.get_schedule_cycle(alice_request) * egpA.mhp.timeStep
+        mhp_start = egpA.scheduler.get_schedule_cycle(alice_request) * egpA.mhp.time_step
         sim_run(max_time + 1)
 
         # Calculate the amount of time a full generation cycle takes
-        cycles_per_gen = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.timeStep)
-        gen_time = cycles_per_gen * egpA.mhp.timeStep
+        cycles_per_gen = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.time_step)
+        gen_time = cycles_per_gen * egpA.mhp.time_step
 
         # Calculate the number of errors we should have received
         num_timeouts = int((max_time - mhp_start) // gen_time)
@@ -998,7 +998,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         bob_pairs = 2
 
         # Use a max time that is a multiple of the mhp timestep and allows the request to begin processing
-        max_time = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.timeStep) * egpA.mhp.timeStep * 5
+        max_time = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.time_step) * egpA.mhp.time_step * 5
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
                                                                         min_fidelity=0.5, max_time=max_time,
                                                                         purpose_id=1, priority=10)
