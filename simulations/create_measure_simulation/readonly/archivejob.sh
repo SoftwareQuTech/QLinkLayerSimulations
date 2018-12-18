@@ -7,14 +7,15 @@
 # https://userinfo.surfsara.nl/systems/cartesius/usage/batch-usage#heading16
 
 # change directory to the temporary directory of the computation job
-JOB_ID=$1
-TMP_DIR=$2
-RESULT_DIR=$3
-POST_PROC=$4
-timestamp=$5
-OUTPUTDIRNAME=$6
-paramsetfile=$7
-RUNONCLUSTER=$8
+SIMULATION_DIR=$1
+JOB_ID=$2
+TMP_DIR=$3
+RESULT_DIR=$4
+POST_PROC=$5
+timestamp=$6
+OUTPUTDIRNAME=$7
+paramsetfile=$8
+RUNONCLUSTER=$9
 
 # Concatenate output CSV files and move to project space
 mkdir -p $RESULT_DIR
@@ -22,7 +23,7 @@ mkdir -p $RESULT_DIR
 mv $TMP_DIR/* $RESULT_DIR
 
 # Move the slurm file
-mv "${SIMULATION_DIR}/slurm-${JOB_ID}.out" $RESULT_DIR
+mv "${SIMULATION_DIR}/slurm-${JOB_ID}"*".out" $RESULT_DIR
 
 
 # Cleanup
@@ -33,7 +34,7 @@ if [ "$POST_PROC" == "y" ]; then
     post_proc_file="${SIMULATION_DIR}/readonly/post_processing.sh"
 
     # Note that this script will only be called if we are on the cluster
-    sbatch --out="${RESULT_DIR}/post_processing_log.out" $post_proc_file $RESULT_DIR $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
+    sbatch --out="${RESULT_DIR}/post_processing_log.out" $post_proc_file $SIMULATION_DIR $RESULT_DIR $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
 else
     # Move to folder to not include absolute
     cd $SIMULATION_DIR

@@ -2,11 +2,12 @@
 #SBATCH -p normal
 #SBATCH -t 24:00:00
 
-RESULT_DIR=$1
-timestamp=$2
-paramsetfile=$3
-RUNONCLUSTER=$4
-OUTPUTDIRNAME=$5
+SIMULATION_DIR=$1
+RESULT_DIR=$2
+timestamp=$3
+paramsetfile=$4
+RUNONCLUSTER=$5
+OUTPUTDIRNAME=$6
 
 ############################
 # Create a tmp CSV file with

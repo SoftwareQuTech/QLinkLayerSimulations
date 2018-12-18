@@ -8,7 +8,7 @@ import SimulaQron.cqc
 #######################
 
 description_string = "Simulation of EGP under CREATE+measure scenario"
-number_of_runs = 1
+number_of_runs = 96
 outputdirname = "CREATE_and_measure"
 
 # Get paths to QLinkLayer and SimulaQron folders
@@ -47,26 +47,26 @@ config_to_p_succ = {
 
 # Create a dictionary that relates the name of the simulation to the config file and req freq factor
 name_to_scenario = {
-    "NoNoise_NC_NC_LRF": ("no_noise/no_noise.json", 0.2),
-    "NoNoise_NC_NC_HRF": ("no_noise/no_noise.json", 0.8),
-    "NoLoss_NC_NC_LRF": ("no_noise/no_losses.json", 0.2),
-    "NoLoss_NC_NC_HRF": ("no_noise/no_losses.json", 0.8),
-    "Lab_NC_NC_LRF": ("lab/networks_no_cavity_no_conversion.json", 0.2),
-    "Lab_NC_NC_HRF": ("lab/networks_no_cavity_no_conversion.json", 0.8),
-    "Lab_NC_WC_LRF": ("lab/networks_no_cavity_with_conversion.json", 0.2),
-    "Lab_NC_WC_HRF": ("lab/networks_no_cavity_with_conversion.json", 0.8),
-    "Lab_WC_NC_LRF": ("lab/networks_with_cavity_no_conversion.json", 0.2),
-    "Lab_WC_NC_HRF": ("lab/networks_with_cavity_no_conversion.json", 0.8),
-    "Lab_WC_WC_LRF": ("lab/networks_with_cavity_with_conversion.json", 0.2),
-    "Lab_WC_WC_HRF": ("lab/networks_with_cavity_with_conversion.json", 0.8),
-    "QLink_NC_NC_LRF": ("qlink/networks_no_cavity_no_conversion.json", 0.2),
-    "QLink_NC_NC_HRF": ("qlink/networks_no_cavity_no_conversion.json", 0.8),
-    "QLink_NC_WC_LRF": ("qlink/networks_no_cavity_with_conversion.json", 0.2),
-    "QLink_NC_WC_HRF": ("qlink/networks_no_cavity_with_conversion.json", 0.8),
-    "QLink_WC_NC_LRF": ("qlink/networks_with_cavity_no_conversion.json", 0.2),
-    "QLink_WC_NC_HRF": ("qlink/networks_with_cavity_no_conversion.json", 0.8),
-    "QLink_WC_WC_LRF": ("qlink/networks_with_cavity_with_conversion.json", 0.2),
-    "QLink_WC_WC_HRF": ("qlink/networks_with_cavity_with_conversion.json", 0.8)
+    # "NoNoise_NC_NC_LRF": ("no_noise/no_noise.json", 0.2),
+    "NoNoise_NC_NC_HRF": ("no_noise/no_noise.json", 0.8)
+    # "NoLoss_NC_NC_LRF": ("no_noise/no_losses.json", 0.2),
+    # "NoLoss_NC_NC_HRF": ("no_noise/no_losses.json", 0.8),
+    # "Lab_NC_NC_LRF": ("lab/networks_no_cavity_no_conversion.json", 0.2),
+    # "Lab_NC_NC_HRF": ("lab/networks_no_cavity_no_conversion.json", 0.8),
+    # "Lab_NC_WC_LRF": ("lab/networks_no_cavity_with_conversion.json", 0.2),
+    # "Lab_NC_WC_HRF": ("lab/networks_no_cavity_with_conversion.json", 0.8),
+    # "Lab_WC_NC_LRF": ("lab/networks_with_cavity_no_conversion.json", 0.2),
+    # "Lab_WC_NC_HRF": ("lab/networks_with_cavity_no_conversion.json", 0.8),
+    # "Lab_WC_WC_LRF": ("lab/networks_with_cavity_with_conversion.json", 0.2),
+    # "Lab_WC_WC_HRF": ("lab/networks_with_cavity_with_conversion.json", 0.8),
+    # "QLink_NC_NC_LRF": ("qlink/networks_no_cavity_no_conversion.json", 0.2),
+    # "QLink_NC_NC_HRF": ("qlink/networks_no_cavity_no_conversion.json", 0.8),
+    # "QLink_NC_WC_LRF": ("qlink/networks_no_cavity_with_conversion.json", 0.2),
+    # "QLink_NC_WC_HRF": ("qlink/networks_no_cavity_with_conversion.json", 0.8),
+    # "QLink_WC_NC_LRF": ("qlink/networks_with_cavity_no_conversion.json", 0.2),
+    # "QLink_WC_NC_HRF": ("qlink/networks_with_cavity_no_conversion.json", 0.8),
+    # "QLink_WC_WC_LRF": ("qlink/networks_with_cavity_with_conversion.json", 0.2),
+    # "QLink_WC_WC_HRF": ("qlink/networks_with_cavity_with_conversion.json", 0.8)
 }
 
 # create paramcombinations
@@ -80,7 +80,7 @@ opt_params = {
     "num_requests": 0,
     "max_sim_time": 0,
     "max_wall_time": 4 * 24 * 3600,
-    "max_mhp_cycle": 80000000,
+    "max_mhp_cycle": 80,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
