@@ -175,30 +175,13 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation(results_path, name=None, config=None, create_probA=1, create_probB=0, min_pairs=1, max_pairs=1,
+def run_simulation(results_path, sim_dir, name=None, config=None, create_probA=1, create_probB=0, min_pairs=1, max_pairs=1,
                    tmax_pair=0,
                    request_cycle=0, num_requests=1, max_sim_time=float('inf'),
                    max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, measure_directly=False,
                    t0=0, t_cycle=0,
                    alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True,
                    collect_queue_data=False):
-
-    sim_dir_env = "SIMULATION_DIR"
-
-    # Check that the simulation path is set
-    if sim_dir_env not in os.environ:
-        print("The environment variable {} must be set to the path to the simulation folder"
-              "before running this script!".format(sim_dir_env))
-        sys.exit()
-    else:
-        sim_dir = os.getenv(sim_dir_env)
-        if not os.path.isdir(sim_dir):
-            print("The environment variable {} is not a path to a folder.")
-            sys.exit()
-
-    # Check that sim_dir ends with '/'
-    if not sim_dir[-1] == '/':
-        sim_dir += "/"
 
     # Save additional data
     if save_additional_data:

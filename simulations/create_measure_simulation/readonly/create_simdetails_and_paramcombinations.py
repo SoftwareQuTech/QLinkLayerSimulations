@@ -16,22 +16,8 @@ import easysquid
 ######################################################################################
 
 def get_sim_dir():
-    sim_dir_env = "SIMULATION_DIR"
-
-    # Check that the simulation path is set
-    if sim_dir_env not in os.environ:
-        print("The environment variable {} must be set to the path to the simulation folder"
-              "before running this script!".format(sim_dir_env))
-        sys.exit()
-    else:
-        sim_dir = os.getenv(sim_dir_env)
-        if not os.path.isdir(sim_dir):
-            print("The environment variable {} is not a path to a folder.")
-            sys.exit()
-
-    # Check that sim_dir ends with '/'
-    if not sim_dir[-1] == '/':
-        sim_dir += "/"
+    path_to_here = os.path.dirname(os.path.abspath(__file__))
+    sim_dir = "/".join(path_to_here.split("/")[:-1]) + "/"
 
     return sim_dir
 
