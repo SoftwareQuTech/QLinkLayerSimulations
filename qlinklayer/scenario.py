@@ -218,6 +218,36 @@ class EGPSimulationScenario(TimedProtocol):
         """
         pass
 
+    def get_ok(self, remove=True):
+        """
+        Returns the oldest ok message that we received during the simulation
+        :param remove: bool
+            Whether to remove the ok from the scenario's storage
+        :return: tuple
+            Ok information
+        """
+        ok = self.ok_storage.pop(0) if remove else self.ok_storage[0]
+        return ok
+
+    def get_error(self, remove=True):
+        """
+        Returns the oldest error that we received during the simulation
+        :param remove: bool
+            Whether to remove the error data from the scenario's storage
+        """
+        err = self.err_storage.pop(0) if remove else self.err_storage[0]
+        return err
+
+    def _err_callback(self, result):
+        """
+        Collects the errors from the EGP and stores them for data collection
+        :param result: tuple
+            Contains the error information from the EGP
+        """
+        now = sim_time()
+        logger.error("{} got error {} at time {}".format(self.node.nodeID, result, now))
+        self.err_storage.append(result)
+
 
 class MeasureAfterSuccessScenario(EGPSimulationScenario):
     def __init__(self, egp, request_cycle, request_prob=1, min_pairs=1, max_pairs=1, min_fidelity=0.2, tmax_pair=0,
@@ -351,17 +381,6 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         else:
             raise RuntimeError("Unknown state formalism")
 
-    def get_ok(self, remove=True):
-        """
-        Returns the oldest ok message that we received during the simulation
-        :param remove: bool
-            Whether to remove the ok from the scenario's storage
-        :return: tuple
-            Ok information
-        """
-        ok = self.ok_storage.pop(0) if remove else self.ok_storage[0]
-        return ok
-
     def get_measurement(self, remove=True):
         """
         Returns the oldest measurement result that we received during the simulation
@@ -370,25 +389,6 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         """
         measurement = self.measurement_results.pop(0) if remove else self.measurement_results[0]
         return measurement
-
-    def _err_callback(self, result):
-        """
-        Collects the errors from the EGP and stores them for data collection
-        :param result: tuple
-            Contains the error information from the EGP
-        """
-        now = sim_time()
-        logger.error("{} got error {} at time {}".format(self.node.nodeID, result, now))
-        self.err_storage.append(result)
-
-    def get_error(self, remove=True):
-        """
-        Returns the oldest error that we received during the simulation
-        :param remove: bool
-            Whether to remove the error data from the scenario's storage
-        """
-        err = self.err_storage.pop(0) if remove else self.err_storage[0]
-        return err
 
 
 class MeasureBeforeSuccessScenario(EGPSimulationScenario):
@@ -485,17 +485,6 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
 
         return create_id, ent_id, meas_out, basis, f_goodness, t_create
 
-    def get_ok(self, remove=True):
-        """
-        Returns the oldest ok message that we received during the simulation
-        :param remove: bool
-            Whether to remove the ok from the scenario's storage
-        :return: tuple
-            Ok information
-        """
-        ok = self.ok_storage.pop(0) if remove else self.ok_storage[0]
-        return ok
-
     def get_measurement(self, ent_id=None, remove=True):
         """
         Returns the measurement result corresponding to the given entanglement id.
@@ -521,22 +510,3 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
                 return ent_id, meas_data
             except KeyError:
                 return None, None
-
-    def _err_callback(self, result):
-        """
-        Collects the errors from the EGP and stores them for data collection
-        :param result: tuple
-            Contains the error information from the EGP
-        """
-        now = sim_time()
-        logger.error("{} got error {} at time {}".format(self.node.nodeID, result, now))
-        self.err_storage.append(result)
-
-    def get_error(self, remove=True):
-        """
-        Returns the oldest error that we received during the simulation
-        :param remove: bool
-            Whether to remove the error data from the scenario's storage
-        """
-        err = self.err_storage.pop(0) if remove else self.err_storage[0]
-        return err
