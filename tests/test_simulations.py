@@ -13,7 +13,7 @@ from simulations.create_measure_simulation.setupsim import perform_single_simula
 from simulations import analysis_sql_data
 from simulations.create_measure_simulation.setupsim import set_simdetails_and_paramcombinations
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.ERROR)
 
 
 class TestSimulations(unittest.TestCase):
@@ -142,16 +142,16 @@ class TestSimulations(unittest.TestCase):
     def test6_analyse_multi_case(self):
         nr_of_add_data_files = len(
             glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*additional_data.json")))
-        self.assertEqual(nr_of_add_data_files, 20)
+        self.assertEqual(nr_of_add_data_files, 16)
 
         nr_of_data_files = len(glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*.db")))
-        self.assertEqual(nr_of_data_files, 20)
+        self.assertEqual(nr_of_data_files, 16)
 
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
 
         nr_of_analysis_files = len(
             glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*analysis_output.txt")))
-        self.assertEqual(nr_of_analysis_files, 20)
+        self.assertEqual(nr_of_analysis_files, 16)
 
 
 if __name__ == '__main__':
