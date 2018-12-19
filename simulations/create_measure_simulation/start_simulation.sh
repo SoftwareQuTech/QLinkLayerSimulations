@@ -252,17 +252,27 @@ fi
 ##################
 
 if [ "$RUNONCLUSTER" == 'y' ]; then
-    # TODO how to get the correct number of cores per node
-    cores_per_node=24
-    if [ "$NRCORES" -gt "$cores_per_node" ]; then
-        # Create paramset files for each job in the array
-        num_nodes=$(python3 "${SIMULATION_DIR}/readonly/create_paramsets_for_array_job.py" --total_cores $NRCORES --cores_per_node $cores_per_node --paramsetfile $paramsetdestination)
 
-        # Run the array of jobs
-        sbatch --array=1-$num_nodes -n $cores_per_node -t $MAXTIME -p $PARTITION readonly/run_simulation.sh -rd $resultsdir -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc $RUNONCLUSTER -pp $POST_PROC -lai $num_nodes
-    else
-        sbatch -n $NRCORES -t $MAXTIME -p $PARTITION readonly/run_simulation.sh -rd $resultsdir -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc $RUNONCLUSTER -pp $POST_PROC
-    fi
+    # TODO how to get the correct number of cores per node
+    # cores_per_node=24
+    # if [ "$NRCORES" -gt "$cores_per_node" ]; then
+    #     # Create paramset files for each job in the array
+    #     num_nodes=$(python3 "${SIMULATION_DIR}/readonly/create_paramsets_for_array_job.py" --total_cores $NRCORES --cores_per_node $cores_per_node --paramsetfile $paramsetdestination)
+
+    #     # Run the array of jobs
+    #     sbatch --array=1-$num_nodes -n $cores_per_node -t $MAXTIME -p $PARTITION readonly/run_simulation.sh -rd $resultsdir -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc $RUNONCLUSTER -pp $POST_PROC -lai $num_nodes
+    # else
+    sbatch -n $NRCORES -t $MAXTIME -p $PARTITION readonly/parallelize_simulation.sh -rd $resultsdir -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -pp $POST_PROC -p $PARTITION
+    # fi
 else
-    sh readonly/run_simulation.sh -rd $resultsdir -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc $RUNONCLUSTER -pp $POST_PROC
+    echo "in start simulation ${resultsdir}"
+    sh readonly/run_simulation.sh -rd $resultsdir -td $resultsdir -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc $RUNONCLUSTER -pp $POST_PROC
+fi
+
+# Check if we should do post-processing (for cluster this is done after the archiving job)
+if ! [ "$RUNONCLUSTER" == 'y' ]; then
+    if [ "$POST_PROC" == 'y' ]; then
+        post_proc_file="${SIMULATION_DIR}/readonly/post_processing.sh"
+        $post_proc_file $SIMULATION_DIR $resultsdir $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
+    fi
 fi

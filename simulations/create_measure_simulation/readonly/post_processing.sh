@@ -1,6 +1,4 @@
 #!/bin/bash
-#SBATCH -p normal
-#SBATCH -t 24:00:00
 
 SIMULATION_DIR=$1
 RESULT_DIR=$2

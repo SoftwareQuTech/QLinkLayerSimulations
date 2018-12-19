@@ -15,7 +15,7 @@ POST_PROC=$5
 timestamp=$6
 OUTPUTDIRNAME=$7
 paramsetfile=$8
-RUNONCLUSTER=$9
+PARTITION=$9
 
 # Concatenate output CSV files and move to project space
 mkdir -p $RESULT_DIR
@@ -33,8 +33,14 @@ rmdir $TMP_DIR
 if [ "$POST_PROC" == "y" ]; then
     post_proc_file="${SIMULATION_DIR}/readonly/post_processing.sh"
 
+    if [ "$PARTITION" == "short" ]; then
+        MAXTIME=1:00:00
+    else
+        MAXTIME=24:00:00
+    fi
+
     # Note that this script will only be called if we are on the cluster
-    sbatch --out="${RESULT_DIR}/post_processing_log.out" $post_proc_file $SIMULATION_DIR $RESULT_DIR $timestamp $paramsetfile $RUNONCLUSTER $OUTPUTDIRNAME
+    sbatch -p $PARTITION -t $MAXTIME --out="${RESULT_DIR}/post_processing_log.out" $post_proc_file $SIMULATION_DIR $RESULT_DIR $timestamp $paramsetfile y $OUTPUTDIRNAME
 else
     # Move to folder to not include absolute
     cd $SIMULATION_DIR
