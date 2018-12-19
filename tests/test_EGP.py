@@ -875,15 +875,19 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpB.mhp.stop()
 
         # Get the start time of the generation attempts
-        mhp_start = egpA.scheduler.get_schedule_cycle(alice_request) * egpA.mhp.time_step
+        sched_cycle = egpA.scheduler.get_schedule_cycle(alice_request)
+        timeout_cycle = 910
         sim_run(max_time + 1)
 
         # Calculate the amount of time a full generation cycle takes
         cycles_per_gen = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.time_step)
         gen_time = cycles_per_gen * egpA.mhp.time_step
+        start_cycle = sched_cycle + (cycles_per_gen - (sched_cycle % cycles_per_gen))
+        mhp_start = start_cycle * egpA.mhp.time_step
+        mhp_end = timeout_cycle * egpA.mhp.time_step
 
         # Calculate the number of errors we should have received
-        num_timeouts = int((max_time - mhp_start) // gen_time)
+        num_timeouts = int((mhp_end - mhp_start) // gen_time)
 
         # Assert that there were a few entanglement attempts before timing out the request
         expected_err_mhp = egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER
