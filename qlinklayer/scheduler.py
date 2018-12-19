@@ -789,6 +789,7 @@ class StrictPriorityRequestScheduler(Scheduler):
         :param queue_item: obj `~qlinklayer.localQueue._LocalQueueItem`
             The local queue item
         """
+        logger.debug("Handling item timeout")
         request = queue_item.request
         aid = queue_item.qid, queue_item.seq
         self.clear_request(aid)

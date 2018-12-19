@@ -15,7 +15,7 @@ from qlinklayer.scenario import EGPSimulationScenario
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.WARNING)
 
 
 class IncreasMHPCycleProtocol(TimedProtocol):
