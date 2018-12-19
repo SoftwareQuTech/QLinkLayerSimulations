@@ -456,6 +456,95 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Check the entangled pairs, ignore communication qubit
         self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
 
+    def test_asymmetric_mixed_requests(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(alice, bob, connected=False, accept_all=True)
+
+        egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
+        dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
+        mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=0.02, lengthB=0.03,
+                                                    delay_A=[0.02e9 / 200000, 0.04e9 / 200000], use_time_window=True)
+
+        egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
+
+        # Schedule egp CREATE commands mid simulation
+        sim_scheduler = SimulationScheduler()
+        alice_num_pairs = 1
+        alice_num_bits = 255
+        bob_num_pairs = 2
+        bob_num_bits = 255
+        alice_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                            num_pairs=alice_num_pairs, min_fidelity=0.5,
+                                                                            max_time=0, purpose_id=1, priority=10)
+
+        alice_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                             num_pairs=alice_num_bits, min_fidelity=0.5,
+                                                                             max_time=0, purpose_id=1, priority=10,
+                                                                             measure_directly=True)
+
+        bob_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_pairs,
+                                                                          min_fidelity=0.9, max_time=0,
+                                                                          purpose_id=2, priority=2)
+
+        bob_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
+                                                                           min_fidelity=0.9, max_time=0,
+                                                                           purpose_id=2, priority=2,
+                                                                           measure_directly=True)
+
+        alice_scheduled_epr = partial(egpA.create, cqc_request_raw=alice_request_epr)
+        alice_scheduled_bits = partial(egpA.create, cqc_request_raw=alice_request_bits)
+        bob_scheduled_epr = partial(egpB.create, cqc_request_raw=bob_request_epr)
+        bob_scheduled_bits = partial(egpB.create, cqc_request_raw=bob_request_bits)
+
+        # Schedule a sequence of various create requests
+        sim_scheduler.schedule_function(func=alice_scheduled_epr, t=0)
+        sim_scheduler.schedule_function(func=bob_scheduled_bits, t=2.5)
+        sim_scheduler.schedule_function(func=bob_scheduled_epr, t=5)
+        sim_scheduler.schedule_function(func=alice_scheduled_bits, t=7.5)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(100000)
+        self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
+
+        # Check the generated bits
+        correlated_measurements = defaultdict(int)
+        total_measurements = defaultdict(int)
+        for resA, resB in zip(self.alice_results, self.bob_results):
+            self.assertEqual(resA[0], resB[0])
+            if resA[0] == EntInfoCreateKeepHeader.type:
+                continue
+            _, a_create, a_id, a_m, a_basis, _, a_t = resA
+            _, b_create, b_id, b_m, b_basis, _, b_t = resB
+            self.assertEqual(a_create, b_create)
+            self.assertEqual(a_id, b_id)
+            self.assertEqual(a_t, b_t)
+
+            if a_basis == b_basis:
+                total_measurements[a_basis] += 1
+                if a_m == b_m:
+                    correlated_measurements[a_basis] += 1
+
+        # Assume basis == 0 -> Z and basis == 1 -> X
+        alpha = egpA.mhp.alpha
+        expected_z = 1 - alpha / (4 - 3 * alpha)
+        actual_z = correlated_measurements[0] / total_measurements[0]
+        expected_x = (8 - 7 * alpha) / (8 - 6 * alpha)
+        actual_x = correlated_measurements[1] / total_measurements[1]
+        expected_y = (8 - 7 * alpha) / (8 - 6 * alpha)
+        actual_y = correlated_measurements[2] / total_measurements[1]
+
+        # Allow a tolerance of 10%
+        tolerance = 0.1
+        self.assertGreaterEqual(actual_z, expected_z - tolerance)
+        self.assertGreaterEqual(actual_x, expected_x - tolerance)
+        self.assertGreaterEqual(actual_y, expected_y - tolerance)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
+
     def test_priority_mixed_requests(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
         egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=4,
