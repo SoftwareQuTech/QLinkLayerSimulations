@@ -742,7 +742,6 @@ class NodeCentricEGP(EGP):
             # Check if an error occurred while processing a request
             if proto_err:
                 logger.error("Protocol error occured in MHP: {}".format(proto_err))
-                self.issue_err(err=proto_err)
                 self._handle_mhp_err(result)
                 return
 
@@ -829,6 +828,9 @@ class NodeCentricEGP(EGP):
                 local_aid = aidA if self.node.nodeID == self.mhp.conn.nodeA.nodeID else aidB
             else:
                 local_aid = aid
+
+            if self.scheduler.has_request(local_aid):
+                self.issue_err(err=proto_err)
 
             # Check if we may have lost a message
             if mhp_seq >= self.expected_seq:

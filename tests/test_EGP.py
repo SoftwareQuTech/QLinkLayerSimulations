@@ -845,16 +845,13 @@ class TestNodeCentricEGP(unittest.TestCase):
         pm.addEvent(source=egpB, evtType=egpB._EVT_ERROR, ds=bob_error_counter)
 
         # Schedule egp CREATE commands mid simulation
-        sim_scheduler = SimulationScheduler()
         max_time = 10
-        alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
-                                                                        min_fidelity=0.5, max_time=max_time,
-                                                                        purpose_id=1, priority=10)
+        raw_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=1,
+                                                                      min_fidelity=0.5, max_time=max_time,
+                                                                      purpose_id=1, priority=10)
 
-        alice_scheduled_create = partial(egpA.create, cqc_request_raw=alice_request)
-        # Schedule a sequence of various create requests
-        t0 = 0
-        sim_scheduler.schedule_function(func=alice_scheduled_create, t=t0)
+        request = egpA._get_egp_request(raw_request)
+        egpA.create(cqc_request_raw=raw_request)
 
         # Construct a network for the simulation
         nodes = [
@@ -875,31 +872,26 @@ class TestNodeCentricEGP(unittest.TestCase):
         egpB.mhp.stop()
 
         # Get the start time of the generation attempts
-        sched_cycle = egpA.scheduler.get_schedule_cycle(alice_request)
-        timeout_cycle = 910
+        sched_cycle = egpA.scheduler.get_schedule_cycle(request)
+        cycles_per_gen = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.time_step)
+        timeout_cycle = egpA.scheduler.get_timeout_cycle(request) - (cycles_per_gen - 1)
         sim_run(max_time + 1)
 
         # Calculate the amount of time a full generation cycle takes
-        cycles_per_gen = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.time_step)
-        gen_time = cycles_per_gen * egpA.mhp.time_step
-        start_cycle = sched_cycle + (cycles_per_gen - (sched_cycle % cycles_per_gen))
-        mhp_start = start_cycle * egpA.mhp.time_step
-        mhp_end = timeout_cycle * egpA.mhp.time_step
+        offset = (cycles_per_gen - (sched_cycle % cycles_per_gen)) % cycles_per_gen
+        start_cycle = sched_cycle + offset
 
         # Calculate the number of errors we should have received
-        num_timeouts = int((mhp_end - mhp_start) // gen_time)
+        num_timeouts = int((timeout_cycle - start_cycle) // cycles_per_gen)
 
         # Assert that there were a few entanglement attempts before timing out the request
         expected_err_mhp = egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER
         expected_err_egp = egpA.ERR_TIMEOUT
 
         # Unresponsive error two times followed by a timeout of the request
-        expected_results = [(expected_err_mhp, 0)] * num_timeouts + [(expected_err_egp, alice_request)]
+        expected_results = [(expected_err_mhp, 0)] * num_timeouts + [(expected_err_egp, 0)]
         self.assertEqual(len(self.alice_results), len(expected_results))
-        self.assertEqual(self.alice_results[:num_timeouts], expected_results[:num_timeouts])
-
-        err, _ = self.alice_results[-1]
-        self.assertEqual(err, expected_err_egp)
+        self.assertEqual(self.alice_results, expected_results)
 
         # Verify that events were tracked
         self.assertEqual(alice_error_counter.num_tested_items, count_errors(self.alice_results))
