@@ -1094,6 +1094,8 @@ class NodeCentricEGP(EGP):
     def get_measurement_outcome(self, creq):
         """
         Returns the oldest measurement outcome along with its basis.
+        :param creq: obj ~qlinklayer.SchedulerRequest
+            The request to construct the okay for
         :return: tuple of int, int
             The measurement outcome and basis in which it was measured
         """
@@ -1106,7 +1108,7 @@ class NodeCentricEGP(EGP):
         Crafts an OK to issue to higher layers depending on the current generation.  If measure_directly we construct
         and ent_id that excludes the logical_id.  The ok for a measure_directly request contains the measurement
         outcome and basis.
-        :param creq: obj ~qlinklayer.EGPRequest
+        :param creq: obj ~qlinklayer.SchedulerRequest
             The request to construct the okay for
         :param mhp_seq: int
             MHP Sequence corresponding to the communication that signaled success for this generation
@@ -1171,7 +1173,7 @@ class NodeCentricEGP(EGP):
 
         elif type == EntInfoMeasDirectHeader.type:
             cqc_header = CQCHeader()
-            length = CQC_XTRA_QUBIT_HDR_LENGTH + ENT_INFO_MEAS_DIRECT_LENGTH
+            length = ENT_INFO_MEAS_DIRECT_LENGTH
             cqc_header.setVals(version=CQC_VERSION, tp=CQC_TP_EPR_OK, app_id=0, length=length)
 
             creatorID, otherID, mhp_seq = ent_id
