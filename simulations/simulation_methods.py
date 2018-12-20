@@ -12,7 +12,7 @@ from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreate
     EGPQubErrSequence, EGPLocalQueueSequence, AttemptCollector
 from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
-from qlinklayer.scenario import MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
+from qlinklayer.specific_scenarios import MixedScenario
 from simulations._get_configs_from_easysquid import NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
 
 # Here we add an entry into the Connection structure in Easysquid Easynetwork to give us access to load up configs
@@ -38,8 +38,7 @@ def setup_data_directory(dir_path):
         pass
 
 
-def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, measure_directly,
-                          collect_queue_data=False):
+def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, collect_queue_data=False):
     # Create simulation data directory (simple timestamp) containing data collected by the datasequences
     setup_data_directory(dir_path)
 
@@ -65,12 +64,11 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
     ok_ds = EGPOKSequence(name="EGP OKs", attempt_collectors=attempt_collectors, dbFile=data_file,
                           maxSteps=collection_duration)
 
-    if measure_directly:
-        # DataSequence for QubErr collection
-        quberr_ds = EGPQubErrSequence(name="EGP QubErr", dbFile=data_file, maxSteps=collection_duration)
-    else:
-        # DataSequence for entangled state collection
-        state_ds = EGPStateSequence(name="EGP Qubit States", dbFile=data_file, maxSteps=collection_duration)
+    # DataSequence for QubErr collection
+    quberr_ds = EGPQubErrSequence(name="EGP QubErr", dbFile=data_file, maxSteps=collection_duration)
+
+    # DataSequence for entangled state collection
+    state_ds = EGPStateSequence(name="EGP Qubit States", dbFile=data_file, maxSteps=collection_duration)
 
     if collect_queue_data:
         # DataSequence for local queues
@@ -83,19 +81,16 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=create_ds)
-    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=ok_ds)
-    if not measure_directly:
-        pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_OK, ds=state_ds)
+    pm.addEventAny([scenarioA] * 2, [scenarioA._EVT_CK_OK, scenarioA._EVT_MD_OK], ds=ok_ds)
+    pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CK_OK, ds=state_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_ERR, ds=err_ds)
 
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=create_ds)
-    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=ok_ds)
-    if not measure_directly:
-        pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_OK, ds=state_ds)
+    pm.addEventAny([scenarioB] * 2, [scenarioB._EVT_CK_OK, scenarioA._EVT_MD_OK], ds=ok_ds)
+    pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CK_OK, ds=state_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
 
-    if measure_directly:
-        pm.addEventAny([scenarioA, scenarioB], [scenarioA._EVT_OK, scenarioB._EVT_OK], ds=quberr_ds)
+    pm.addEventAny([scenarioA, scenarioB], [scenarioA._EVT_MD_OK, scenarioB._EVT_MD_OK], ds=quberr_ds)
 
     if collect_queue_data:
         for qid in range(len(lqAs)):
@@ -107,40 +102,25 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, m
             pm.addEvent(lq, lq._EVT_ITEM_ADDED, ds=lqB_ds[qid])
             pm.addEvent(lq, lq._EVT_ITEM_REMOVED, ds=lqB_ds[qid])
 
-    if measure_directly:
-        collectors = [create_ds, ok_ds, quberr_ds, err_ds]
-    else:
-        collectors = [create_ds, ok_ds, state_ds, err_ds]
+    collectors = [create_ds, ok_ds, state_ds, quberr_ds, err_ds]
     if collect_queue_data:
         collectors += lqA_ds + lqB_ds
     return collectors
 
 
-def create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs, max_pairs, tmax_pair,
-                     request_cycle, num_requests, measure_directly,
-                     additional_data=None):
+def create_scenarios(egpA, egpB, request_cycle, request_paramsA, request_paramsB, additional_data=None):
     if request_cycle == 0:
         # Use t_cycle of MHP for the request cycle
         request_cycle = egpA.mhp.conn.t_cycle
 
     if additional_data:
         additional_data["request_t_cycle"] = request_cycle
-        additional_data["create_request_probA"] = create_probA
-        additional_data["create_request_probB"] = create_probB
+        additional_data["request_paramsA"] = request_paramsA
+        additional_data["request_paramsB"] = request_paramsB
 
     # Set up the Measure Immediately scenarios at nodes alice and bob
-    other_request_info = {"min_pairs": min_pairs, "max_pairs": max_pairs, "tmax_pair": tmax_pair,
-                          "num_requests": num_requests}
-    if measure_directly:
-        alice_scenario = MeasureBeforeSuccessScenario(egp=egpA, request_cycle=request_cycle, request_prob=create_probA,
-                                                      **other_request_info)
-        bob_scenario = MeasureBeforeSuccessScenario(egp=egpB, request_cycle=request_cycle, request_prob=create_probB,
-                                                    **other_request_info)
-    else:
-        alice_scenario = MeasureAfterSuccessScenario(egp=egpA, request_cycle=request_cycle, request_prob=create_probA,
-                                                     **other_request_info)
-        bob_scenario = MeasureAfterSuccessScenario(egp=egpB, request_cycle=request_cycle, request_prob=create_probB,
-                                                   **other_request_info)
+    alice_scenario = MixedScenario(egpA, request_cycle, request_paramsA)
+    bob_scenario = MixedScenario(egpB, request_cycle, request_paramsB)
     alice_scenario.start()
     bob_scenario.start()
 
@@ -176,11 +156,10 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, num_priorities=1, e
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation(results_path, sim_dir, name=None, config=None, create_probA=1, create_probB=0, min_pairs=1,
-                   max_pairs=1, tmax_pair=0, num_priorities=1, egp_queue_weights=None, request_cycle=0, num_requests=1,
-                   max_sim_time=float('inf'), max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False,
-                   measure_directly=False, t0=0, t_cycle=0, alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60,
-                   save_additional_data=True, collect_queue_data=False):
+def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name=None, config=None, num_priorities=1,
+                   egp_queue_weights=None, request_cycle=0, max_sim_time=float('inf'), max_wall_time=float('inf'),
+                   max_mhp_cycle=float('inf'), enable_pdb=False, t0=0, t_cycle=0, alphaA=0.1, alphaB=0.1,
+                   wall_time_per_timestep=60, save_additional_data=True, collect_queue_data=False):
 
     # Save additional data
     if save_additional_data:
@@ -226,9 +205,8 @@ def run_simulation(results_path, sim_dir, name=None, config=None, create_probA=1
     max_sim_time = min(max_sim_time, mhp_conn.t_cycle * max_mhp_cycle / SECOND)
 
     # Create scenarios which act as higher layers communicating with the EGPs
-    alice_scenario, bob_scenario = create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs,
-                                                    max_pairs, tmax_pair, request_cycle, num_requests,
-                                                    measure_directly, additional_data)
+    alice_scenario, bob_scenario = create_scenarios(egpA, egpB, request_cycle, request_paramsA, request_paramsB,
+                                                    additional_data)
 
     # Hook up data collectors to the scenarios
     collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, results_path, measure_directly,
