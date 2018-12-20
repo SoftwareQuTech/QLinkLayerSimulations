@@ -123,12 +123,18 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         return alice, bob
 
-    def create_egps(self, nodeA, nodeB, connected=True, accept_all=True, num_priorities=1):
+    def create_egps(self, nodeA, nodeB, connected=True, accept_all=True, num_priorities=1, strict_priority=False):
+        if strict_priority:
+            weights = [0] * num_priorities
+        else:
+            weights = None
         # Set up EGP
         egpA = NodeCentricEGP(node=nodeA, err_callback=self.alice_err_callback, ok_callback=self.alice_callback,
-                              accept_all_requests=accept_all, num_priorities=num_priorities)
+                              accept_all_requests=accept_all, num_priorities=num_priorities,
+                              scheduler_weights=weights)
         egpB = NodeCentricEGP(node=nodeB, err_callback=self.bob_err_callback, ok_callback=self.bob_callback,
-                              accept_all_requests=accept_all, num_priorities=num_priorities)
+                              accept_all_requests=accept_all, num_priorities=num_priorities,
+                              scheduler_weights=weights)
 
         if connected:
             egpA.connect_to_peer_protocol(egpB)
@@ -452,7 +458,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_priority_mixed_requests(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=4)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=4,
+                                      strict_priority=True)
 
         # Schedule egp CREATE commands mid simulation
         alice_num_pairs = 1
@@ -521,7 +528,8 @@ class TestNodeCentricEGP(unittest.TestCase):
     def test_mixed_fidelity(self):
         # Verify switching between bright state populations
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=4)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=4,
+                                      strict_priority=True)
 
         # Schedule egp CREATE commands mid simulation
         alice_num_pairs = 1
@@ -592,7 +600,8 @@ class TestNodeCentricEGP(unittest.TestCase):
 
     def test_priority_overtake(self):
         alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
-        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=3)
+        egpA, egpB = self.create_egps(nodeA=alice, nodeB=bob, connected=True, accept_all=True, num_priorities=3,
+                                      strict_priority=True)
 
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()

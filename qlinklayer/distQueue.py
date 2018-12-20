@@ -239,7 +239,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
                 self.waitAddAcks[ack_id] = [qid, queue_seq, request, num_attempts + 1]
 
                 # Construct the add message using the same comms seq as used originally
-                add_msg = [self.myID, ack_id, qid, queue_seq, request]
+                add_msg = (self.myID, ack_id, qid, queue_seq, request)
 
                 # Send and setup a communication timeout to retry
                 self.send_msg(self.CMD_ADD, add_msg)

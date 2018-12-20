@@ -5,7 +5,6 @@ from netsquid.simutil import sim_run, sim_reset
 from util.config_paths import ConfigPathStorage
 from easysquid.easynetwork import setup_physical_network
 from qlinklayer.egp import NodeCentricEGP
-from qlinklayer.scheduler import SchedulerRequest
 from qlinklayer.specific_scenarios import MixedScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
@@ -55,7 +54,7 @@ class TestScenario(unittest.TestCase):
         scen = MixedScenario(self.egp, 3, request_params)
         self.assertEqual(scen.time_step, request_cycle)
         self.assertIs(scen.egp, self.egp)
-        self.assertEqual(scen.scenario_names, ["A", "B"])
+        self.assertEqual(set(scen.scenario_names), {"A", "B"})
         self.assertEqual(scen.scenario_probs, [0.1, 0.1])
         self.assertEqual(list(scen.scenario_num_requests.values()), [float('inf'), float('inf')])
 
@@ -85,7 +84,7 @@ class TestScenario(unittest.TestCase):
         sim_run(num_cycles)
 
         prioritites = [req.priority for req in requests]
-        fractions = [prioritites.count(i)/num_cycles for i in range(3)]
+        fractions = [prioritites.count(i) / num_cycles for i in range(3)]
         ideal_fractions = [request_params["A"]["prob"], request_params["B"]["prob"], request_params["C"]["prob"]]
         for f, id_f in zip(fractions, ideal_fractions):
             self.assertAlmostEqual(f, id_f, places=1)
@@ -108,7 +107,8 @@ class TestScenario(unittest.TestCase):
             self.assertEqual(req.atomic, params["atomic"])
             self.assertEqual(req.measure_directly, params["measure_directly"])
 
-        frac_num_pairs = [[req.num_pairs for req in Crequests].count(n_p)/len(Crequests) for n_p in paramsC["num_pairs"]]
+        frac_num_pairs = [[req.num_pairs for req in Crequests].count(n_p) / len(Crequests)
+                          for n_p in paramsC["num_pairs"]]
         num_values = len(paramsC["num_pairs"])
         ideal_frac_num_pairs = [1 / num_values] * num_values
         for f_n_p, i_f_n_p in zip(frac_num_pairs, ideal_frac_num_pairs):
@@ -130,6 +130,7 @@ class TestScenario(unittest.TestCase):
             return NodeCentricEGP.construct_cqc_ok_message(EntInfoMeasDirectHeader.type, create_id=i,
                                                            ent_id=(0, 0, i),
                                                            fidelity_estimate=0.5, t_create=0, m=0, basis=0)
+
         def CK_result(i):
             return NodeCentricEGP.construct_cqc_ok_message(EntInfoCreateKeepHeader.type, create_id=i,
                                                            ent_id=(0, 0, i),

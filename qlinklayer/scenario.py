@@ -9,7 +9,8 @@ from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FOR
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCCmdHeader, CQCEPRRequestHeader, CQC_TP_COMMAND, \
     CQC_CMD_EPR, CQC_VERSION, CQC_CMD_HDR_LENGTH, CQC_EPR_REQ_LENGTH, CQC_HDR_LENGTH, CQCXtraQubitHeader, \
     CQC_XTRA_QUBIT_HDR_LENGTH
-from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader, ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
+from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader,\
+    ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
 
 
 class EGPSimulationScenario(TimedProtocol):
@@ -283,13 +284,19 @@ class EGPSimulationScenario(TimedProtocol):
             try:
                 # Get the key of the first item
                 ent_id = next(iter(self.node_measurement_storage))
-                meas_data = self.node_measurement_storage.pop(ent_id) if remove else self.node_measurement_storage[ent_id]
+                if remove:
+                    meas_data = self.node_measurement_storage.pop(ent_id)
+                else:
+                    meas_data = self.node_measurement_storage[ent_id]
                 return ent_id, meas_data
             except StopIteration:
                 return None, None
         else:
             try:
-                meas_data = self.node_measurement_storage.pop(ent_id) if remove else self.node_measurement_storage[ent_id]
+                if remove:
+                    meas_data = self.node_measurement_storage.pop(ent_id)
+                else:
+                    meas_data = self.node_measurement_storage[ent_id]
                 return ent_id, meas_data
             except KeyError:
                 return None, None
