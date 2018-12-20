@@ -10,8 +10,8 @@ from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid import qProgramLibrary as qprgms
 from qlinklayer.toolbox import LinkLayerException
-from qlinklayer.scheduler import StrictPriorityRequestScheduler
-from qlinklayer.distQueue import EGPDistributedQueue
+from qlinklayer.scheduler import WFQRequestScheduler
+from qlinklayer.distQueue import WFQDistributedQueue
 from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
@@ -199,7 +199,7 @@ class NodeCentricEGP(EGP):
     ERR_CREATE = 47
 
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None, throw_local_queue_events=False,
-                 accept_all_requests=False, num_priorities=1):
+                 accept_all_requests=False, num_priorities=1, scheduler_weights=None):
         """
         Node Centric Entanglement Generation Protocol.  Uses a Distributed Queue Protocol and Scheduler to coordinate
         the execution of requests of entanglement production between two peers.
@@ -239,12 +239,12 @@ class NodeCentricEGP(EGP):
         }
 
         # Create local share of distributed queue
-        self.dqp = EGPDistributedQueue(node=self.node, throw_local_queue_events=throw_local_queue_events,
+        self.dqp = WFQDistributedQueue(node=self.node, throw_local_queue_events=throw_local_queue_events,
                                        accept_all=accept_all_requests, numQueues=num_priorities)
         self.dqp.add_callback = self._add_to_queue_callback
 
         # Create the request scheduler
-        self.scheduler = StrictPriorityRequestScheduler(distQueue=self.dqp, qmm=self.qmm)
+        self.scheduler = WFQRequestScheduler(distQueue=self.dqp, qmm=self.qmm, weights=scheduler_weights)
         self.scheduler.set_timeout_callback(self.request_timeout_handler)
 
         # Pydynaa events
@@ -686,7 +686,7 @@ class NodeCentricEGP(EGP):
         try:
             # Store the request locally if DQP ADD was successful
             status, qid, qseq, creq = result
-            if status == EGPDistributedQueue.DQ_OK:
+            if status == WFQDistributedQueue.DQ_OK:
                 logger.debug("Completed adding item to Distributed Queue, got result: {}".format(result))
 
             # Otherwise bubble up the DQP error

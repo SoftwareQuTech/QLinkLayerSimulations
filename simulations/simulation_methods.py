@@ -1,8 +1,6 @@
 import netsquid as ns
 import pdb
 import json
-import os
-import sys
 from time import time
 import math
 from os.path import exists
@@ -149,7 +147,7 @@ def create_scenarios(egpA, egpB, create_probA, create_probB, min_pairs, max_pair
     return alice_scenario, bob_scenario
 
 
-def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=False):
+def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, egp_queue_weights=None, collect_queue_data=False):
     # Grab the nodes and connections
     nodeA = network.get_node_by_id(0)
     nodeB = network.get_node_by_id(1)
@@ -158,8 +156,10 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=
     dqp_conn = network.get_connection(nodeA, nodeB, "dqp_conn")
 
     # Create our EGP instances and connect them
-    egpA = NodeCentricEGP(nodeA, throw_local_queue_events=collect_queue_data, accept_all_requests=True)
-    egpB = NodeCentricEGP(nodeB, throw_local_queue_events=collect_queue_data, accept_all_requests=True)
+    egpA = NodeCentricEGP(nodeA, scheduler_weights=egp_queue_weights, throw_local_queue_events=collect_queue_data,
+                          accept_all_requests=True)
+    egpB = NodeCentricEGP(nodeB, scheduler_weights=egp_queue_weights, throw_local_queue_events=collect_queue_data,
+                          accept_all_requests=True)
     egpA.connect_to_peer_protocol(other_egp=egpB, egp_conn=egp_conn, mhp_conn=mhp_conn, dqp_conn=dqp_conn,
                                   alphaA=alphaA, alphaB=alphaB)
 
@@ -175,13 +175,11 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, collect_queue_data=
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation(results_path, sim_dir, name=None, config=None, create_probA=1, create_probB=0, min_pairs=1, max_pairs=1,
-                   tmax_pair=0,
-                   request_cycle=0, num_requests=1, max_sim_time=float('inf'),
-                   max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, measure_directly=False,
-                   t0=0, t_cycle=0,
-                   alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True,
-                   collect_queue_data=False):
+def run_simulation(results_path, sim_dir, name=None, config=None, create_probA=1, create_probB=0, min_pairs=1,
+                   max_pairs=1, tmax_pair=0, egp_queue_weights=None, request_cycle=0, num_requests=1,
+                   max_sim_time=float('inf'), max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False,
+                   measure_directly=False, t0=0, t_cycle=0, alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60,
+                   save_additional_data=True, collect_queue_data=False):
 
     # Save additional data
     if save_additional_data:
@@ -208,7 +206,8 @@ def run_simulation(results_path, sim_dir, name=None, config=None, create_probA=1
         additional_data["mhp_t_cycle"] = mhp_conn.t_cycle
 
     # Setup entanglement generation protocols
-    egpA, egpB = setup_network_protocols(network, alphaA=alphaA, alphaB=alphaB, collect_queue_data=collect_queue_data)
+    egpA, egpB = setup_network_protocols(network, alphaA=alphaA, alphaB=alphaB, egp_queue_weights=egp_queue_weights,
+                                         collect_queue_data=collect_queue_data)
     if save_additional_data:
         additional_data["alphaA"] = alphaA
         additional_data["alphaB"] = alphaB

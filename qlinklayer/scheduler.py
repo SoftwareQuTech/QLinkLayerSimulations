@@ -200,14 +200,12 @@ class StrictPriorityRequestScheduler(Scheduler):
         :param master_request: bool
         :return: :obj:`~qlinklayer.scheduler.SchedulerRequest`
         """
-        scheduler_request = cls._scheduler_request_named_tuple(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle,
-                                                               min_fidelity=egp_request.min_fidelity,
-                                                               purpose_id=egp_request.purpose_id,
-                                                               create_id=create_id, num_pairs=egp_request.num_pairs,
-                                                               priority=egp_request.priority, store=egp_request.store,
-                                                               atomic=egp_request.atomic,
-                                                               measure_directly=egp_request.measure_directly,
-                                                               master_request=master_request)
+        scheduler_request = SchedulerRequest(sched_cycle=sched_cycle, timeout_cycle=timeout_cycle,
+                                             min_fidelity=egp_request.min_fidelity, purpose_id=egp_request.purpose_id,
+                                             create_id=create_id, num_pairs=egp_request.num_pairs,
+                                             priority=egp_request.priority, store=egp_request.store,
+                                             atomic=egp_request.atomic, measure_directly=egp_request.measure_directly,
+                                             master_request=master_request)
 
         return scheduler_request
 
@@ -908,23 +906,29 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         # unless a queue has infinite (0) weight.
         min_virtual_finish = self._get_largest_mhp_cycle()
         queue_item_to_use = None
-
-        # Go in reverse such that if two items have the same virt finish, take the one with the lowest qid
-        for local_queue in reversed(self.distQueue.queueList):
+        # First get any queue items that have an infinite weight
+        for local_queue in self.distQueue.queueList:
             queue_item = local_queue.peek()
             if queue_item is not None and queue_item.ready:
                 if queue_item.request.init_virtual_finish is None:
                     # This queue has infinite weight so just take this queue_item directly
                     queue_item_to_use = queue_item
                     break
-                if self._compare_mhp_cycle(queue_item.virtual_finish, min_virtual_finish) < 1:
-                    min_virtual_finish = queue_item.virtual_finish
-                    queue_item_to_use = queue_item
+
+        if queue_item_to_use is None:
+            # Go in reverse such that if two items have the same virt finish, take the one with the lowest qid
+            for local_queue in reversed(self.distQueue.queueList):
+                queue_item = local_queue.peek()
+                if queue_item is not None and queue_item.ready:
+                    if self._compare_mhp_cycle(queue_item.virtual_finish, min_virtual_finish) < 1:
+                        min_virtual_finish = queue_item.virtual_finish
+                        queue_item_to_use = queue_item
+
         if queue_item_to_use is None:
             return None, None
         else:
             aid = queue_item_to_use.qid, queue_item_to_use.seq
-            return aid, queue_item_to_use
+            return aid, queue_item_to_use.request
 
     def set_virtual_finish(self, scheduler_request, qid):
         """

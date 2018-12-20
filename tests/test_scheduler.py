@@ -381,12 +381,11 @@ class TestWFQRequestScheduler(unittest.TestCase):
         scheduler.inc_cycle()
 
         for i in range(3):
-            aid, queue_item = scheduler.select_queue()
-            self.assertEqual(queue_item.request.create_id, i)
+            aid, request = scheduler.select_queue()
+            self.assertEqual(request.create_id, i)
             scheduler._post_process_success(aid)
-            # scheduler.clear_request(aid)
 
-        aid, queue_item = scheduler.select_queue()
+        aid, request = scheduler.select_queue()
         self.assertIs(aid, None)
 
     def test_scheduling_fidelity(self):
@@ -403,19 +402,19 @@ class TestWFQRequestScheduler(unittest.TestCase):
         scheduler.inc_cycle()
 
         for create_id in [1, 0]:
-            aid, queue_item = scheduler.select_queue()
-            self.assertEqual(queue_item.request.create_id, create_id)
+            aid, request = scheduler.select_queue()
+            self.assertEqual(request.create_id, create_id)
             scheduler._post_process_success(aid)
 
-        aid, queue_item = scheduler.select_queue()
+        aid, request = scheduler.select_queue()
         self.assertIs(aid, None)
 
     def test_scheduling_num_pairs_iterate(self):
         scheduler = WFQRequestScheduler(self.distQueueA, self.qmmA, self.feuA)
 
         # Compare high and low num pairs (non atomic)
-        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=3, create_id=0),
-                    SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=6, create_id=1)]
+        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=6, create_id=0),
+                    SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=3, create_id=1)]
         for qid, req in enumerate(requests):
             scheduler._add_to_queue(req, qid)
 
@@ -423,12 +422,12 @@ class TestWFQRequestScheduler(unittest.TestCase):
 
         scheduler.inc_cycle()
 
-        for create_id in ([0, 1] * 3 + [1] * 3):
-            aid, queue_item = scheduler.select_queue()
-            self.assertEqual(queue_item.request.create_id, create_id)
+        for create_id in ([0, 1] * 3 + [0] * 3):
+            aid, request = scheduler.select_queue()
+            self.assertEqual(request.create_id, create_id)
             scheduler._post_process_success(aid)
 
-        aid, queue_item = scheduler.select_queue()
+        aid, request = scheduler.select_queue()
         self.assertIs(aid, None)
 
     def test_scheduling_measure_directly(self):
@@ -447,11 +446,11 @@ class TestWFQRequestScheduler(unittest.TestCase):
         scheduler.inc_cycle()
 
         for create_id in [1, 0]:
-            aid, queue_item = scheduler.select_queue()
-            self.assertEqual(queue_item.request.create_id, create_id)
+            aid, request = scheduler.select_queue()
+            self.assertEqual(request.create_id, create_id)
             scheduler._post_process_success(aid)
 
-        aid, queue_item = scheduler.select_queue()
+        aid, request = scheduler.select_queue()
         self.assertIs(aid, None)
 
     def test_scheduling_atomic(self):
@@ -460,8 +459,8 @@ class TestWFQRequestScheduler(unittest.TestCase):
         scheduler.mhp_full_cycle = 3 * scheduler.mhp_cycle_period
 
         # Compare create and keep and measure direclty
-        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=3, atomic=True, create_id=0),
-                    SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=5, create_id=1)]
+        requests = [SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=5, create_id=0),
+                    SchedulerRequest(timeout_cycle=None, sched_cycle=None, num_pairs=3, atomic=True, create_id=1)]
         for qid, req in enumerate(requests):
             scheduler._add_to_queue(req, qid)
 
@@ -469,12 +468,12 @@ class TestWFQRequestScheduler(unittest.TestCase):
 
         scheduler.inc_cycle()
 
-        for create_id in [1, 1, 0, 0, 0, 1, 1, 1]:
-            aid, queue_item = scheduler.select_queue()
-            self.assertEqual(queue_item.request.create_id, create_id)
+        for create_id in [0, 0, 0, 1, 1, 1, 0, 0]:
+            aid, request = scheduler.select_queue()
+            self.assertEqual(request.create_id, create_id)
             scheduler._post_process_success(aid)
 
-        aid, queue_item = scheduler.select_queue()
+        aid, request = scheduler.select_queue()
         self.assertIs(aid, None)
 
     def test_scheduling_weights_same_req(self):
@@ -495,11 +494,11 @@ class TestWFQRequestScheduler(unittest.TestCase):
         scheduler.inc_cycle()
 
         for create_id in [0, 1, 2]:
-            aid, queue_item = scheduler.select_queue()
-            self.assertEqual(queue_item.request.create_id, create_id)
+            aid, request = scheduler.select_queue()
+            self.assertEqual(request.create_id, create_id)
             scheduler._post_process_success(aid)
 
-        aid, queue_item = scheduler.select_queue()
+        aid, request = scheduler.select_queue()
         self.assertIs(aid, None)
 
     def test_scheduling_weights_diff_req(self):
@@ -533,11 +532,11 @@ class TestWFQRequestScheduler(unittest.TestCase):
         scheduler.inc_cycle()
 
         for create_id in [2, 1, 0]:
-            aid, queue_item = scheduler.select_queue()
-            self.assertEqual(queue_item.request.create_id, create_id)
+            aid, request = scheduler.select_queue()
+            self.assertEqual(request.create_id, create_id)
             scheduler._post_process_success(aid)
 
-        aid, queue_item = scheduler.select_queue()
+        aid, request = scheduler.select_queue()
         self.assertIs(aid, None)
 
 
