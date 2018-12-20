@@ -1133,7 +1133,7 @@ class NodeCentricEGP(EGP):
         t_create = now - self.mhp_service.get_midpoint_comm_delay(self.node)
 
         # Craft okay based on the request type
-        if self.scheduler.is_handling_measure_directly():
+        if creq.measure_directly:
             ent_id = (creatorID, otherID, mhp_seq)
             m, basis = self.get_measurement_outcome(creq)
             result = self.construct_cqc_ok_message(EntInfoMeasDirectHeader.type, creq.create_id, ent_id,
