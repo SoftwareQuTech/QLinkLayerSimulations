@@ -470,9 +470,9 @@ class TestNodeCentricEGP(unittest.TestCase):
         # Schedule egp CREATE commands mid simulation
         sim_scheduler = SimulationScheduler()
         alice_num_pairs = 1
-        alice_num_bits = 255
+        alice_num_bits = 30
         bob_num_pairs = 2
-        bob_num_bits = 255
+        bob_num_bits = 30
         alice_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
                                                                             num_pairs=alice_num_pairs, min_fidelity=0.5,
                                                                             max_time=0, purpose_id=1, priority=10)
@@ -508,39 +508,6 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         sim_run(100000)
         self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
-
-        # Check the generated bits
-        correlated_measurements = defaultdict(int)
-        total_measurements = defaultdict(int)
-        for resA, resB in zip(self.alice_results, self.bob_results):
-            self.assertEqual(resA[0], resB[0])
-            if resA[0] == EntInfoCreateKeepHeader.type:
-                continue
-            _, a_create, a_id, a_m, a_basis, _, a_t = resA
-            _, b_create, b_id, b_m, b_basis, _, b_t = resB
-            self.assertEqual(a_create, b_create)
-            self.assertEqual(a_id, b_id)
-            self.assertEqual(a_t, b_t)
-
-            if a_basis == b_basis:
-                total_measurements[a_basis] += 1
-                if a_m == b_m:
-                    correlated_measurements[a_basis] += 1
-
-        # Assume basis == 0 -> Z and basis == 1 -> X
-        alpha = egpA.mhp.alpha
-        expected_z = 1 - alpha / (4 - 3 * alpha)
-        actual_z = correlated_measurements[0] / total_measurements[0]
-        expected_x = (8 - 7 * alpha) / (8 - 6 * alpha)
-        actual_x = correlated_measurements[1] / total_measurements[1]
-        expected_y = (8 - 7 * alpha) / (8 - 6 * alpha)
-        actual_y = correlated_measurements[2] / total_measurements[1]
-
-        # Allow a tolerance of 10%
-        tolerance = 0.1
-        self.assertGreaterEqual(actual_z, expected_z - tolerance)
-        self.assertGreaterEqual(actual_x, expected_x - tolerance)
-        self.assertGreaterEqual(actual_y, expected_y - tolerance)
 
         # Check the entangled pairs, ignore communication qubit
         self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
