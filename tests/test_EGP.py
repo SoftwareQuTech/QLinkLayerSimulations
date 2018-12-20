@@ -12,13 +12,14 @@ from easysquid.puppetMaster import PM_Controller, PM_Test
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from easysquid.toolbox import SimulationScheduler, logger
+from netsquid.components.delaymodels import FibreDelayModel
 from netsquid.simutil import sim_reset, sim_run
 from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.WARNING)
 
 
 def store_result(storage, result):
@@ -452,6 +453,84 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertGreaterEqual(actual_z, expected_z - tolerance)
         self.assertGreaterEqual(actual_x, expected_x - tolerance)
         self.assertGreaterEqual(actual_y, expected_y - tolerance)
+
+        # Check the entangled pairs, ignore communication qubit
+        self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
+
+    def test_asymmetric_mixed_requests(self):
+        alice, bob = self.create_nodes(alice_device_positions=5, bob_device_positions=5)
+        egpA, egpB = self.create_egps(alice, bob, connected=False, accept_all=True)
+
+        egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
+        dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
+
+        c = FibreDelayModel().c
+        time_window = 1
+        lengthA = 0.02
+        lengthB = 0.03
+        delayB = lengthB * 1e9 / c
+        delayAM = lengthA * 1e9 / c
+        mhp_cycle_period = 1.1
+        num_cyclesAM = delayAM / mhp_cycle_period
+        num_cyclesB = delayB / mhp_cycle_period
+        delayMA = (2 * num_cyclesB - num_cyclesAM) * mhp_cycle_period
+        mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=lengthA, lengthB=lengthB,
+                                                    delay_A=[delayAM, delayMA], time_window=time_window,
+                                                    use_time_window=True, t_cycle=mhp_cycle_period)
+
+        egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
+
+        # Schedule egp CREATE commands mid simulation
+        sim_scheduler = SimulationScheduler()
+        alice_num_pairs = 1
+        alice_num_bits = 30
+        bob_num_pairs = 2
+        bob_num_bits = 30
+        alice_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                            num_pairs=alice_num_pairs, min_fidelity=0.5,
+                                                                            max_time=0, purpose_id=1, priority=10)
+
+        alice_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID,
+                                                                             num_pairs=alice_num_bits, min_fidelity=0.5,
+                                                                             max_time=0, purpose_id=1, priority=10,
+                                                                             measure_directly=True)
+
+        bob_request_epr = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_pairs,
+                                                                          min_fidelity=0.9, max_time=0,
+                                                                          purpose_id=2, priority=2)
+
+        bob_request_bits = EGPSimulationScenario.construct_cqc_epr_request(otherID=alice.nodeID, num_pairs=bob_num_bits,
+                                                                           min_fidelity=0.9, max_time=0,
+                                                                           purpose_id=2, priority=2,
+                                                                           measure_directly=True)
+
+        alice_scheduled_epr = partial(egpA.create, cqc_request_raw=alice_request_epr)
+        alice_scheduled_bits = partial(egpA.create, cqc_request_raw=alice_request_bits)
+        bob_scheduled_epr = partial(egpB.create, cqc_request_raw=bob_request_epr)
+        bob_scheduled_bits = partial(egpB.create, cqc_request_raw=bob_request_bits)
+
+        # Schedule a sequence of various create requests
+        sim_scheduler.schedule_function(func=alice_scheduled_epr, t=0)
+        sim_scheduler.schedule_function(func=bob_scheduled_bits, t=2.5)
+        sim_scheduler.schedule_function(func=bob_scheduled_epr, t=5)
+        sim_scheduler.schedule_function(func=alice_scheduled_bits, t=7.5)
+
+        # Construct a network for the simulation
+        network = self.create_network(egpA, egpB)
+        network.start()
+
+        sim_run(11000)
+
+        self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
+        for resA, resB in zip(self.alice_results, self.bob_results):
+            self.assertEqual(resA[0], resB[0])
+            if resA[0] == EntInfoCreateKeepHeader.type:
+                continue
+            _, a_create, a_id, a_m, a_basis, _, a_t = resA
+            _, b_create, b_id, b_m, b_basis, _, b_t = resB
+            self.assertEqual(a_create, b_create)
+            self.assertEqual(a_id, b_id)
+            self.assertEqual(a_t, b_t)
 
         # Check the entangled pairs, ignore communication qubit
         self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
