@@ -1,6 +1,6 @@
 import abc
 import numpy as np
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
@@ -255,11 +255,11 @@ class NodeCentricEGP(EGP):
         self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
 
         # Measure directly storage and handler
-        self.basis_choice = []
+        self.measurement_info = []
         self.measurement_in_progress = False
         self.measure_directly_reply = None
-        self.measurement_results = []
-        self.corrected_measurements = []
+        self.measurement_results = defaultdict(list)
+        self.corrected_measurements = defaultdict(list)
 
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
                                  alphaA=None, alphaB=None):
@@ -507,9 +507,12 @@ class NodeCentricEGP(EGP):
             self.expected_seq = new_seq
 
         # May receive expire multiple times if ack lost, clear only if we have the request locally
-        if self.scheduler.get_request(aid):
+        request = self.scheduler.get_request(aid)
+        if request is not None:
             # If we are still processing the expired request clear it
             self.scheduler.clear_request(aid)
+            if request.measure_directly:
+                self._remove_measurement_data(aid)
 
         # Alert higher layer protocols
         self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
@@ -780,7 +783,7 @@ class NodeCentricEGP(EGP):
 
                         # If handling a measure directly request we need to throw away the measurement result
                         if creq.measure_directly and self.scheduler.has_request(aid):
-                            m, basis = self.measurement_results.pop(0)
+                            m, basis = self.measurement_results[aid].pop(0)
                             logger.debug("Removing measurement outcome {} in basis {} from stored results"
                                          .format(m, basis))
 
@@ -851,6 +854,8 @@ class NodeCentricEGP(EGP):
 
                     # Clear the request
                     self.scheduler.clear_request(aid=local_aid)
+                    if request.measure_directly:
+                        self._remove_measurement_data(aid)
 
                     # Alert higher layer protocols
                     self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
@@ -875,7 +880,7 @@ class NodeCentricEGP(EGP):
 
         if creq.measure_directly:
             # Grab the result and correct
-            m, basis = self.measurement_results.pop(0)
+            m, basis = self.measurement_results[aid].pop(0)
 
             # Flip this outcome in the case we need to apply a correction
             creator = not (self.dqp.master ^ creq.master_request)
@@ -889,7 +894,7 @@ class NodeCentricEGP(EGP):
                     m ^= 1
 
             # Pass up the meaurement info to higher layers
-            self.corrected_measurements.append((m, basis))
+            self.corrected_measurements[aid].append((m, basis))
             self._return_ok(mhp_seq, aid)
 
         else:
@@ -950,7 +955,7 @@ class NodeCentricEGP(EGP):
                 logger.debug("Measuring comm_q {} in Y basis".format(comm_q))
                 prgm.apply(INSTR_ROT_X, q, angle=np.pi / 2)
 
-            self.basis_choice.append(basis)
+            self.measurement_info.append((self.scheduler.curr_aid, basis))
 
             # Set a flag to make sure we catch replies that occur during the measurement
             self.measurement_in_progress = True
@@ -980,13 +985,17 @@ class NodeCentricEGP(EGP):
             self.qmm.vacate_qubit(comm_q)
 
             # Store the measurement result
-            basis = self.basis_choice.pop(0)
-            self.measurement_results.append((outcome, basis))
+            aid, basis = self.measurement_info.pop(0)
+            self.measurement_results[aid].append((outcome, basis))
 
             # If we received a reply for this attempt during measurement we can handle it immediately
             if self.measure_directly_reply:
                 self.handle_reply_mhp(self.measure_directly_reply)
                 self.measure_directly_reply = None
+
+    def _remove_measurement_data(self, aid):
+        self.measurement_results[aid] = []
+        self.corrected_measurements[aid] = []
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """
@@ -1014,6 +1023,8 @@ class NodeCentricEGP(EGP):
 
                 # Clear the request
                 self.scheduler.clear_request(aid=aid)
+                if request.measure_directly:
+                    self._remove_measurement_data(aid)
 
             # Update expected sequence number
             self.expected_seq = new_mhp_seq
@@ -1091,7 +1102,7 @@ class NodeCentricEGP(EGP):
             logger.debug("Leaving entangled qubit in comm_q {}".format(comm_q))
             self._return_ok(mhp_seq, aid)
 
-    def get_measurement_outcome(self, creq):
+    def get_measurement_outcome(self, aid):
         """
         Returns the oldest measurement outcome along with its basis.
         :param creq: obj ~qlinklayer.SchedulerRequest
@@ -1100,10 +1111,10 @@ class NodeCentricEGP(EGP):
             The measurement outcome and basis in which it was measured
         """
         # Retrieve the measurement outcome and basis
-        m, basis = self.corrected_measurements.pop(0)
+        m, basis = self.corrected_measurements[aid].pop(0)
         return m, basis
 
-    def _create_ok(self, creq, mhp_seq):
+    def _create_ok(self, creq, aid, mhp_seq):
         """
         Crafts an OK to issue to higher layers depending on the current generation.  If measure_directly we construct
         and ent_id that excludes the logical_id.  The ok for a measure_directly request contains the measurement
@@ -1135,7 +1146,7 @@ class NodeCentricEGP(EGP):
         # Craft okay based on the request type
         if creq.measure_directly:
             ent_id = (creatorID, otherID, mhp_seq)
-            m, basis = self.get_measurement_outcome(creq)
+            m, basis = self.get_measurement_outcome(aid)
             result = self.construct_cqc_ok_message(EntInfoMeasDirectHeader.type, creq.create_id, ent_id,
                                                    fidelity_estimate, t_create, m=m, basis=basis)
 
@@ -1205,19 +1216,13 @@ class NodeCentricEGP(EGP):
             logger.error("Request not found!")
             self.issue_err(err=self.ERR_OTHER)
 
-        # Check that aid actually corresponds to a request, measure directly requests may have in-flight messages
-        # which arrived after we switched to servicing another request
-        if not self.scheduler.is_generating_aid(aid) and not self.scheduler.is_measure_directly(aid):
-            logger.error("Request absolute queue IDs mismatch!")
-            self.issue_err(err=self.ERR_OTHER)
-
         # Pass back the okay and clean up
         logger.debug("Issuing okay to caller")
-        ok_data = self._create_ok(creq, mhp_seq)
+        ok_data = self._create_ok(creq, aid, mhp_seq)
         self.issue_ok(ok_data)
 
         # Schedule different events depending on the type of gen we completed
-        if self.scheduler.is_handling_measure_directly():
+        if creq.measure_directly:
             self._schedule_now(self._EVT_BIT_COMPLETED)
 
         else:
@@ -1228,12 +1233,13 @@ class NodeCentricEGP(EGP):
         self.scheduler.mark_gen_completed(aid=aid)
 
         # Schedule event if request completed
-        if self.scheduler.curr_aid is None:
+        if not self.scheduler.has_request(aid):
             logger.debug("Finished request, clearing stored results")
-            self.measurement_results = []
+            if creq.measure_directly:
+                self._remove_measurement_data(aid)
             self._schedule_now(self._EVT_REQ_COMPLETED)
 
-    def request_timeout_handler(self, request):
+    def request_timeout_handler(self, aid, request):
         """
         Handler for requests that were not serviced within their alotted time.  Passes an error along with the
         request up to higher layers.
@@ -1241,3 +1247,5 @@ class NodeCentricEGP(EGP):
             The request (used to get the Create ID)
         """
         self.issue_err(err=self.ERR_TIMEOUT, err_data=request.create_id)
+        if request.measure_directly:
+            self._remove_measurement_data(aid)

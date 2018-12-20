@@ -791,7 +791,7 @@ class StrictPriorityRequestScheduler(Scheduler):
         request = queue_item.request
         aid = queue_item.qid, queue_item.seq
         self.clear_request(aid)
-        self.timeout_callback(request)
+        self.timeout_callback(aid, request)
 
     def _reset_outstanding_req_data(self):
         """

@@ -542,7 +542,7 @@ class TestWFQRequestScheduler(unittest.TestCase):
 
 class TestTimings(unittest.TestCase):
     def setUp(self):
-        def timeout_handler(request):
+        def timeout_handler(aid, request):
             self.timeout_handler_called[0] = True
 
         self.timeout_handler_called = [False]
