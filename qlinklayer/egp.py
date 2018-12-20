@@ -738,8 +738,8 @@ class NodeCentricEGP(EGP):
         """
         try:
             logger.debug("Handling MHP Reply: {}".format(result))
-            import pdb
-            pdb.set_trace()
+            # import pdb
+            # pdb.set_trace()
 
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)

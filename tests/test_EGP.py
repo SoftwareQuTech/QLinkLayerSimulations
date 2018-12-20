@@ -12,13 +12,14 @@ from easysquid.puppetMaster import PM_Controller, PM_Test
 from easysquid.qnode import QuantumNode
 from easysquid.quantumMemoryDevice import NVCommunicationDevice
 from easysquid.toolbox import SimulationScheduler, logger
+from netsquid.components.delaymodels import FibreDelayModel
 from netsquid.simutil import sim_reset, sim_run
 from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.WARNING)
 
 
 def store_result(storage, result):
@@ -462,8 +463,20 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         egp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
         dqp_conn = ClassicalFibreConnection(nodeA=alice, nodeB=bob, length=0.05)
-        mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=0.02, lengthB=0.03,
-                                                    delay_A=[0.02e9 / 200000, 0.04e9 / 200000], use_time_window=True)
+
+        c = FibreDelayModel().c
+        time_window = 1
+        lengthA = 0.02
+        lengthB = 0.03
+        delayB = lengthB * 1e9 / c
+        delayAM = lengthA * 1e9 / c
+        mhp_cycle_period = 1.1
+        num_cyclesAM = delayAM / mhp_cycle_period
+        num_cyclesB = delayB / mhp_cycle_period
+        delayMA = (2 * num_cyclesB - num_cyclesAM) * mhp_cycle_period
+        mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=lengthA, lengthB=lengthB,
+                                                    delay_A=[delayAM, delayMA], time_window=time_window,
+                                                    use_time_window=True, t_cycle=mhp_cycle_period)
 
         egpA.connect_to_peer_protocol(egpB, egp_conn=egp_conn, dqp_conn=dqp_conn, mhp_conn=mhp_conn)
 
@@ -506,8 +519,18 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = self.create_network(egpA, egpB)
         network.start()
 
-        sim_run(100000)
+        sim_run(11000)
+
         self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
+        for resA, resB in zip(self.alice_results, self.bob_results):
+            self.assertEqual(resA[0], resB[0])
+            if resA[0] == EntInfoCreateKeepHeader.type:
+                continue
+            _, a_create, a_id, a_m, a_basis, _, a_t = resA
+            _, b_create, b_id, b_m, b_basis, _, b_t = resB
+            self.assertEqual(a_create, b_create)
+            self.assertEqual(a_id, b_id)
+            self.assertEqual(a_t, b_t)
 
         # Check the entangled pairs, ignore communication qubit
         self.check_memories(alice.qmem, bob.qmem, range(alice_num_pairs + bob_num_pairs))
