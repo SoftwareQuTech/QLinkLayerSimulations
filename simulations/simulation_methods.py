@@ -209,7 +209,7 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                                                     additional_data)
 
     # Hook up data collectors to the scenarios
-    collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, results_path, measure_directly,
+    collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, results_path,
                                        collect_queue_data=collect_queue_data)
 
     # Start the simulation

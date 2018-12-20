@@ -875,7 +875,7 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         if weights is None:
             return [1] * len(self.distQueue.queueList)
         if not isinstance(weights, list) or isinstance(weights, tuple):
-            raise TypeError("Weights need to be None or list")
+            raise TypeError("Weights need to be None or list and not {}".format(weights))
         if not len(weights) == len(self.distQueue.queueList):
             raise ValueError("Number of weights must equal number of queues")
         for weight in weights:

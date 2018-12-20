@@ -39,9 +39,9 @@ constant_params = {
 config_dir = "setupsim/config"
 
 configs = {"LAB_NC_NC": "lab/networks_no_cavity_no_conversion.json",
-           "QLINK_WC_WC": "qlink/networks_with_cavity_with_conversion.json",
-           "QLINK_WC_WC_HIGH_C_LOSS": "qlink/networks_with_cavity_with_conversion_high_c_loss.json",
-           }
+           "QLINK_WC_WC": "qlink/networks_with_cavity_with_conversion.json"}
+           # "QLINK_WC_WC_HIGH_C_LOSS": "qlink/networks_with_cavity_with_conversion_high_c_loss.json",
+           # }
 
 config_to_p_succ = {
     "no_noise/no_losses.json": 0.18962460137276416,
@@ -70,7 +70,7 @@ origin_probs = {"originA": (1, 0),
                 "originAB": (1/2, 1/2)}
 
 weights_fractions = {"high": 10,
-                    "low": 2}
+                     "low": 2}
 
 mixes = {"uniform": {"NL": 1/3, "CK": 1/3, "MD": 1/3},
          "moreNL": {"NL": 4/6, "CK": 1/6, "MD": 1/6},
@@ -82,8 +82,8 @@ mixes = {"uniform": {"NL": 1/3, "CK": 1/3, "MD": 1/3},
 
 # Weights and num queues
 weights_dct = {"FIFO": ([0], 1),
-               "higherWFQ": [0, 10, 1],
-               "lowerWFQ": [0, 2, 1]
+               "higherWFQ": ([0, 10, 1], 3),
+               "lowerWFQ": ([0, 2, 1], 3)
                }
 
 
@@ -164,7 +164,7 @@ for config_name, config in configs.items():
                     simulation_run_params = {"config": config_file_path,
                                              "request_paramsA": request_paramsA,
                                              "request_paramsB": request_paramsB,
-                                             "egp_scheduler_weights": [0],
+                                             "egp_queue_weights": [0],
                                              "num_priorities": 1
                                              }
                     simulation_run_params.update(constant_params)
@@ -191,7 +191,7 @@ for config_name, config in configs.items():
             simulation_run_params = {"config": config_file_path,
                                      "request_paramsA": request_paramsA,
                                      "request_paramsB": request_paramsB,
-                                     "egp_scheduler_weights": weights,
+                                     "egp_queue_weights": weights,
                                      "num_priorities": num_priorities}
             simulation_run_params.update(constant_params)
             run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
