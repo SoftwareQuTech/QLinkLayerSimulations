@@ -207,6 +207,11 @@ def get_attempt_data(all_gens):
     # For consistent output, create empty dict if no gens
     if len(gen_attempts) == 0:
         gen_attempts = {0: {}, 1: {}}
+    if len(gen_attempts) == 1:
+        if gen_attempts.keys()[0] == 0:
+            gen_attempts[1] = {}
+        else:
+            gen_attempts[0] = {}
 
     return gen_attempts
 
@@ -998,8 +1003,8 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 
     try:
         prnt.print("")
-        prnt.print("Probability of scheduling a request per request cycle was {} at node A and {} at node B".format(
-            additional_data["create_request_probA"], additional_data["create_request_probB"]))
+        prnt.print("Request params for node A was {}".format(additional_data["request_paramsA"]))
+        prnt.print("Request params for node B was {}".format(additional_data["request_paramsB"]))
         prnt.print(
             "Probability that a scheduled request was on A {}".format(additional_data["create_request_origin_bias"]))
     except KeyError:

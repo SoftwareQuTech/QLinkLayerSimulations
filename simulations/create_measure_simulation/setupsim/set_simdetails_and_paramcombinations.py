@@ -71,20 +71,20 @@ name_to_scenario = {
 
 # create paramcombinations
 
+min_pairs = 1
+max_pairs = 1
+tmax_pair = 0
+num_requests = 0
+measure_directly = True
+
 opt_params = {
-    "create_probB": 0,
-    "min_pairs": 1,
-    "max_pairs": 1,
-    "tmax_pair": 0,
     "request_cycle": 0,
-    "num_requests": 0,
     "max_sim_time": 0,
     "max_wall_time": 4 * 24 * 3600,
     "max_mhp_cycle": 80,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
-    "measure_directly": True,
     "t0": 0,
     "wall_time_per_timestep": 1 * 1,
     "save_additional_data": True,
@@ -99,7 +99,22 @@ for name, scenario in name_to_scenario.items():
     param_set.update(opt_params)
     param_set["config"] = config_dir + "/" + config_file
     p_succ = config_to_p_succ[config_file]
-    param_set["create_probA"] = freq_req_factor * p_succ
+    params = {"num_pairs": [min_pairs, max_pairs],
+               "tmax_pair": tmax_pair,
+               "min_fidelity": 0,
+               "purpose_id": 0,
+               "priority": 0,
+               "store": not measure_directly,
+               "atomic": False,
+               "measure_directly": measure_directly}
+    request_paramsA = {"reqs": {"prob": freq_req_factor * p_succ,
+                                "number_request": num_requests,
+                                "params": params}}
+    request_paramsB = {"reqs": {"prob": 0,
+                                "number_request": 0,
+                                "params": params}}
+    param_set["request_paramsA"] = request_paramsA
+    param_set["request_paramsB"] = request_paramsB
     paramcombinations[name] = param_set
 
 ################################################################

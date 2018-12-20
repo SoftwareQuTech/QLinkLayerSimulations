@@ -26,7 +26,7 @@ class TestSimulations(unittest.TestCase):
         cls.alpha = 0.1
         cls.create_probA = 1
         cls.create_probB = 0
-        cls.max_mhp_cycle = 10000
+        cls.max_mhp_cycle = 1000
 
     @classmethod
     def tearDownClass(cls):
@@ -56,22 +56,31 @@ class TestSimulations(unittest.TestCase):
         _get_configs_from_easysquid.main()
 
     def test2_create_details_and_params(self):
+        params = {"num_pairs": [1, 1],
+                  "tmax_pair": 0,
+                  "min_fidelity": 0,
+                  "purpose_id": 0,
+                  "priority": 0,
+                  "store": False,
+                  "atomic": False,
+                  "measure_directly": True}
+        request_paramsA = {"reqs": {"prob": self.create_probA,
+                                    "number_request": 500,
+                                    "params": params}}
+        request_paramsB = {"reqs": {"prob": self.create_probB,
+                                    "number_request": 500,
+                                    "params": params}}
         paramcombinations = {
             self.sim_name: {
-                "create_probA": self.create_probA,
-                "create_probB": self.create_probB,
-                "min_pairs": 1,
-                "max_pairs": 1,
-                "tmax_pair": 0,
+                "request_paramsA": request_paramsA,
+                "request_paramsB": request_paramsB,
                 "request_cycle": 0,
-                "num_requests": 500,
                 "max_sim_time": 0,
                 "max_wall_time": 345600,
                 "max_mhp_cycle": self.max_mhp_cycle,
                 "enable_pdb": False,
                 "alphaA": self.alpha,
                 "alphaB": self.alpha,
-                "measure_directly": True,
                 "t0": 0,
                 "wall_time_per_timestep": 1,
                 "save_additional_data": True,
@@ -89,7 +98,7 @@ class TestSimulations(unittest.TestCase):
         self._reset_folder(self.results_folder)
         paramfile = os.path.join(os.environ["SIMULATION_DIR"], "setupsim/paramcombinations.json")
         shutil.copy(paramfile, self.results_folder)
-
+    #
     def test3_run_single_case(self):
         timestamp = "TEST_SIMULATION"
         runindex = 0
@@ -110,8 +119,8 @@ class TestSimulations(unittest.TestCase):
         request_t_cycle = additional_data["request_t_cycle"]
         alphaA = additional_data["alphaA"]
         alphaB = additional_data["alphaB"]
-        create_probA = additional_data["create_request_probA"]
-        create_probB = additional_data["create_request_probB"]
+        create_probA = additional_data["request_paramsA"]["reqs"]["prob"]
+        create_probB = additional_data["request_paramsB"]["reqs"]["prob"]
         total_matrix_time = additional_data['total_real_time']
         p_succ = additional_data["p_succ"]
 
@@ -142,16 +151,16 @@ class TestSimulations(unittest.TestCase):
     def test6_analyse_multi_case(self):
         nr_of_add_data_files = len(
             glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*additional_data.json")))
-        self.assertEqual(nr_of_add_data_files, 16)
+        self.assertEqual(nr_of_add_data_files, 3)
 
         nr_of_data_files = len(glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*.db")))
-        self.assertEqual(nr_of_data_files, 16)
+        self.assertEqual(nr_of_data_files, 3)
 
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
 
         nr_of_analysis_files = len(
             glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*analysis_output.txt")))
-        self.assertEqual(nr_of_analysis_files, 16)
+        self.assertEqual(nr_of_analysis_files, 3)
 
 
 if __name__ == '__main__':
