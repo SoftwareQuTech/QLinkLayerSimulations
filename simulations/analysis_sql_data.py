@@ -268,18 +268,24 @@ def parse_quberr_from_sql(results_path, max_real_time=None):
     # Parse the qubit error data
     Z_err = []
     X_err = []
+    Y_err = []
     Z_data_points = 0
     X_data_points = 0
+    Y_data_points = 0
     for entry in quberr_data:
         data_point = EGPQubErrDataPoint(entry)
         z_err = data_point.z_err
         x_err = data_point.x_err
+        y_err = data_point.y_err
         if z_err in [0, 1]:
             Z_err.append(z_err)
             Z_data_points += 1
         if x_err in [0, 1]:
             X_err.append(x_err)
             X_data_points += 1
+        if y_err in [0, 1]:
+            Y_err.append(y_err)
+            Y_data_points += 1
     if Z_data_points > 0:
         avg_Z_err = sum(Z_err) / Z_data_points
     else:
@@ -288,8 +294,12 @@ def parse_quberr_from_sql(results_path, max_real_time=None):
         avg_X_err = sum(X_err) / X_data_points
     else:
         avg_X_err = None
+    if Y_data_points > 0:
+        avg_Y_err = sum(Y_err) / Y_data_points
+    else:
+        avg_Y_err = None
 
-    return (avg_Z_err, Z_data_points), (avg_X_err, X_data_points)
+    return (avg_Z_err, Z_data_points), (avg_X_err, X_data_points), (avg_Y_err, Y_data_points)
 
 
 def calc_throughput(all_gens, window=1):
@@ -746,7 +756,7 @@ def get_data_from_single_file(path_to_file, max_real_time=None):
     fidelities = parse_fidelities_from_sql(path_to_file, max_real_time=max_real_time)
 
     # Get QubErr
-    Z_data, X_data = parse_quberr_from_sql(path_to_file, max_real_time=max_real_time)
+    Z_data, X_data, Y_data = parse_quberr_from_sql(path_to_file, max_real_time=max_real_time)
 
     # Get queue data
     raw_queue_dataA = parse_table_data_from_sql(path_to_file, "EGP_Local_Queue_A", max_real_time=max_real_time)
@@ -764,6 +774,8 @@ def get_data_from_single_file(path_to_file, max_real_time=None):
         data_dct["Z_data"] = Z_data
     if X_data:
         data_dct["X_data"] = X_data
+    if Y_data:
+        data_dct["Y_data"] = Y_data
     if raw_queue_dataA:
         data_dct["raw_queue_dataA"] = raw_queue_dataA
     if raw_queue_dataB:
@@ -837,9 +849,10 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     fidelities = parse_fidelities_from_sql(results_path, max_real_time=max_real_time)
 
     # Get QubErr
-    Z_data, X_data = parse_quberr_from_sql(results_path, max_real_time=max_real_time)
+    Z_data, X_data, Y_data = parse_quberr_from_sql(results_path, max_real_time=max_real_time)
     avg_Z_err, Z_data_points = Z_data
     avg_X_err, X_data_points = X_data
+    avg_Y_err, Y_data_points = Y_data
 
     # Get queue data
     # TODO Currently only local queue with id 0
@@ -907,9 +920,13 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         prnt.print("Average QubErr in Z-basis NO_DATA")
     if avg_X_err:
         prnt.print("Average QubErr in X-basis {} (from {} data points)".format(avg_X_err, X_data_points))
-        prnt.print("")
     else:
         prnt.print("Average QubErr in X-basis NO_DATA")
+    if avg_Y_err:
+        prnt.print("Average QubErr in Y-basis {} (from {} data points)".format(avg_Y_err, Y_data_points))
+        prnt.print("")
+    else:
+        prnt.print("Average QubErr in Y-basis NO_DATA")
         prnt.print("")
 
     if gen_attempts:
