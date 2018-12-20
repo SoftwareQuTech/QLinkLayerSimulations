@@ -9,7 +9,7 @@ from netsquid import get_qstate_formalism, DM_FORMALISM, KET_FORMALISM, STAB_FOR
 from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCCmdHeader, CQCEPRRequestHeader, CQC_TP_COMMAND, \
     CQC_CMD_EPR, CQC_VERSION, CQC_CMD_HDR_LENGTH, CQC_EPR_REQ_LENGTH, CQC_HDR_LENGTH, CQCXtraQubitHeader, \
     CQC_XTRA_QUBIT_HDR_LENGTH
-from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
+from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader, ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
 
 
 class EGPSimulationScenario(TimedProtocol):
@@ -91,6 +91,12 @@ class EGPSimulationScenario(TimedProtocol):
         self.create_storage = []
         self._EVT_CREATE = EventType("EGP CREATE", "Triggers when create was called")
 
+        # Data collection
+        self.ok_storage = []
+        self.entangled_qstates = {}
+        self.node_measurement_storage = {}
+        self.err_storage = []
+
     def run_protocol(self):
         """
         Calls the EGP to make a request for entanglement
@@ -153,6 +159,29 @@ class EGPSimulationScenario(TimedProtocol):
         cqc_message = cqc_header.pack() + cqc_cmd_header.pack() + cqc_epr_request_header.pack()
         return cqc_message
 
+    @staticmethod
+    def unpack_cqc_ok(results):
+        """
+        Unpacks the CQC message containing the OK from EGP.
+        If measure direct, cqc_xtra_qubit_header will be None.
+        :param result: bytes
+        :return: tuple (cqc_header, cqc_xtra_qubit_header, cqc_ent_info_header)
+        """
+        # Read header
+        cqc_header = CQCHeader(results[:CQC_HDR_LENGTH])
+        results = results[CQC_HDR_LENGTH:]
+        if cqc_header.length == CQC_XTRA_QUBIT_HDR_LENGTH + ENT_INFO_CREATE_KEEP_LENGTH:
+            cqc_xtra_qubit_header = CQCXtraQubitHeader(results[:CQC_XTRA_QUBIT_HDR_LENGTH])
+            results = results[CQC_XTRA_QUBIT_HDR_LENGTH:]
+            cqc_ent_info_header = EntInfoCreateKeepHeader(results[:ENT_INFO_CREATE_KEEP_LENGTH])
+        elif cqc_header.length == ENT_INFO_MEAS_DIRECT_LENGTH:
+            cqc_xtra_qubit_header = None
+            cqc_ent_info_header = EntInfoMeasDirectHeader(results[:ENT_INFO_MEAS_DIRECT_LENGTH])
+        else:
+            raise ValueError("Could not parse cqc message, unknown length")
+
+        return cqc_header, cqc_xtra_qubit_header, cqc_ent_info_header
+
     def _create(self, cqc_request_raw):
         """
         Internal method for calling the EGP's create method and storing the creation id and timestamp info for
@@ -209,14 +238,88 @@ class EGPSimulationScenario(TimedProtocol):
         logger.debug("Scheduling error event now.")
         self._schedule_now(self._EVT_ERR)
 
-    @abc.abstractmethod
+    def get_ok(self, remove=True):
+        """
+        Returns the oldest ok message that we received during the simulation
+        :param remove: bool
+            Whether to remove the ok from the scenario's storage
+        :return: tuple
+            Ok information
+        """
+        ok = self.ok_storage.pop(0) if remove else self.ok_storage[0]
+        return ok
+
+    def get_error(self, remove=True):
+        """
+        Returns the oldest error that we received during the simulation
+        :param remove: bool
+            Whether to remove the error data from the scenario's storage
+        """
+        err = self.err_storage.pop(0) if remove else self.err_storage[0]
+        return err
+
     def _err_callback(self, result):
         """
-        Internal handler for errors thrown by the EGP
+        Collects the errors from the EGP and stores them for data collection
         :param result: tuple
-            Error information returned by EGP
+            Contains the error information from the EGP
         """
-        pass
+        now = sim_time()
+        logger.error("{} got error {} at time {}".format(self.node.nodeID, result, now))
+        self.err_storage.append(result)
+
+    def get_measurement(self, ent_id=None, remove=True):
+        """
+        Returns the measurement result corresponding to the given entanglement id.
+        If ent_id is None, the first item (ent_id, meas_data) is returned
+        :param remove: bool
+            Whether to remove the measurement result from the scenario's storage
+        :param ent_id: tuple or None
+            The entanglement ID
+        :return: tuple
+            Returns the entanglement ID and the measurement data as (ent_id, meas_data)
+        """
+        if ent_id is None:
+            try:
+                # Get the key of the first item
+                ent_id = next(iter(self.node_measurement_storage))
+                meas_data = self.node_measurement_storage.pop(ent_id) if remove else self.node_measurement_storage[ent_id]
+                return ent_id, meas_data
+            except StopIteration:
+                return None, None
+        else:
+            try:
+                meas_data = self.node_measurement_storage.pop(ent_id) if remove else self.node_measurement_storage[ent_id]
+                return ent_id, meas_data
+            except KeyError:
+                return None, None
+
+    def store_qstate(self, qubit_id, source_id, other_id, mhp_seq):
+        """
+        Extracts the qubit state based on the used formalism and stores it locally for collection
+        :param qubit_id: int
+            The qubit ID in memory that we want the state of
+        :param source_id: int
+        :param other_id: int
+        :param mhp_seq: int
+        """
+        qstate = self.node.qmem.peek(qubit_id)[0].qstate
+        formalism = get_qstate_formalism()
+        key = (source_id, other_id, mhp_seq)
+
+        # if formalism == DM_FORMALISM and qstate.dm.shape == (4, 4):
+        if formalism == DM_FORMALISM:
+            self.entangled_qstates[key] = qstate.dm
+
+        # elif formalism == KET_FORMALISM and qstate.ket.shape == (4, 1):
+        elif formalism == KET_FORMALISM:
+            self.entangled_qstates[key] = qstate.ket
+
+        elif formalism == STAB_FORMALISM:
+            self.entangled_qstates[key] = qstate.stab
+
+        else:
+            raise RuntimeError("Unknown state formalism")
 
 
 class MeasureAfterSuccessScenario(EGPSimulationScenario):
@@ -268,7 +371,7 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         # Data storage from collected info
         self.ok_storage = []
         self.entangled_qstates = {}
-        self.measurement_results = []
+        self.node_measurement_storage = []
         self.err_storage = []
 
     def _ok_callback(self, result):
@@ -289,13 +392,13 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         self.store_qstate(logical_id, create_id, peer_id, mhp_seq)
 
         # Measure the logical qubit in the result
-        [outcome] = self.node.qmem.measure([logical_id])
+        [outcome], _ = self.node.qmem.measure([logical_id])
 
         now = sim_time()
         logger.info("{} measured {} for ent_id {} at time {}".format(self.node.nodeID, outcome, ent_id, now))
 
         # Store the measurement result for data collection
-        self.measurement_results.append((mhp_seq, outcome))
+        self.node_measurement_storage.append((mhp_seq, outcome))
 
         # Free the qubit for the EGP
         self.qmm.free_qubit(logical_id)
@@ -323,72 +426,6 @@ class MeasureAfterSuccessScenario(EGPSimulationScenario):
         t_goodness = cqc_ent_info_header.t_goodness
 
         return create_id, ent_id, logical_id, f_goodness, t_create, t_goodness
-
-    def store_qstate(self, qubit_id, source_id, other_id, mhp_seq):
-        """
-        Extracts the qubit state based on the used formalism and stores it locally for collection
-        :param qubit_id: int
-            The qubit ID in memory that we want the state of
-        :param source_id: int
-        :param other_id: int
-        :param mhp_seq: int
-        """
-        qstate = self.node.qmem.peek(qubit_id)[0].qstate
-        formalism = get_qstate_formalism()
-        key = (source_id, other_id, mhp_seq)
-
-        # if formalism == DM_FORMALISM and qstate.dm.shape == (4, 4):
-        if formalism == DM_FORMALISM:
-            self.entangled_qstates[key] = qstate.dm
-
-        # elif formalism == KET_FORMALISM and qstate.ket.shape == (4, 1):
-        elif formalism == KET_FORMALISM:
-            self.entangled_qstates[key] = qstate.ket
-
-        elif formalism == STAB_FORMALISM:
-            self.entangled_qstates[key] = qstate.stab
-
-        else:
-            raise RuntimeError("Unknown state formalism")
-
-    def get_ok(self, remove=True):
-        """
-        Returns the oldest ok message that we received during the simulation
-        :param remove: bool
-            Whether to remove the ok from the scenario's storage
-        :return: tuple
-            Ok information
-        """
-        ok = self.ok_storage.pop(0) if remove else self.ok_storage[0]
-        return ok
-
-    def get_measurement(self, remove=True):
-        """
-        Returns the oldest measurement result that we received during the simulation
-        :param remove: bool
-            Whether to remove the measurement result from the scenario's storage
-        """
-        measurement = self.measurement_results.pop(0) if remove else self.measurement_results[0]
-        return measurement
-
-    def _err_callback(self, result):
-        """
-        Collects the errors from the EGP and stores them for data collection
-        :param result: tuple
-            Contains the error information from the EGP
-        """
-        now = sim_time()
-        logger.error("{} got error {} at time {}".format(self.node.nodeID, result, now))
-        self.err_storage.append(result)
-
-    def get_error(self, remove=True):
-        """
-        Returns the oldest error that we received during the simulation
-        :param remove: bool
-            Whether to remove the error data from the scenario's storage
-        """
-        err = self.err_storage.pop(0) if remove else self.err_storage[0]
-        return err
 
 
 class MeasureBeforeSuccessScenario(EGPSimulationScenario):
@@ -442,7 +479,7 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
 
         # Data storage from collected info
         self.ok_storage = []
-        self.measurement_storage = OrderedDict()
+        self.node_measurement_storage = OrderedDict()
         self.err_storage = []
 
     def _ok_callback(self, result):
@@ -461,7 +498,7 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         # Store the basis/bit choice and the midpoint outcomes for QubErr or key generation
         meas_data = (basis, outcome)
 
-        self.measurement_storage[ent_id] = meas_data
+        self.node_measurement_storage[ent_id] = meas_data
 
     @staticmethod
     def unpack_cqc_ok(result):
@@ -484,59 +521,3 @@ class MeasureBeforeSuccessScenario(EGPSimulationScenario):
         t_create = cqc_ent_info_header.t_create
 
         return create_id, ent_id, meas_out, basis, f_goodness, t_create
-
-    def get_ok(self, remove=True):
-        """
-        Returns the oldest ok message that we received during the simulation
-        :param remove: bool
-            Whether to remove the ok from the scenario's storage
-        :return: tuple
-            Ok information
-        """
-        ok = self.ok_storage.pop(0) if remove else self.ok_storage[0]
-        return ok
-
-    def get_measurement(self, ent_id=None, remove=True):
-        """
-        Returns the measurement result corresponding to the given entanglement id.
-        If ent_id is None, the first item (ent_id, meas_data) is returned and deleted, independently of 'remove'.
-        :param remove: bool
-            Whether to remove the measurement result from the scenario's storage
-        :param ent_id: tuple or None
-            The entanglement ID
-        :return: tuple
-            Returns the entanglement ID and the measurement data as (ent_id, meas_data)
-        """
-        if ent_id is None:
-            try:
-                # Get the key of the first item
-                ent_id = next(iter(self.measurement_storage))
-                meas_data = self.measurement_storage.pop(ent_id) if remove else self.measurement_storage[ent_id]
-                return ent_id, meas_data
-            except StopIteration:
-                return None, None
-        else:
-            try:
-                meas_data = self.measurement_storage.pop(ent_id) if remove else self.measurement_storage[ent_id]
-                return ent_id, meas_data
-            except KeyError:
-                return None, None
-
-    def _err_callback(self, result):
-        """
-        Collects the errors from the EGP and stores them for data collection
-        :param result: tuple
-            Contains the error information from the EGP
-        """
-        now = sim_time()
-        logger.error("{} got error {} at time {}".format(self.node.nodeID, result, now))
-        self.err_storage.append(result)
-
-    def get_error(self, remove=True):
-        """
-        Returns the oldest error that we received during the simulation
-        :param remove: bool
-            Whether to remove the error data from the scenario's storage
-        """
-        err = self.err_storage.pop(0) if remove else self.err_storage[0]
-        return err

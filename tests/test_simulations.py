@@ -13,7 +13,7 @@ from simulations.create_measure_simulation.setupsim import perform_single_simula
 from simulations import analysis_sql_data
 from simulations.create_measure_simulation.setupsim import set_simdetails_and_paramcombinations
 
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.CRITICAL)
 
 
 class TestSimulations(unittest.TestCase):

@@ -1085,8 +1085,6 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
                 prnt.print("")
 
     # Save the data to json file
-    import pdb
-    pdb.set_trace()
     data_dct = get_data(results_path=results_path)
     if os.path.isfile(results_path):
         data_filename = results_path[:results_path.rfind(".")] + "_all_data.json"
