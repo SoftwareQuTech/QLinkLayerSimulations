@@ -54,7 +54,7 @@ class TestScenario(unittest.TestCase):
         scen = MixedScenario(self.egp, 3, request_params)
         self.assertEqual(scen.time_step, request_cycle)
         self.assertIs(scen.egp, self.egp)
-        self.assertEqual(scen.scenario_names, ["A", "B"])
+        self.assertEqual(set(scen.scenario_names), {"A", "B"})
         self.assertEqual(list(scen.scenario_probs.values()), [0.1, 0.1])
         self.assertEqual(list(scen.scenario_num_requests.values()), [float('inf'), float('inf')])
 
