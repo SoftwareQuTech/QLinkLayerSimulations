@@ -85,9 +85,9 @@ def change_connnection_type():
             virtual_delay = (2 * delay_max - delay_min)
             delay_spec = [delay_min, virtual_delay]
             if lengthA < lengthB:
-                config_dct["conn_configs"][conn_config_name]["parameters"]["delayA"] = delay_spec
+                config_dct["conn_configs"][conn_config_name]["parameters"]["delay_A"] = delay_spec
             elif lengthB < lengthA:
-                config_dct["conn_configs"][conn_config_name]["parameters"]["delayB"] = delay_spec
+                config_dct["conn_configs"][conn_config_name]["parameters"]["delay_B"] = delay_spec
 
             # Update the comment in the file
             config_dct["AutoGenerate"].append("This file was then later modified by /path/to/QLinkLayer/simulations/"
