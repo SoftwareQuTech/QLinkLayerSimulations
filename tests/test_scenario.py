@@ -81,7 +81,7 @@ class TestScenario(unittest.TestCase):
 
         scen.start()
 
-        num_cycles = 1000
+        num_cycles = 5000
         sim_run(num_cycles)
 
         prioritites = [req.priority for req in requests]
