@@ -203,12 +203,11 @@ def _update_no_noise_file(path_to_file):
 
 
 def add_loss_qlink_wc_wc():
-    p_loss_A = 1e-4
-    p_loss_B = 1e-4
     qlink_wc_wc_path = "qlink/networks_with_cavity_with_conversion.json"
     qlink_high_p_loss_path = "qlink/networks_with_cavity_with_conversion_high_p_loss.json"
     qlinklayer_qlink_wc_wc_path = os.path.join(path_to_this_config_folder, qlink_wc_wc_path)
     qlinklayer_qlink_wc_wc_high_p_loss_path = os.path.join(path_to_this_config_folder, qlink_high_p_loss_path)
+
     # Read config file
     with open(qlinklayer_qlink_wc_wc_path, 'r') as f:
         config_dct = json.load(f)
@@ -216,11 +215,15 @@ def add_loss_qlink_wc_wc():
     # Get the connection config name of the mhp connection
     conn_config_name = _get_conn_config_name_of_mhp_conn(config_dct)
 
-    # Update the type to use node centric heralded fibre connection
-    config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_A"] = p_loss_A
-    config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_B"] = p_loss_B
+    # Add noise to the mhp and classical communications
+    mhp_p_loss_A = 1e-4
+    mhp_p_loss_B = 1e-4
+    classical_p_loss = 1e-4
+    config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_A"] = mhp_p_loss_A
+    config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_B"] = mhp_p_loss_B
+    config_dct["conn_configs"]["classical1"]["parameters"]["c_prob_loss"] = classical_p_loss
 
-    # Write to file again
+    # Write to high loss config
     with open(qlinklayer_qlink_wc_wc_high_p_loss_path, 'w') as f:
         json.dump(config_dct, f, indent=2)
 
