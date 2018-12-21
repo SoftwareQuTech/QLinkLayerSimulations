@@ -144,7 +144,7 @@ class MixedScenario(EGPSimulationScenario):
             CQC OK information returned by the EGP
         """
 
-        logger.info("Node {} got an OK message".format(self.node.name))
+        logger.debug("Node {} got an OK message".format(self.node.name))
 
         # Store data for retrieval
         self.ok_storage.append(result)

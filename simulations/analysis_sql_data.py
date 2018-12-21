@@ -238,9 +238,6 @@ def parse_fidelities_from_sql(results_path, max_real_time=None):
         timestamp = data_point.timestamp
         ts.append(timestamp)
         density_matrix = data_point.density_matrix
-        print("dm: {}".format(density_matrix))
-        print("fid: {}".format(calc_fidelity(density_matrix)))
-        print("")
         fidelities.append(calc_fidelity(density_matrix))
 
     return fidelities
@@ -914,7 +911,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
         prnt.print("")
 
     if fidelities:
-        print("fidelities: {}".format(fidelities))
+        # print("fidelities: {}".format(fidelities))
         prnt.print("Average fidelity: {} s".format(sum(fidelities) / len(fidelities)))
         prnt.print("Minimum fidelity: {} s".format(min(fidelities)))
         prnt.print("Maximum fidelity: {} s".format(max(fidelities)))
