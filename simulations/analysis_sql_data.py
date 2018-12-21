@@ -197,18 +197,19 @@ def get_attempt_data(all_gens):
     for nodeID, all_node_gens in all_gens.items():
         for gen in all_node_gens:
             attempts = gen[2]
-            ent_id = gen[3]
+            ent_id = gen[-3:]
+            key = "{}_{}_{}".format(*ent_id)
 
             if nodeID in gen_attempts:
-                gen_attempts[nodeID][ent_id] = attempts
+                gen_attempts[nodeID][key] = attempts
             else:
-                gen_attempts[nodeID] = {ent_id: attempts}
+                gen_attempts[nodeID] = {key: attempts}
 
     # For consistent output, create empty dict if no gens
     if len(gen_attempts) == 0:
         gen_attempts = {0: {}, 1: {}}
     if len(gen_attempts) == 1:
-        if gen_attempts.keys()[0] == 0:
+        if list(gen_attempts.keys())[0] == 0:
             gen_attempts[1] = {}
         else:
             gen_attempts[0] = {}
@@ -936,11 +937,15 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 
     if gen_attempts:
         are_equal = True
-        for key in gen_attemptsA:
-            if not gen_attemptsA[key] == gen_attemptsB[key]:
-                are_equal = False
-                break
-        prnt.print("Number of attempts equal for the two nodes, for each generation: {}".format(are_equal))
+        if not len(gen_attemptsA) == len(gen_attemptsB):
+            prnt.print("Number of started generations are different between the nodes, A has {} and B has {}".format(
+                len(gen_attemptsA), len(gen_attemptsB)))
+        else:
+            for key in gen_attemptsA:
+                if not gen_attemptsA[key] == gen_attemptsB[key]:
+                    are_equal = False
+                    break
+            prnt.print("Number of attempts equal for the two nodes, for each generation: {}".format(are_equal))
         # TODO assuming that node attempts are equal for the two nodes
         nr_of_gens = len(list(all_gens.values())[0])
         if nr_of_gens > 0:

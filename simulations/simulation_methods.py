@@ -81,12 +81,14 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, c
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=create_ds)
-    pm.addEventAny([scenarioA] * 2, [scenarioA._EVT_CK_OK, scenarioA._EVT_MD_OK], ds=ok_ds)
+    pm.addEvent(scenarioA, scenarioA._EVT_CK_OK, ds=ok_ds)
+    pm.addEvent(scenarioA, scenarioA._EVT_MD_OK, ds=ok_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CK_OK, ds=state_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_ERR, ds=err_ds)
 
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=create_ds)
-    pm.addEventAny([scenarioB] * 2, [scenarioB._EVT_CK_OK, scenarioB._EVT_MD_OK], ds=ok_ds)
+    pm.addEvent(scenarioB, scenarioB._EVT_CK_OK, ds=ok_ds)
+    pm.addEvent(scenarioB, scenarioB._EVT_MD_OK, ds=ok_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CK_OK, ds=state_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
 

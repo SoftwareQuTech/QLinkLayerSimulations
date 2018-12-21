@@ -13,7 +13,7 @@ from simulations.create_measure_simulation.setupsim import perform_single_simula
 from simulations import analysis_sql_data
 from simulations.create_measure_simulation.setupsim import set_simdetails_and_paramcombinations
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.WARNING)
 
 
 class TestSimulations(unittest.TestCase):
@@ -30,7 +30,7 @@ class TestSimulations(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls._reset_folder(cls.results_folder, make_new=False)
+        # cls._reset_folder(cls.results_folder, make_new=False)
 
         # Reset files
         set_simdetails_and_paramcombinations.main(ask_for_input=False)
