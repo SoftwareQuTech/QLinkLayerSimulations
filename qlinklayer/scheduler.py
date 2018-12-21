@@ -319,6 +319,12 @@ class StrictPriorityRequestScheduler(Scheduler):
             logger.debug("Suspending generation for {} cycles".format(num_suspended_cycles))
             self.num_suspended_cycles = num_suspended_cycles
 
+    def resume_generation(self):
+        """
+        Clears suspend by force (in the case that an mhp reply came back and we want to resume early)
+        """
+        self.num_suspended_cycles = 0
+
     def suspended(self):
         """
         Checks if the scheduler is currently suspending generation

@@ -771,8 +771,14 @@ class NodeCentricEGP(EGP):
                         logger.debug("Updating MHP Seq")
                         self._process_mhp_seq(mhp_seq, aid)
 
-            # Check if the reply came in before our emission handling completed, defer processing
-            elif self.emission_handling_in_progress != self.EMIT_HANDLER_NONE:
+            # Check if the reply came in before our emission handling completed
+            elif self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
+                if midpoint_outcome == 0:
+                    self.clear_if_handling_emission(aid)
+                else:
+                    self.mhp_reply = result
+
+            elif self.emission_handling_in_progress == self.EMIT_HANDLER_MD and aid == self.measurement_info[0][0]:
                 self.mhp_reply = result
 
             # Otherwise this response is associated with a generation attempt and we are ready to process
@@ -1011,8 +1017,15 @@ class NodeCentricEGP(EGP):
             The absolute queue id to check for
         :return:
         """
+        # Check if we are handling the emission for this aid
         if self.handling_emission(aid):
+            # Halt handling
             self.node.qmemory.stop_program()
+
+            # Allow scheduler to resume
+            self.scheduler.resume_generation()
+
+            # Remove emission handling metadata
             if self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
                 self.move_info = None
 
