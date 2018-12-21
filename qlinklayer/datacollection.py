@@ -4,6 +4,7 @@ from easysquid.puppetMaster import PM_SQLDataSequence
 from easysquid.toolbox import logger
 from netsquid.pydynaa import Entity, EventHandler
 from netsquid.simutil import warn_deprecated
+from netsquid.qubits import qubitapi as qapi
 from qlinklayer.egp import NodeCentricEGP, EGP
 from qlinklayer.scenario import MeasureBeforeSuccessScenario, MeasureAfterSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoMeasDirectHeader, EntInfoCreateKeepHeader
@@ -353,25 +354,31 @@ class EGPStateSequence(EGPDataSequence):
         super(EGPStateSequence, self).__init__(*args, **kwargs)
 
         # Keep track of what states have been collected
-        self._collected_states = []
+        self._collected_ent_ids = []
 
     def get_column_names(self):
         matrix_columns = ["{}, {}, {}".format(i, j, k) for i in range(4) for j in range(4) for k in ['real', 'imag']]
-        return ["Timestamp", "Node ID"] + matrix_columns + ["Success"]
+        return ["Timestamp"] + matrix_columns + ["Success"]
 
     def getData(self, time, source=None):
         scenario = source[0]
-        key, qstate = scenario.entangled_qstates.popitem()
+        ent_id = next(iter(scenario.entangled_qubits))
 
-        # Check if we already collected the state
-        # If so return None to tell the pupperMaster to not record this data point
-        if key in self._collected_states:
-            return [None, True]
-        else:
-            self._collected_states.append(key)
-            nodeID = scenario.egp.node.nodeID
-            val = [nodeID] + [n for sl in [[z.real, z.imag] for z in qstate.flat] for n in sl]
+        # Wait for both nodes to commit their state
+        if ent_id in self._collected_ent_ids:
+            self._collected_ent_ids.remove(ent_id)
+            q1 = self.evt_source_list[0].entangled_qubits.pop(ent_id)
+            q2 = self.evt_source_list[1].entangled_qubits.pop(ent_id)
+            qstate = qapi.reduced_dm([q1, q2])
+
+            qapi.discard(q1)
+            qapi.discard(q2)
+
+            val = [n for sl in [[z.real, z.imag] for z in qstate.flat] for n in sl]
             return [val, True]
+        else:
+            self._collected_ent_ids.append(ent_id)
+            return [None, True]
 
 
 class EGPStateDataPoint(EGPDataPoint):
@@ -393,11 +400,11 @@ class EGPStateDataPoint(EGPDataPoint):
             self.node_id = data[1]
 
             # Construct the matrix
-            m_data = data[2:34]
+            m_data = data[1:33]
             density_matrix = np.matrix(
                 [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
             self.density_matrix = density_matrix
-            self.success = data[34]
+            self.success = data[33]
         except IndexError:
             raise ValueError("Cannot parse data")
 

@@ -158,7 +158,7 @@ while true; do
         profile_file="${resultsdir}/${timestamp}_key_${actual_key}_run_${runindex}.prof"
         python3 -m cProfile -o $profile_file $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
     else
-        mprof run python3 $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
+        python3 $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
     fi
 
     if [ "$RUNONCLUSTER" == 'y' ]; then

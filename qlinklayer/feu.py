@@ -45,6 +45,7 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         self.node = node
         self.mhp_service = mhp_service
         self.achievable_fidelities = self._calculate_achievable_fidelities()
+        # print("FEU: {}".format(self.achievable_fidelities))
 
     def update_components(self, node=None, mhp_service=None):
         """

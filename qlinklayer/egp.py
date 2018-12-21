@@ -6,6 +6,7 @@ from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
 from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_ROT_X, INSTR_MEASURE
 from netsquid.components.qprogram import QuantumProgram
+from netsquid.qubits import qubitapi as qapi
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid import qProgramLibrary as qprgms
@@ -738,8 +739,6 @@ class NodeCentricEGP(EGP):
         """
         try:
             logger.debug("Handling MHP Reply: {}".format(result))
-            # import pdb
-            # pdb.set_trace()
 
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
@@ -1060,17 +1059,23 @@ class NodeCentricEGP(EGP):
 
         # Construct a quantum program to correct and move
         prgm = QuantumProgram()
-        qs = prgm.get_qubit_indices(2)
+        if comm_q != storage_q:
+            qs = prgm.get_qubit_indices(2)
+        else:
+            qs = prgm.get_qubit_indices(1)
         prgm.apply(INSTR_Z, qs[0])
 
         # Check if we need to move the qubit into storage
         if comm_q != storage_q:
             prgm.apply(INSTR_INIT, qs[1])
-            qprgms.move_using_CNOTs(prgm, qs[0], qs[1])
+            qprgms.move_using_CXDirections(prgm, qs[0], qs[1])
 
         # Set the callback of the program
         self.node.qmem.set_program_done_callback(self._return_ok, mhp_seq=mhp_seq, aid=aid)
-        self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q, storage_q])
+        if comm_q != storage_q:
+            self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q, storage_q])
+        else:
+            self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q])
 
     def _move_comm_to_storage(self, mhp_seq, aid):
         """
@@ -1093,7 +1098,7 @@ class NodeCentricEGP(EGP):
             prgm = QuantumProgram()
             qs = prgm.get_qubit_indices(2)
             prgm.apply(INSTR_INIT, qs[1])
-            qprgms.move_using_CNOTs(prgm, qs[0], qs[1])
+            qprgms.move_using_CXDirections(prgm, qs[0], qs[1])
 
             # Set the callback
             self.node.qmem.set_program_done_callback(self._return_ok, mhp_seq=mhp_seq, aid=aid)

@@ -314,19 +314,21 @@ class EGPSimulationScenario(TimedProtocol):
         formalism = get_qstate_formalism()
         key = (source_id, other_id, mhp_seq)
 
-        # if formalism == DM_FORMALISM and qstate.dm.shape == (4, 4):
-        if formalism == DM_FORMALISM:
+        if formalism == DM_FORMALISM and qstate.dm.shape == (4, 4):
+        # if formalism == DM_FORMALISM:
             self.entangled_qstates[key] = qstate.dm
 
-        # elif formalism == KET_FORMALISM and qstate.ket.shape == (4, 1):
-        elif formalism == KET_FORMALISM:
+        elif formalism == KET_FORMALISM and qstate.ket.shape == (4, 1):
+        # elif formalism == KET_FORMALISM:
             self.entangled_qstates[key] = qstate.ket
 
         elif formalism == STAB_FORMALISM:
             self.entangled_qstates[key] = qstate.stab
 
         else:
-            raise RuntimeError("Unknown state formalism")
+            # TODO
+            pass
+            # raise RuntimeError("Unknown state formalism")
 
 
 class MeasureAfterSuccessScenario(EGPSimulationScenario):

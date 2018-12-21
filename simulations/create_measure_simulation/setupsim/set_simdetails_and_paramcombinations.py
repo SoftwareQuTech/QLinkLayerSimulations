@@ -48,11 +48,11 @@ config_to_p_succ = {
 # Create a dictionary that relates the name of the simulation to the config file and req freq factor
 name_to_scenario = {
     # "NoNoise_NC_NC_LRF": ("no_noise/no_noise.json", 0.2),
-    "NoNoise_NC_NC_HRF": ("no_noise/no_noise.json", 0.8),
+    # "NoNoise_NC_NC_HRF": ("no_noise/no_noise.json", 0.8)
     # "NoLoss_NC_NC_LRF": ("no_noise/no_losses.json", 0.2),
     # "NoLoss_NC_NC_HRF": ("no_noise/no_losses.json", 0.8),
     # "Lab_NC_NC_LRF": ("lab/networks_no_cavity_no_conversion.json", 0.2),
-    "Lab_NC_NC_HRF": ("lab/networks_no_cavity_no_conversion.json", 0.8),
+    # "Lab_NC_NC_HRF": ("lab/networks_no_cavity_no_conversion.json", 0.8)
     # "Lab_NC_WC_LRF": ("lab/networks_no_cavity_with_conversion.json", 0.2),
     # "Lab_NC_WC_HRF": ("lab/networks_no_cavity_with_conversion.json", 0.8),
     # "Lab_WC_NC_LRF": ("lab/networks_with_cavity_no_conversion.json", 0.2),
@@ -75,18 +75,18 @@ min_pairs = 1
 max_pairs = 1
 tmax_pair = 0
 num_requests = 0
-measure_directly = True
+measure_directly = False
 
 opt_params = {
     "request_cycle": 0,
     "max_sim_time": 0,
     "max_wall_time": 4 * 24 * 3600,
-    "max_mhp_cycle": 80,
+    "max_mhp_cycle": 1000000,
     "enable_pdb": False,
     "alphaA": 0.1,
     "alphaB": 0.1,
     "t0": 0,
-    "wall_time_per_timestep": 1 * 1,
+    "wall_time_per_timestep": 1 * 10,
     "save_additional_data": True,
     "collect_queue_data": True}
 
@@ -101,10 +101,10 @@ for name, scenario in name_to_scenario.items():
     p_succ = config_to_p_succ[config_file]
     params = {"num_pairs": [min_pairs, max_pairs],
                "tmax_pair": tmax_pair,
-               "min_fidelity": 0,
+               "min_fidelity": 0.8,
                "purpose_id": 0,
                "priority": 0,
-               "store": not measure_directly,
+               "store": False,
                "atomic": False,
                "measure_directly": measure_directly}
     request_paramsA = {"reqs": {"prob": freq_req_factor * p_succ,

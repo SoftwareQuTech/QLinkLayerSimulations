@@ -238,9 +238,9 @@ def parse_fidelities_from_sql(results_path, max_real_time=None):
         timestamp = data_point.timestamp
         ts.append(timestamp)
         density_matrix = data_point.density_matrix
-        print("dm: {}".format(density_matrix))
-        print("fid: {}".format(calc_fidelity(density_matrix)))
-        print("")
+        # print("dm: {}".format(density_matrix))
+        # print("fid: {}".format(calc_fidelity(density_matrix)))
+        # print("")
         fidelities.append(calc_fidelity(density_matrix))
 
     return fidelities

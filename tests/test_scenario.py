@@ -157,8 +157,8 @@ class TestScenario(unittest.TestCase):
             scen._ok_callback(result)
 
         self.assertEqual(scen.ok_storage, results)
-        self.assertEqual(len(scen.entangled_qstates), 10)
-        self.assertEqual(len(scen.node_measurement_storage), len(results))
+        self.assertEqual(len(scen.entangled_qubits), 10)
+        self.assertEqual(len(scen.node_measurement_storage), 10)
 
 
 if __name__ == '__main__':
