@@ -25,7 +25,7 @@ path_to_SimulaQron = "/".join(path_to_cqc___init__.split("/")[:-2])
 constant_params = {
     "max_sim_time": 0,
     "max_wall_time": 4 * 24 * 3600,
-    "max_mhp_cycle": 80,
+    "max_mhp_cycle": 80000000,
     "t0": 0,
     "enable_pdb": False,
     "wall_time_per_timestep": 1 * 1,
@@ -39,9 +39,9 @@ constant_params = {
 config_dir = "setupsim/config"
 
 configs = {"LAB_NC_NC": "lab/networks_no_cavity_no_conversion.json",
-           "QLINK_WC_WC": "qlink/networks_with_cavity_with_conversion.json"}
-           # "QLINK_WC_WC_HIGH_C_LOSS": "qlink/networks_with_cavity_with_conversion_high_c_loss.json",
-           # }
+           "QLINK_WC_WC": "qlink/networks_with_cavity_with_conversion.json",
+           "QLINK_WC_WC_HIGH_C_LOSS": "qlink/networks_with_cavity_with_conversion_high_c_loss.json",
+           }
 
 config_to_p_succ = {
     "no_noise/no_losses.json": 0.18962460137276416,
