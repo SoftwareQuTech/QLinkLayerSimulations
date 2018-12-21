@@ -4,7 +4,7 @@ from collections import namedtuple, defaultdict
 from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
-from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_ROT_X, INSTR_MEASURE
+from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_ROT_X, INSTR_MEASURE, INSTR_SWAP
 from netsquid.components.qprogram import QuantumProgram
 from netsquid.qubits import qubitapi as qapi
 from easysquid.easyfibre import ClassicalFibreConnection
@@ -1068,6 +1068,7 @@ class NodeCentricEGP(EGP):
         # Check if we need to move the qubit into storage
         if comm_q != storage_q:
             prgm.apply(INSTR_INIT, qs[1])
+            # prgm.apply(INSTR_SWAP, [qs[0], qs[1]])
             qprgms.move_using_CXDirections(prgm, qs[0], qs[1])
 
         # Set the callback of the program
@@ -1098,6 +1099,7 @@ class NodeCentricEGP(EGP):
             prgm = QuantumProgram()
             qs = prgm.get_qubit_indices(2)
             prgm.apply(INSTR_INIT, qs[1])
+            # prgm.apply(INSTR_SWAP, [qs[0], qs[1]])
             qprgms.move_using_CXDirections(prgm, qs[0], qs[1])
 
             # Set the callback

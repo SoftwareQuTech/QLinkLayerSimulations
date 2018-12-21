@@ -238,9 +238,9 @@ def parse_fidelities_from_sql(results_path, max_real_time=None):
         timestamp = data_point.timestamp
         ts.append(timestamp)
         density_matrix = data_point.density_matrix
-        # print("dm: {}".format(density_matrix))
-        # print("fid: {}".format(calc_fidelity(density_matrix)))
-        # print("")
+        print("dm: {}".format(density_matrix))
+        print("fid: {}".format(calc_fidelity(density_matrix)))
+        print("")
         fidelities.append(calc_fidelity(density_matrix))
 
     return fidelities
@@ -254,7 +254,7 @@ def calc_fidelity(d_matrix):
     :return: The fidelity
     :rtype: float
     """
-    psi = np.matrix([[0, 1, 1, 0]]).transpose() / np.sqrt(2)
+    psi = np.matrix([[1, 0, 0, -1]]).transpose() / np.sqrt(2)
     return np.real((psi.H * d_matrix * psi)[0, 0])
 
 

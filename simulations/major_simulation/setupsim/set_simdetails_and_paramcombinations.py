@@ -111,7 +111,7 @@ def single_type_request_params(type, prob, num_pairs):
     elif type == "MD":
         params = {"num_pairs": num_pairs,
                   "tmax_pair": 0,
-                  "min_fidelity": 0.6,
+                  "min_fidelity": 0.5,
                   "purpose_id": 0,
                   "priority": 2,
                   "store": False,
