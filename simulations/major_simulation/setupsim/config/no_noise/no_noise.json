@@ -22,7 +22,11 @@
         "dark_rate": 0,
         "detection_eff": 1,
         "visibility": 1,
-        "t0": 0
+        "t0": 0,
+        "c_prob_loss_A": 0.0,
+        "c_prob_loss_B": 0.0,
+        "c_prob_error_A": 0.0,
+        "c_prob_error_B": 0.0
       }
     },
     "classical1": {

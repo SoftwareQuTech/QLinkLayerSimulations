@@ -22,7 +22,15 @@
         "dark_rate": 20,
         "detection_eff": 0.8,
         "visibility": 0.9,
-        "t0": 0
+        "t0": 0,
+        "c_prob_loss_A": 0.0,
+        "c_prob_loss_B": 0.0,
+        "c_prob_error_A": 0.0,
+        "c_prob_error_B": 0.0,
+        "delay_A": [
+          48366.79380373205,
+          96733.58760746408
+        ]
       }
     },
     "classical1": {

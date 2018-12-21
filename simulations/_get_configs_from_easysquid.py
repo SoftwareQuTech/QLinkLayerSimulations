@@ -15,19 +15,20 @@ import easysquid
 path_to_this_file = os.path.realpath(__file__)
 path_to_this_folder = "/".join(path_to_this_file.split("/")[:-1])
 path_to_this_config_folder = os.path.join(path_to_this_folder, "create_measure_simulation/setupsim/config")
+other_folders = [os.path.join(path_to_this_folder, conf_folder) for conf_folder in ["major_simulation/setupsim/config"]]
 
 NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibre_connection"
 
 
-def _remove_current_files():
-    for folder in os.listdir(path_to_this_config_folder):
-        dst = os.path.join(path_to_this_config_folder, folder)
+def _remove_current_files(path):
+    for folder in os.listdir(path):
+        dst = os.path.join(path, folder)
         if os.path.exists(dst):
             shutil.rmtree(dst)
 
 
 def copy_files_from_easysquid():
-    _remove_current_files()
+    _remove_current_files(path_to_this_config_folder)
 
     path_to_easysquid___init__ = os.path.abspath(easysquid.__file__)
     path_to_easysquid = "/".join(path_to_easysquid___init__.split("/")[:-2])
@@ -228,12 +229,22 @@ def add_loss_qlink_wc_wc():
         json.dump(config_dct, f, indent=2)
 
 
+def copy_files_to_other_folders():
+    for other_folder in other_folders:
+        _remove_current_files(other_folder)
+        for folder in os.listdir(path_to_this_config_folder):
+            src = os.path.join(path_to_this_config_folder, folder)
+            dst = os.path.join(other_folder, folder)
+            shutil.copytree(src, dst)
+
+
 def main():
     copy_files_from_easysquid()
     copy_qlink_wc_wc_high_loss()
     change_connnection_type()
     make_no_loss_and_no_noise_files()
     add_loss_qlink_wc_wc()
+    copy_files_to_other_folders()
 
 
 if __name__ == '__main__':

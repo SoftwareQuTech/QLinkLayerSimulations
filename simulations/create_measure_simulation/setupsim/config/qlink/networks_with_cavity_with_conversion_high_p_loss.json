@@ -8,10 +8,10 @@
     "heralded1": {
       "type": "node_centric_heralded_fibre_connection",
       "parameters": {
-        "lengthA": 0.001,
-        "lengthB": 0.001,
+        "lengthA": 10,
+        "lengthB": 15,
         "p_loss_init": 0,
-        "p_loss_length": 0,
+        "p_loss_length": 0.5,
         "time_window": 40,
         "c": 206753.41931034482,
         "c_noise_model": "default",
@@ -19,24 +19,29 @@
         "q_noise_model": "default",
         "q_loss_model": "default",
         "bandwidth": 1000,
-        "dark_rate": 0,
-        "detection_eff": 1,
-        "visibility": 1,
+        "dark_rate": 20,
+        "detection_eff": 0.8,
+        "visibility": 0.9,
         "t0": 0,
-        "c_prob_loss_A": 0.0,
-        "c_prob_loss_B": 0.0,
+        "c_prob_loss_A": 0.0001,
+        "c_prob_loss_B": 0.0001,
         "c_prob_error_A": 0.0,
-        "c_prob_error_B": 0.0
+        "c_prob_error_B": 0.0,
+        "delay_A": [
+          48366.79380373205,
+          96733.58760746408
+        ]
       }
     },
     "classical1": {
       "type": "classical_fibre_connection",
       "parameters": {
-        "length": 0.002,
+        "length": 25,
         "loss_model": "default",
         "noise_model": "default",
         "c": 206753.41931034482,
-        "bandwidth": 1000
+        "bandwidth": 1000,
+        "c_prob_loss": 0.0001
       }
     }
   },
@@ -54,7 +59,7 @@
             "initialization_op": {
               "noise_model": {
                 "INITIALIZE_NM": {
-                  "depolar_prob": 0
+                  "depolar_prob": 0.05
                 }
               },
               "operation_time": 310000.0
@@ -62,7 +67,7 @@
             "z_rot_gate": {
               "noise_model": {
                 "CARBON_SINGLE_QUBIT_NM": {
-                  "dephasing_prob": 0
+                  "dephasing_prob": 0.001
                 }
               },
               "operation_time": 20000.0
@@ -72,7 +77,7 @@
             "initialization_op": {
               "noise_model": {
                 "INITIALIZE_NM": {
-                  "depolar_prob": 0
+                  "depolar_prob": 0.05
                 }
               },
               "operation_time": 2000.0
@@ -88,7 +93,7 @@
             "measurement_op": {
               "noise_model": {
                 "MEASURE_QUANTUMNM": {
-                  "error_rate": 0
+                  "error_rate": 0.05
                 }
               },
               "operation_time": 3700.0
@@ -98,7 +103,7 @@
             "cx_direction": {
               "noise_model": {
                 "EC_CXDIRECTION_NM": {
-                  "dephasing_prob": 0
+                  "dephasing_prob": 0.05
                 }
               },
               "operation_time": 500000.0
@@ -111,8 +116,8 @@
             "qubit_type": "electron",
             "noise_model": {
               "T1T2": {
-                "T1": 0,
-                "T2": 0
+                "T1": 2680000.0,
+                "T2": 3300.0
               }
             },
             "gates_ids": [
@@ -125,7 +130,7 @@
             "noise_model": {
               "T1T2": {
                 "T1": 0,
-                "T2": 0
+                "T2": 3500000.0
               }
             },
             "gates_ids": [
@@ -138,7 +143,7 @@
             "noise_model": {
               "T1T2": {
                 "T1": 0,
-                "T2": 0
+                "T2": 3500000.0
               }
             },
             "gates_ids": [
@@ -151,7 +156,7 @@
             "noise_model": {
               "T1T2": {
                 "T1": 0,
-                "T2": 0
+                "T2": 3500000.0
               }
             },
             "gates_ids": [
@@ -162,20 +167,20 @@
         "photon_emission": {
           "photon_emission_noise": {
             "delta_w": [
-              0,
-              0,
-              0
+              377,
+              62,
+              77
             ],
             "tau_decay": [
-              0,
-              0,
-              0
+              263,
+              837,
+              640
             ],
-            "tau_emission": 0,
+            "tau_emission": 6.48,
             "time_window": 40,
-            "delta_phi": 0,
-            "p_zero_phonon": 1,
-            "collection_eff": 1,
+            "delta_phi": 10.606601717798211,
+            "p_zero_phonon": 0.46,
+            "collection_eff": 0.004425660112387056,
             "p_double_exc": 0.04
           },
           "photon_emission_delay": 5500.0
