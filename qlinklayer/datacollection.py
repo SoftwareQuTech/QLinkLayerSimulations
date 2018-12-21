@@ -358,7 +358,7 @@ class EGPStateSequence(EGPDataSequence):
 
     def get_column_names(self):
         matrix_columns = ["{}, {}, {}".format(i, j, k) for i in range(4) for j in range(4) for k in ['real', 'imag']]
-        return ["Timestamp"] + matrix_columns + ["Success"]
+        return ["Timestamp", "Outcome 1", "Outcome 2"] + matrix_columns + ["Success"]
 
     def getData(self, time, source=None):
         scenario = source[0]
@@ -367,15 +367,15 @@ class EGPStateSequence(EGPDataSequence):
         # Wait for both nodes to commit their state
         if ent_id in self._collected_ent_ids:
             self._collected_ent_ids.remove(ent_id)
-            q1 = self.evt_source_list[0].entangled_qubits.pop(ent_id)
-            q2 = self.evt_source_list[1].entangled_qubits.pop(ent_id)
+            r1, q1 = self.evt_source_list[0].entangled_qubits.pop(ent_id)
+            r2, q2 = self.evt_source_list[1].entangled_qubits.pop(ent_id)
             qstate = qapi.reduced_dm([q1, q2])
 
             qapi.discard(q1)
             qapi.discard(q2)
 
-            val = [n for sl in [[z.real, z.imag] for z in qstate.flat] for n in sl]
-            return [val, True]
+            val = [r1, r2] + [n for sl in [[z.real, z.imag] for z in qstate.flat] for n in sl]
+            return [val, r1 == r2]
         else:
             self._collected_ent_ids.append(ent_id)
             return [None, True]
@@ -390,21 +390,23 @@ class EGPStateDataPoint(EGPDataPoint):
                 self.from_raw_data(data)
         else:
             self.timestamp = None
-            self.node_id = None
+            self.outcome1 = None
+            self.outcome2 = None
             self.density_matrix = None
             self.success = None
 
     def from_raw_data(self, data):
         try:
             self.timestamp = data[0]
-            self.node_id = data[1]
+            self.outcome1 = data[1]
+            self.outcome2 = data[2]
 
             # Construct the matrix
-            m_data = data[1:33]
+            m_data = data[3:35]
             density_matrix = np.matrix(
                 [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
             self.density_matrix = density_matrix
-            self.success = data[33]
+            self.success = data[35]
         except IndexError:
             raise ValueError("Cannot parse data")
 

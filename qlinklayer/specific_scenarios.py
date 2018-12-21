@@ -160,8 +160,9 @@ class MixedScenario(EGPSimulationScenario):
             measure_directly = False
 
             logical_id = cqc_xtra_qubit_header.qubit_id
+            midpoint_outcome = self.egp.midpoint_outcome
 
-            self.entangled_qubits[ent_id] = self.node.qmem.pop(logical_id)[0]
+            self.entangled_qubits[ent_id] = (midpoint_outcome, self.node.qmem.pop(logical_id)[0])
 
             # Free the qubit for the EGP
             self.qmm.vacate_qubit(logical_id)
