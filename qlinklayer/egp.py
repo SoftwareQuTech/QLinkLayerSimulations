@@ -778,7 +778,8 @@ class NodeCentricEGP(EGP):
                 else:
                     self.mhp_reply = result
 
-            elif self.emission_handling_in_progress == self.EMIT_HANDLER_MD and aid == self.measurement_info[0][0]:
+            # Check if we have results for this aid
+            elif self.emission_handling_in_progress == self.EMIT_HANDLER_MD and len(self.measurement_results[aid]) == 0:
                 self.mhp_reply = result
 
             # Otherwise this response is associated with a generation attempt and we are ready to process
