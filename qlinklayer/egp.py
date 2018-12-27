@@ -1,5 +1,6 @@
 import abc
 import numpy as np
+from math import floor, ceil
 from collections import namedtuple, defaultdict
 from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
@@ -206,6 +207,12 @@ class NodeCentricEGP(EGP):
     EMIT_HANDLER_CK = 51
     EMIT_HANDLER_MD = 52
 
+    # Operation types
+    OP_NONE = 60
+    OP_MOVE = 61
+    OP_MEAS = 62
+    OP_INIT = 63
+
     def __init__(self, node, conn=None, err_callback=None, ok_callback=None, throw_local_queue_events=False,
                  accept_all_requests=False, num_priorities=1, scheduler_weights=None):
         """
@@ -230,6 +237,13 @@ class NodeCentricEGP(EGP):
         self.this_corr_delay = 0
         self.peer_corr_delay = 0
         self.max_measurement_delay = 0
+        self.max_memory_init_delay = 0
+
+        # Information to keep track of whether memory qubits requires initalization
+        self._next_init_cycle = {}
+        self._cycles_per_initialization = {}
+        # self._last_memory_init = {}
+        # self._memory_decoherence_time = {}
 
         # Request tracking
         self.expected_seq = 0
@@ -262,9 +276,16 @@ class NodeCentricEGP(EGP):
         self._EVT_ENT_COMPLETED = EventType("ENT COMPLETE", "Successfully generated an entangled pair of qubits")
         self._EVT_REQ_COMPLETED = EventType("REQ COMPLETE", "Successfully completed a request")
 
+        # Setup program handlers
+        self.node.qmem.set_program_done_callback(self._handle_program_done, once=False)
+        self.node.qmem.set_program_fail_callback(self._handle_program_failure, once=False)
+        self._current_prgm_name = self.OP_NONE
+        self._current_prgm = None
+
         # Measure directly storage and handler
         self.measurement_info = []
         self.move_info = None
+        self.init_info = None
         self.midpoint_outcome = None
         self.emission_handling_in_progress = self.EMIT_HANDLER_NONE
         self.mhp_reply = None
@@ -324,11 +345,12 @@ class NodeCentricEGP(EGP):
                                                          callback=self.handle_reply_mhp)
 
         # Give scheduler information about timing
+        cycle_period = self.mhp_service.get_cycle_time(self.node)
         remote_node = self.mhp_service.get_node(nodeID=self.mhp.get_otherID())
         scheduling_offsets = self.mhp_service.get_timing_offsets([self.node, remote_node])
         local_trigger = scheduling_offsets[self.node.nodeID]
         remote_trigger = scheduling_offsets[self.mhp.get_otherID()]
-        self.scheduler.configure_mhp_timings(cycle_period=self.mhp_service.get_cycle_time(self.node),
+        self.scheduler.configure_mhp_timings(cycle_period=cycle_period,
                                              full_cycle=self.mhp_service.get_full_cycle_time(self.node),
                                              local_trigger=local_trigger, remote_trigger=remote_trigger)
 
@@ -373,6 +395,11 @@ class NodeCentricEGP(EGP):
         peer_move_delays = other_egp.qmm.get_move_delays(0)
         max_peer_move_delay = max([time for time in peer_move_delays.values() if time != float('inf')])
         max_move_delay = max(max_this_move_delay, max_peer_move_delay)
+        # TODO: assuming that the ID of the storage qubit is 1
+        this_memory_init_delay = self.qmm.get_memory_init_delay(1)
+        peer_memory_init_delay = other_egp.qmm.get_memory_init_delay(1)
+        self.max_memory_init_delay = max(this_memory_init_delay, peer_memory_init_delay)
+        other_egp.max_memory_init_delay = self.max_memory_init_delay
 
         local_measurement_delay = self.qmm.get_measurement_delay(0)
         remote_measurement_delay = other_egp.qmm.get_measurement_delay(0)
@@ -380,6 +407,27 @@ class NodeCentricEGP(EGP):
         other_egp.max_measurement_delay = self.max_measurement_delay
         self.max_move_delay = max_move_delay
         other_egp.max_move_delay = max_move_delay
+
+        mhp_cycle_period = self.scheduler.mhp_cycle_period
+        # TODO Only using qubit ID 1
+        for qubit_id in [1]:
+            _, this_T2 = self.qmm.get_qubit_T1_T2(qubit_id)
+            _, peer_T2 = other_egp.qmm.get_qubit_T1_T2(qubit_id)
+            if this_T2 == 0:
+                if peer_T2 == 0:
+                    memory_decoherence_time = 0
+                else:
+                    memory_decoherence_time = peer_T2
+            else:
+                if peer_T2 == 0:
+                    memory_decoherence_time = this_T2
+                else:
+                    memory_decoherence_time = min(this_T2, peer_T2)
+            if memory_decoherence_time == 0:
+                self._cycles_per_initialization[qubit_id] = None
+            else:
+                self._cycles_per_initialization[qubit_id] = floor(memory_decoherence_time / mhp_cycle_period)
+            other_egp._cycles_per_initialization = self._cycles_per_initialization
 
         this_corr_delay = self.qmm.get_correction_delay(0)
         peer_corr_delay = other_egp.qmm.get_correction_delay(0)
@@ -725,8 +773,27 @@ class NodeCentricEGP(EGP):
             # Get scheduler's next gen task
             gen = self.scheduler.next()
             self.scheduler.inc_cycle()
+            # if gen.flag:
+                # if self.node.qmem._memory_positions[1]._qubit is None:
+                    # import pdb
+                    # pdb.set_trace()
+                    # print(self.node.qmem._memory_positions)
 
             if gen.flag:
+                # import pdb
+                # pdb.set_trace()
+                if gen.storage_q != gen.comm_q:
+                    # Check that storage qubit is already initialized
+                    if self._memory_needs_initialization(gen.storage_q):
+                        self.initialize_storage(gen.storage_q)
+                        return False
+
+                # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
+                if not self.scheduler.is_handling_measure_directly():
+                    suspend_time = self.scheduler.mhp_full_cycle
+                    logger.debug("Next generation attempt after {}".format(suspend_time))
+                    self.scheduler.suspend_generation(suspend_time)
+
                 # Store the gen for pickup by mhp
                 self.mhp_service.put_ready_data(self.node.nodeID, gen)
                 return True
@@ -739,6 +806,96 @@ class NodeCentricEGP(EGP):
             self.issue_err(err=self.ERR_OTHER)
             return False
 
+    def initialize_storage(self, qubit_id):
+        """
+        Initializes the qubit if possible, if so, suspends the scheduler
+        :param qubit_id:
+        :return:
+        """
+        logger.debug("Node {} : Memory qubit {} needs initalization".format(self.node.name, qubit_id))
+        if self.scheduler.suspended():
+            logger.debug("Node {} : Scheduler is suspended".format(self.node.name))
+            return
+        elif self.qmm.is_busy():
+            logger.debug("Node {} : QMM is busy".format(self.node.name))
+            return
+        elif self.qmm.reserved_qubits[qubit_id]:
+            logger.debug("Node {} : Qubit ID {} is reserved".format(self.node.name, qubit_id))
+            return
+        else:
+            logger.debug("Node {} : Initializing qubit {} in cycle {}".format(self.node.name, qubit_id, self.scheduler.mhp_cycle_number))
+            if self._cycles_per_initialization[qubit_id] is not None:
+                this_cycle = self.scheduler.mhp_cycle_number
+                init_delay_cycles = ceil(self.max_memory_init_delay / self.scheduler.mhp_cycle_period)
+                dec_cycles = self._cycles_per_initialization[qubit_id]
+                self._next_init_cycle[qubit_id] = (this_cycle + init_delay_cycles + dec_cycles) % self.scheduler.max_mhp_cycle_number
+            else:
+                self._next_init_cycle[qubit_id] = None
+            # self.init_info = qubit_id
+            # self._last_memory_init[qubit_id] = None
+            prgm = QuantumProgram()
+            q = prgm.get_qubit_indices(1)[0]
+            prgm.apply(INSTR_INIT, q)
+            self.scheduler.suspend_generation(self.max_memory_init_delay)
+            # self.reset_program_callback()
+
+            self._current_prgm = prgm
+            self._current_prgm_name = self.OP_INIT
+            self.node.qmem.execute_program(prgm, qubit_mapping=[qubit_id])
+
+    def _handle_program_failure(self):
+        """
+        Just prints the error of a program failed
+        :return:
+        """
+        logger.error("Node {} : QuantumProgram failed because {}".format(self.node.name, self.node.qmem.failure_exception))
+
+    def _handle_program_done(self):
+        """
+        Handles the finish of a measure, init or swap program
+        :param operation: str
+            "meas", "move" or "init"
+        :return:
+        """
+        if self._current_prgm_name == self.OP_MEAS:
+            logger.debug("Node {} : Handling meas program done".format(self.node.name))
+            self._handle_measurement_outcome()
+        elif self._current_prgm_name == self.OP_MOVE:
+            logger.debug("Node {} : Handling move program done".format(self.node.name))
+            self._handle_move_completion()
+        elif self._current_prgm_name == self.OP_INIT:
+            logger.debug("Node {} : Handling init program done".format(self.node.name))
+            self._handle_init_completion()
+        else:
+            raise ValueError("Unknown operation")
+
+    def _handle_init_completion(self):
+        """
+        Handles the completion of an initialization
+        :return:
+        """
+        pass
+
+    def _memory_needs_initialization(self, qubit_id):
+        """
+        Checks if qubit should be initialized to be ready to be used.
+        :param qubit_id:
+        :return:
+        """
+        # Has the qubit been initialized and not used
+        if qubit_id not in self._next_init_cycle:
+            return True
+        else:
+            # Does this qubit have infinite decoherence time?
+            if self._cycles_per_initialization[qubit_id] is None:
+                return False
+            else:
+                curr_cycle = self.scheduler.mhp_cycle_number
+                if self.scheduler._compare_mhp_cycle(self._next_init_cycle[qubit_id], curr_cycle) <= 0:
+                    return True
+                else:
+                    return False
+
     # Callback handler to be given to MHP so that EGP updates when request is satisfied
     def handle_reply_mhp(self, result):
         """
@@ -747,7 +904,7 @@ class NodeCentricEGP(EGP):
             Contains the processing result information from attempting entanglement generation
         """
         try:
-            logger.debug("Handling MHP Reply: {}".format(result))
+            logger.debug("Node {} : Handling MHP Reply: {} in cycle {}".format(self.node.name, result, self.scheduler.mhp_cycle_number))
 
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
@@ -764,7 +921,7 @@ class NodeCentricEGP(EGP):
                     logger.warning("Got MHP Reply containing aid {} for no current or old request!".format(aid))
 
                 else:
-                    logger.debug("Got MHP reply containing aid {} for an old request".format(aid))
+                    logger.warning("Got MHP reply containing aid {} for an old request".format(aid))
                     self.clear_if_handling_emission(aid)
                     # Update the MHP Sequence number as necessary
                     if midpoint_outcome in [1, 2]:
@@ -773,26 +930,33 @@ class NodeCentricEGP(EGP):
 
             # Check if the reply came in before our emission handling completed
             elif self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
-                if midpoint_outcome == 0:
-                    self.clear_if_handling_emission(aid)
-                else:
-                    self.mhp_reply = result
+                raise RuntimeError("Shouldn't be handling CK emit")
+                # if midpoint_outcome == 0:
+                #     self.clear_if_handling_emission(aid)
+                # else:
+                #     print("suspended cycles = {}".format(self.scheduler.num_suspended_cycles))
+                #     self.mhp_reply = result
 
             # Check if we have results for this aid
             elif self.emission_handling_in_progress == self.EMIT_HANDLER_MD and len(self.measurement_results[aid]) == 0:
                 self.mhp_reply = result
 
-            # Otherwise this response is associated with a generation attempt and we are ready to process
+            # Otherwise this response is associated with a generation attempt where emission handling is finished
+            # and we are ready to process
             else:
                 # No entanglement generated
                 if midpoint_outcome == 0:
                     logger.debug("Failed to produce entanglement with other node")
                     creq = self.scheduler.get_request(aid)
+
                     if creq is None:
                         logger.error("Request not found!")
                         self.issue_err(err=self.ERR_OTHER)
 
                     else:
+                        # Resume generation
+                        self.scheduler.resume_generation()
+
                         # Free the resources for the next attempt
                         self.scheduler.free_gen_resources(aid)
 
@@ -899,6 +1063,10 @@ class NodeCentricEGP(EGP):
             self.issue_err(err=self.ERR_OTHER)
             return
 
+        # Get comm and storage qubit
+        comm_q = self.scheduler.curr_gen.comm_q
+        storage_q = self.scheduler.curr_gen.storage_q
+
         # Check if the corresponding request is measure directly
         if creq.measure_directly:
             # Grab the result and correct
@@ -918,8 +1086,12 @@ class NodeCentricEGP(EGP):
             # Pass up the meaurement info to higher layers
             self.corrected_measurements[aid].append((m, basis))
             self._return_ok(mhp_seq, aid)
-
-        # Otherwise we are keeping the qubit
+        # We need to move state to memory qubit
+        elif comm_q != storage_q:
+            self.midpoint_outcome = r
+            self.move_info = mhp_seq, aid, storage_q
+            self._move_comm_to_storage(comm_q, storage_q)
+        # Otherwise we're leaving the state in the communication qubit and just return the ok
         else:
             self.midpoint_outcome = r
             self._return_ok(mhp_seq=mhp_seq, aid=aid)
@@ -936,6 +1108,8 @@ class NodeCentricEGP(EGP):
         # Get request resources
         comm_q = self.scheduler.curr_gen.comm_q
         storage_q = self.scheduler.curr_gen.storage_q
+
+        logger.debug("Handling photon emission")
 
         if self.scheduler.is_handling_measure_directly():
             logger.debug("Beginning measurement of qubit for measure directly")
@@ -965,30 +1139,47 @@ class NodeCentricEGP(EGP):
             # Suspend generation while the measurement is in progress
             self.scheduler.suspend_generation(self.max_measurement_delay)
             prgm.apply(INSTR_MEASURE, q, output_key="m")
-            self.node.qmem.set_program_done_callback(self._handle_measurement_outcome, prgm=prgm)
+            # self.node.qmem.set_program_done_callback(self._handle_measurement_outcome, prgm=prgm)
+
+            self._current_prgm = prgm
+            self._current_prgm_name = self.OP_MEAS
             self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q])
 
-        elif comm_q != storage_q:
-            logger.debug("Moving comm_q {} to storage_q {}".format(comm_q, storage_q))
-            # Set a flag to make sure we catch replies that occur during the measurement
-            self.emission_handling_in_progress = self.EMIT_HANDLER_CK
-
-            # Construct a quantum program to correct and move
-            prgm = QuantumProgram()
-            qs = prgm.get_qubit_indices(2)
-            prgm.apply(INSTR_INIT, qs[1])
-            qprgms.move_using_CXDirections(prgm, qs[0], qs[1])
-
-            # Store the aid and storage_q information
-            self.move_info = (self.scheduler.curr_aid, storage_q)
-
-            # Set the callback of the program
-            self.scheduler.suspend_generation(self.max_move_delay)
-            self.node.qmem.set_program_done_callback(self._handle_move_completion, prgm=prgm)
-            self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q, storage_q])
+        # elif comm_q != storage_q:
+        #     self._move_comm_to_storage(comm_q, storage_q)
 
         else:
-            logger.debug("Entangled qubit will remain in comm_q")
+            logger.debug("Entangled qubit will remain in comm_q until midpoint reply")
+
+    def _move_comm_to_storage(self, comm_q, storage_q):
+        """
+        Moves the state in the communication qubit to a specified storage qubit.
+        Suspends scheduler during this time
+        :param comm_q:
+        :param storage_q:
+        :return:
+        """
+        logger.debug("Node {} : Moving comm_q {} to storage_q {}".format(self.node.name, comm_q, storage_q))
+        if self.node.qmem._memory_positions[storage_q]._qubit is None:
+            raise RuntimeError("No qubit before trying to swap")
+        # Set a flag to make sure we catch replies that occur during the measurement
+        # self.emission_handling_in_progress = self.EMIT_HANDLER_CK
+
+        # Reset init info of this storage qubit
+        self._next_init_cycle.pop(storage_q)
+
+        # Construct a quantum program to correct and move
+        prgm = QuantumProgram()
+        qs = prgm.get_qubit_indices(2)
+        qprgms.move_using_CXDirections(prgm, qs[0], qs[1])
+
+        # Set the callback of the program
+        self.scheduler.suspend_generation(self.max_move_delay)
+        # self.node.qmem.set_program_done_callback(self._handle_move_completion, prgm=prgm)
+
+        self._current_prgm = prgm
+        self._current_prgm_name = self.OP_MOVE
+        self.node.qmem.execute_program(prgm, qubit_mapping=[comm_q, storage_q])
 
     def handling_emission(self, aid):
         """
@@ -1002,7 +1193,8 @@ class NodeCentricEGP(EGP):
 
         # Handle create and keep program
         elif self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
-            emit_aid, _ = self.move_info
+            raise RuntimeError("Shouldn't be handling CK after emission now")
+            # emit_aid, _ = self.move_info
 
         # Handle measure directly program
         else:
@@ -1021,7 +1213,8 @@ class NodeCentricEGP(EGP):
         # Check if we are handling the emission for this aid
         if self.handling_emission(aid):
             # Halt handling
-            self.node.qmemory.stop_program()
+            # logger.info("Stopping swap program")
+            # self.node.qmemory.stop_program()
 
             # Allow scheduler to resume
             self.scheduler.resume_generation()
@@ -1033,15 +1226,17 @@ class NodeCentricEGP(EGP):
             else:
                 self.measurement_info.pop(0)
 
-    def _handle_measurement_outcome(self, prgm):
+    def _handle_measurement_outcome(self):
         """
         Handles the measurement outcome from measureing the communication qubit
         directly after the photon was emitted.
         Calls back to complete MHP reply handling.
-        :param prgm: :obj:`netsquid.QuantumProgram`
-            The quantum program to be able to access the measurement outcome
         :return: None
         """
+        prgm = self._current_prgm
+        self._current_prgm_name = self.OP_NONE
+        self._current_prgm = None
+
         outcome = prgm.output["m"][0]
         # Saves measurement outcome
         self.emission_handling_in_progress = self.EMIT_HANDLER_NONE
@@ -1071,26 +1266,29 @@ class NodeCentricEGP(EGP):
         self.measurement_results[aid] = []
         self.corrected_measurements[aid] = []
 
-    def _handle_move_completion(self, prgm):
+    def _handle_move_completion(self):
         """
         Handles completion of the move for create and keep requests that specify store.  If the MHP reply came in
         during the move then we proceed to handle it at this point
         :param prgm:
         :return:
         """
+        self._current_prgm_name = self.OP_NONE
+        self._current_prgm = None
+
         self.emission_handling_in_progress = self.EMIT_HANDLER_NONE
-        aid, storage_q = self.move_info
+        if self.move_info is None:
+            raise RuntimeError("No move info")
+        mhp_seq, aid, storage_q = self.move_info
         self.move_info = None
-        logger.debug("Completed moving comm_q to storage_q")
+        logger.debug("Node {} : Completed moving comm_q to storage_q".format(self.node.name))
         if self.scheduler.curr_gen and self.scheduler.curr_aid == aid:
-            # If we received a reply for this attempt during measurement we can handle it immediately
-            if self.mhp_reply:
-                self.handle_reply_mhp(self.mhp_reply)
-                self.mhp_reply = None
+            # Return ok
+            self._return_ok(mhp_seq, aid)
 
         else:
             logger.warning("Scheduler no longer processing aid {}!  Freeing storage qubit")
-            self.qmm.free_qubit(storage_q)
+            self.qmm.vacate_qubit(storage_q)
 
     def _process_mhp_seq(self, mhp_seq, aid):
         """

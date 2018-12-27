@@ -64,7 +64,7 @@ def change_connnection_type():
             # Set electron T2 to zero
             for q in config_dct["qpd_config"]["default"]["parameters"]["qubits"]:
                 if q["qubit_type"] == "electron":
-                    q["noise_model"]["T1T2"]["T2"] = 0
+                    q["noise_model"]["T1T2"]["T2"] = 1000000.0
 
             # Get the connection config name of the mhp connection
             conn_config_name = _get_conn_config_name_of_mhp_conn(config_dct)

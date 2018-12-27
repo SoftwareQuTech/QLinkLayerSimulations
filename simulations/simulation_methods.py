@@ -3,6 +3,7 @@ import pdb
 import json
 from time import time
 import math
+import logging
 from os.path import exists
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
@@ -14,6 +15,8 @@ from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.specific_scenarios import MixedScenario
 from simulations._get_configs_from_easysquid import NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
+
+logger.setLevel(logging.INFO)
 
 # Here we add an entry into the Connection structure in Easysquid Easynetwork to give us access to load up configs
 # for the simulation using connections defined here in the QLinkLayer

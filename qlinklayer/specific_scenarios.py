@@ -166,7 +166,6 @@ class MixedScenario(EGPSimulationScenario):
 
             # Free the qubit for the EGP
             self.qmm.vacate_qubit(logical_id)
-
         elif isinstance(cqc_ent_info_header, EntInfoMeasDirectHeader):
             measure_directly = True
 

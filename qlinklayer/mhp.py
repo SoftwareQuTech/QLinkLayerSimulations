@@ -770,7 +770,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return: None
         """
         try:
-            logger.debug("{} Beginning entanglement attempt".format(self.node.nodeID))
+            logger.debug("{} Beginning entanglement attempt".format(self.node.name))
             NodeCentricMHP.run_protocol(self)
 
         except Exception:

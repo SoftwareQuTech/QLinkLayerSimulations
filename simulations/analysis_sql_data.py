@@ -238,12 +238,16 @@ def parse_fidelities_from_sql(results_path, max_real_time=None):
         timestamp = data_point.timestamp
         ts.append(timestamp)
         density_matrix = data_point.density_matrix
-        fidelities.append(calc_fidelity(density_matrix))
+        if data_point.outcome1 != data_point.outcome2:
+            logger.error("Nodes got different outcomes from midpoint")
+            continue
+        outcome = data_point.outcome1
+        fidelities.append(calc_fidelity(outcome, density_matrix))
 
     return fidelities
 
 
-def calc_fidelity(d_matrix):
+def calc_fidelity(outcome, d_matrix):
     """
     Computes fidelity to the state 1/sqrt(2)(|01>+|10>)
     :param d_matrix: Density matrix
@@ -251,7 +255,12 @@ def calc_fidelity(d_matrix):
     :return: The fidelity
     :rtype: float
     """
-    psi = np.matrix([[1, 0, 0, -1]]).transpose() / np.sqrt(2)
+    if outcome == 1:
+        psi = np.matrix([[1, 0, 0, -1]]).transpose() / np.sqrt(2)
+    elif outcome == 2:
+        psi = np.matrix([[0, 1, -1, 0]]).transpose() / np.sqrt(2)
+    else:
+        raise ValueError("Unexpected outcome")
     return np.real((psi.H * d_matrix * psi)[0, 0])
 
 

@@ -50,7 +50,7 @@ name_to_scenario = {
     # "NoNoise_NC_NC_LRF": ("no_noise/no_noise.json", 0.2),
     # "NoNoise_NC_NC_HRF": ("no_noise/no_noise.json", 0.8)
     # "NoLoss_NC_NC_LRF": ("no_noise/no_losses.json", 0.2),
-    # "NoLoss_NC_NC_HRF": ("no_noise/no_losses.json", 0.8),
+    "NoLoss_NC_NC_HRF": ("no_noise/no_losses.json", 0.8)
     # "Lab_NC_NC_LRF": ("lab/networks_no_cavity_no_conversion.json", 0.2),
     # "Lab_NC_NC_HRF": ("lab/networks_no_cavity_no_conversion.json", 0.8)
     # "Lab_NC_WC_LRF": ("lab/networks_no_cavity_with_conversion.json", 0.2),
@@ -66,7 +66,7 @@ name_to_scenario = {
     # "QLink_WC_NC_LRF": ("qlink/networks_with_cavity_no_conversion.json", 0.2),
     # "QLink_WC_NC_HRF": ("qlink/networks_with_cavity_no_conversion.json", 0.8),
     # "QLink_WC_WC_LRF": ("qlink/networks_with_cavity_with_conversion.json", 0.2),
-    "QLink_WC_WC_HRF": ("qlink/networks_with_cavity_with_conversion.json", 0.8)
+    # "QLink_WC_WC_HRF": ("qlink/networks_with_cavity_with_conversion.json", 0.8)
 }
 
 # create paramcombinations
@@ -81,12 +81,12 @@ opt_params = {
     "request_cycle": 0,
     "max_sim_time": 0,
     "max_wall_time": 4 * 24 * 3600,
-    "max_mhp_cycle": 1000000,
+    "max_mhp_cycle": 10000,
     "enable_pdb": False,
     "alphaA": [0.1, 0.3],
     "alphaB": [0.1, 0.3],
     "t0": 0,
-    "wall_time_per_timestep": 1 * 10,
+    "wall_time_per_timestep": 1 * 1,
     "save_additional_data": True,
     "collect_queue_data": True}
 
