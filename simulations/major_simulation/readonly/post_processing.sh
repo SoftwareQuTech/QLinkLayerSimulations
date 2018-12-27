@@ -17,7 +17,6 @@ OUTPUTDIRNAME=$6
 tmp_key_file="${RESULT_DIR}/tmp_key_file_${SLURM_JOB_ID}.csv"
 python3 "${SIMULATION_DIR}/readonly/make_key_pool.py" $paramsetfile $tmp_key_file
 
-
 ########################
 # Setup stopos pool
 # to run post processing

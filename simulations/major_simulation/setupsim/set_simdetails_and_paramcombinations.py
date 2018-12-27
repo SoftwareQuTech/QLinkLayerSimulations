@@ -25,7 +25,7 @@ path_to_SimulaQron = "/".join(path_to_cqc___init__.split("/")[:-2])
 constant_params = {
     "max_sim_time": 0,
     "max_wall_time": 0,
-    "max_mhp_cycle": 0,
+    "max_mhp_cycle": 80,
     "t0": 0,
     "enable_pdb": False,
     "wall_time_per_timestep": 1 * 60,
