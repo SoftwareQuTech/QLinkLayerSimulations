@@ -99,7 +99,7 @@
             "cx_direction": {
               "noise_model": {
                 "EC_CXDIRECTION_NM": {
-                  "dephasing_prob": 0.05
+                  "dephasing_prob": 0.008
                 }
               },
               "operation_time": 500000.0
