@@ -266,7 +266,7 @@ if [ "$RUNONCLUSTER" == 'y' ]; then
     # fi
 else
     echo "in start simulation ${resultsdir}"
-    bash readonly/run_simulation.sh -rd $resultsdir -td $resultsdir -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc $RUNONCLUSTER -pp $POST_PROC
+    sh readonly/run_simulation.sh -rd $resultsdir -td $resultsdir -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc $RUNONCLUSTER -pp $POST_PROC
 fi
 
 # Check if we should do post-processing (for cluster this is done after the archiving job)
