@@ -568,7 +568,7 @@ class StrictPriorityRequestScheduler(Scheduler):
         """
         if self.is_generating_aid(aid):
             # Get the used qubit info and free unused resources
-            self.qmm.free_qubit(self.curr_gen.comm_q)
+            self.qmm.vacate_qubit(self.curr_gen.comm_q)
             if self.curr_gen.comm_q != self.curr_gen.storage_q:
                 self.qmm.vacate_qubit(self.curr_gen.storage_q)
 

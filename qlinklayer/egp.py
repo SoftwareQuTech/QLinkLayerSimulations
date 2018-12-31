@@ -775,13 +775,9 @@ class NodeCentricEGP(EGP):
             self.scheduler.inc_cycle()
             # if gen.flag:
                 # if self.node.qmem._memory_positions[1]._qubit is None:
-                    # import pdb
-                    # pdb.set_trace()
                     # print(self.node.qmem._memory_positions)
 
             if gen.flag:
-                # import pdb
-                # pdb.set_trace()
                 if gen.storage_q != gen.comm_q:
                     # Check that storage qubit is already initialized
                     if self._memory_needs_initialization(gen.storage_q):
