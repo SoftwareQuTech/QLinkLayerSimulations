@@ -914,10 +914,10 @@ class NodeCentricEGP(EGP):
             elif not self.scheduler.has_request(aid=aid):
                 # If we have never seen this aid before we should throw a warning
                 if not self.scheduler.previous_request(aid=aid):
-                    logger.warning("Got MHP Reply containing aid {} for no current or old request!".format(aid))
+                    logger.debug("Got MHP Reply containing aid {} a previous request!".format(aid))
 
                 else:
-                    logger.warning("Got MHP reply containing aid {} for an old request".format(aid))
+                    logger.warning("Got MHP reply containing aid {} for an unknown request".format(aid))
                     self.clear_if_handling_emission(aid)
                     # Update the MHP Sequence number as necessary
                     if midpoint_outcome in [1, 2]:
