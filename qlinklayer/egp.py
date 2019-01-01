@@ -913,7 +913,7 @@ class NodeCentricEGP(EGP):
             # Check if this aid may have been expired or timed out while awaiting reply
             elif not self.scheduler.has_request(aid=aid):
                 # If we have never seen this aid before we should throw a warning
-                if not self.scheduler.previous_request(aid=aid):
+                if self.scheduler.previous_request(aid=aid):
                     logger.debug("Got MHP Reply containing aid {} a previous request!".format(aid))
 
                 else:
@@ -1258,6 +1258,8 @@ class NodeCentricEGP(EGP):
             if self.mhp_reply:
                 self.handle_reply_mhp(self.mhp_reply)
                 self.mhp_reply = None
+        elif self.scheduler.previous_request(aid):
+            logger.debug("Handling measurement outcome from request that is already completed with aid {}".format(aid))
         else:
             logger.warning("Handling measurement outcome for request that is not held by"
                            "the scheduler, with aid {}".format(aid))
