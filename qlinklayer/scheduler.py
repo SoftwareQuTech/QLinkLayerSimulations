@@ -79,7 +79,7 @@ class StrictPriorityRequestScheduler(Scheduler):
         self.curr_aid = None  # The absolute queue ID of the current request being handled
         self.curr_gen = None  # The current generation being handled
         self.prev_requests = []  # Previous requests (for filtering delayed communications)
-        self.max_prev_requests = 5  # Number of previous requests to store
+        self.max_prev_requests = 10  # Number of previous requests to store
 
         # Suspended generation tracking
         self.num_suspended_cycles = 0
