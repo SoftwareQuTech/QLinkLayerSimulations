@@ -23,12 +23,12 @@ path_to_SimulaQron = "/".join(path_to_cqc___init__.split("/")[:-2])
 #########################
 
 constant_params = {
-    "max_sim_time": 10,
+    "max_sim_time": 0,
     "max_wall_time": 0,
     "max_mhp_cycle": 0,
     "t0": 0,
     "enable_pdb": False,
-    "wall_time_per_timestep": 1 * 1,
+    "wall_time_per_timestep": 30 * 60,
     "save_additional_data": True,
     "collect_queue_data": True,
     "request_cycle": 0,
@@ -221,11 +221,6 @@ simulation_run_params = {"config": config_file_path,
 simulation_run_params.update(constant_params)
 run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
 paramcombinations[run_name] = simulation_run_params
-
-# TODO TMP
-for key in list(paramcombinations.keys()):
-    if not key == "QLINK_WC_WC_mix_moreMD_weights_lowerWFQ":
-        paramcombinations.pop(key)
 
 print(len(paramcombinations))
 
