@@ -959,8 +959,8 @@ class NodeCentricEGP(EGP):
                         # If handling a measure directly request we need to throw away the measurement result
                         if creq.measure_directly and self.scheduler.has_request(aid):
                             m, basis = self.measurement_results[aid].pop(0)
-                            logger.debug("Removing measurement outcome {} in basis {} from stored results"
-                                         .format(m, basis))
+                            logger.debug("Removing measurement outcome {} in basis {} for aid {} (failed attempt)"
+                                        .format(m, basis, aid))
 
                 elif midpoint_outcome in [1, 2]:
                     # Check if we need to time out this request
@@ -1067,6 +1067,8 @@ class NodeCentricEGP(EGP):
         if creq.measure_directly:
             # Grab the result and correct
             m, basis = self.measurement_results[aid].pop(0)
+            logger.debug("Removing measurement outcome {} in basis {} for aid {} (successful attempt)"
+                        .format(m, basis, aid))
 
             # Flip this outcome in the case we need to apply a correction
             creator = not (self.dqp.master ^ creq.master_request)
@@ -1130,7 +1132,7 @@ class NodeCentricEGP(EGP):
                 prgm.apply(INSTR_ROT_X, q, angle=np.pi / 2)
 
             # Store the aid and basis for retrieval post measurement
-            self.measurement_info.append((self.scheduler.curr_aid, basis))
+            self.measurement_info.append((self.scheduler.curr_aid, basis, comm_q))
 
             # Suspend generation while the measurement is in progress
             self.scheduler.suspend_generation(self.max_measurement_delay)
@@ -1194,7 +1196,7 @@ class NodeCentricEGP(EGP):
 
         # Handle measure directly program
         else:
-            emit_aid, _ = self.measurement_info[0]
+            emit_aid, _, _ = self.measurement_info[0]
 
         return emit_aid == aid
 
@@ -1239,19 +1241,26 @@ class NodeCentricEGP(EGP):
         logger.debug("Measured {} on qubit".format(outcome))
 
         # If the request did not time out during the measurement then store the result
-        if self.scheduler.curr_gen:
+        aid, basis, comm_q = self.measurement_info.pop(0)
+        if self.scheduler.has_request(aid):
+        # if self.scheduler.curr_gen:
             # Free the communication qubit
-            comm_q = self.scheduler.curr_gen.comm_q
+            # comm_q = self.scheduler.curr_gen.comm_q
             self.qmm.vacate_qubit(comm_q)
 
             # Store the measurement result
-            aid, basis = self.measurement_info.pop(0)
+            # aid, basis = self.measurement_info.pop(0)
             self.measurement_results[aid].append((outcome, basis))
+            logger.debug("Adding measurement outcome {} in basis {} for aid {}"
+                        .format(outcome, basis, aid))
 
             # If we received a reply for this attempt during measurement we can handle it immediately
             if self.mhp_reply:
                 self.handle_reply_mhp(self.mhp_reply)
                 self.mhp_reply = None
+        else:
+            logger.warning("Handling measurement outcome for request that is not held by"
+                           "the scheduler, with aid {}".format(aid))
 
     def _remove_measurement_data(self, aid):
         """

@@ -542,7 +542,8 @@ class StrictPriorityRequestScheduler(Scheduler):
             if comm_q != storage_q:
                 self.qmm.vacate_qubit(comm_q)
 
-            self.curr_gen = None
+            # TODO shouldn't remove current gen right? If MD
+            # self.curr_gen = None
 
         else:
             request = self.get_request(aid)
@@ -625,16 +626,19 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         # Check if this is a request currently being processed
         if self.is_generating_aid(aid):
-            logger.debug("Cleared current gen")
+            logger.debug("Cleared current gen {}".format(self.curr_gen))
 
             # Vacate the reserved locations within the QMM
             self.qmm.vacate_qubit(self.curr_gen.comm_q)
             self.qmm.vacate_qubit(self.curr_gen.storage_q)
-            self.curr_gen = None
+
+            # TODO why do we do this?
+            # self.curr_gen = None
 
         # If this item timed out need to remove from the queue
         qid, qseq = aid
         if self.curr_aid == aid:
+            logger.debug("Cleared current aid {}".format(self.curr_aid))
             self.curr_aid = None
 
         if self.distQueue.contains_item(qid, qseq):
