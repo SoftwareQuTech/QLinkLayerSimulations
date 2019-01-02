@@ -912,17 +912,16 @@ class NodeCentricEGP(EGP):
 
             # Check if this aid may have been expired or timed out while awaiting reply
             elif not self.scheduler.has_request(aid=aid):
-                # If we have never seen this aid before we should throw a warning
+                self.clear_if_handling_emission(aid)
+                # Update the MHP Sequence number as necessary
+                if midpoint_outcome in [1, 2]:
+                    logger.debug("Updating MHP Seq")
+                    self._process_mhp_seq(mhp_seq, aid)
                 if self.scheduler.previous_request(aid=aid):
                     logger.debug("Got MHP Reply containing aid {} a previous request!".format(aid))
-
                 else:
+                    # If we have never seen this aid before we should throw a warning
                     logger.warning("Got MHP reply containing aid {} for an unknown request".format(aid))
-                    self.clear_if_handling_emission(aid)
-                    # Update the MHP Sequence number as necessary
-                    if midpoint_outcome in [1, 2]:
-                        logger.debug("Updating MHP Seq")
-                        self._process_mhp_seq(mhp_seq, aid)
 
             # Check if the reply came in before our emission handling completed
             elif self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
