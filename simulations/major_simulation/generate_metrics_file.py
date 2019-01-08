@@ -5,7 +5,7 @@ import sqlite3
 from collections import namedtuple
 
 from easysquid.toolbox import logger
-from simulations.analysis_sql_data import parse_table_data_from_sql
+from simulations.analysis_sql_data import parse_table_data_from_sql, calc_fidelity
 from qlinklayer.datacollection import EGPCreateDataPoint, EGPOKDataPoint, EGPStateDataPoint
 
 MetricsTuple = namedtuple("Metrics", ["fidelity", "QBER", "latency_per_pair", "throughput", "success_fraction", "avg_queue_length"])
@@ -119,12 +119,9 @@ def add_qubit_states(states_data, creates_and_oks_by_create_id, ok_keys_by_times
         if len(ok_keys) != 1:
             raise RuntimeError("The timestamp {} of this qubit state does not have a unique corresponding create datapoint".format(timestamp))
         absolute_create_id, node_id, mhp_seq = ok_keys[0]
-        if state_datapoint.node_id != node_id:
-            import pdb
-            pdb.set_trace()
-            raise RuntimeError("Node ID ({}) of qubit state data point does not match node ID ({}) of corresponding create datapoint".format(state_datapoint.node_id, node_id))
 
         # Add this qubit state datapoint to the data structure
+        # for node_id, ok_node_dct in creates_and_oks_by_create_id[absolute_create_id]:
         ok_datapoint = creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq]
         creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq] = {"ok": ok_datapoint, "state": state_datapoint}
 
@@ -136,8 +133,7 @@ def sort_data_by_request(filename):
 
     add_qubit_states(states_data, creates_and_oks_by_create_id, ok_keys_by_timestamp)
 
-    import pdb
-    pdb.set_trace()
+    return creates_and_oks_by_create_id
 
 
 def get_metrics_from_single_file(filename):
@@ -150,7 +146,28 @@ def get_metrics_from_single_file(filename):
     # c = conn.cursor()
     # c.execute("SELECT name FROM sqlite_master WHERE type='table'")
 
-    sort_data_by_request(filename)
+    fids_per_prio = {}
+
+    creates_and_oks_by_create_id = sort_data_by_request(filename)
+    for create_id, request_data in creates_and_oks_by_create_id.items():
+        create_datapoint = request_data["create"]
+        priority = create_datapoint.priority
+        for node_id, node_oks in request_data["oks"].items():
+            for mhp_seq, ok_data in node_oks.items():
+                if isinstance(ok_data, dict):
+                    state_datapoint = ok_data["state"]
+                    d_matrix = state_datapoint.density_matrix
+                    assert (state_datapoint.outcome1 == state_datapoint.outcome2)
+                    outcome = state_datapoint.outcome1
+                    fid = calc_fidelity(outcome, d_matrix)
+                    if priority not in fids_per_prio:
+                        fids_per_prio[priority] = [fid]
+                    else:
+                        fids_per_prio[priority].append(fid)
+
+    import pdb
+    pdb.set_trace()
+
 
     # states_by_timestamp = get_table_data_by_timestamp(filename, "EGP_Qubit_States")
     # oks_by_timestamp = get_table_data_by_timestamp(filename, "EGP_OKs")

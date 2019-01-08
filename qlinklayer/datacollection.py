@@ -413,7 +413,8 @@ class EGPStateDataPoint(EGPDataPoint):
     def from_data_point(self, data):
         if isinstance(data, EGPStateDataPoint):
             self.timestamp = data.timestamp
-            self.node_id = data.node_id
+            self.outcome1 = data.outcome1
+            self.outcome2 = data.outcome2
             self.density_matrix = data.density_matrix
             self.success = data.success
         else:
@@ -422,7 +423,8 @@ class EGPStateDataPoint(EGPDataPoint):
     def printable_data(self):
         to_print = "EGP State Data-point:\n"
         to_print += "    Timestamp: {}\n".format(self.timestamp)
-        to_print += "    Node ID: {}\n".format(self.node_id)
+        to_print += "    Outcome 1: {}\n".format(self.outcome1)
+        to_print += "    Outcome 2: {}\n".format(self.outcome2)
         to_print += "    Density Matrix: {}\n".format(self.density_matrix)
         to_print += "    Success: {}\n".format(self.success)
         return to_print
