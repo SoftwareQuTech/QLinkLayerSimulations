@@ -1006,7 +1006,13 @@ class NodeCentricEGP(EGP):
             # Get our absolute queue id based on error
             if proto_err == self.mhp.conn.ERR_QUEUE_MISMATCH:
                 aidA, aidB = aid
-                local_aid = aidA if self.node.nodeID == self.mhp.conn.nodeA.nodeID else aidB
+                local_aid, remote_aid = (aidA, aidB) if self.node.nodeID == self.mhp.conn.nodeA.nodeID else (aidB, aidA)
+
+                # Check if we have knowledge of our peers current request
+                rqid, rqseq = remote_aid
+                if not self.dqp.contains_item(rqid, rqseq):
+                    self.send_expire_notification(aid=remote_aid, createID=None, originID=None,
+                                                  new_seq=self.expected_seq)
             else:
                 local_aid = aid
 

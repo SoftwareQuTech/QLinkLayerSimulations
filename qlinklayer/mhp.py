@@ -155,8 +155,13 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
             self._reset_incoming()
             return
 
-        incoming_request = self._construct_request(sender, classical, qubit)
-        self._process_incoming_request(sender, incoming_request)
+        if classical is not None:
+            incoming_request = self._construct_request(sender, classical, qubit)
+            self._process_incoming_request(sender, incoming_request)
+
+        else:
+            if qubit is not None:
+                self._drop_qubit(qubit)
 
     @abc.abstractmethod
     def _construct_request(self, sender, classical, qubit):
