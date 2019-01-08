@@ -113,9 +113,20 @@ def get_creates_and_oks_by_create_id(filename):
 
 def add_qubit_states(states_data, creates_and_oks_by_create_id, ok_keys_by_timestamp):
     for raw_datapoint in states_data:
-        datapoint = EGPStateDataPoint(raw_datapoint)
-        timestamp = datapoint.timestamp
+        state_datapoint = EGPStateDataPoint(raw_datapoint)
+        timestamp = state_datapoint.timestamp
+        ok_keys = ok_keys_by_timestamp[timestamp]
+        if len(ok_keys) != 1:
+            raise RuntimeError("The timestamp {} of this qubit state does not have a unique corresponding create datapoint".format(timestamp))
+        absolute_create_id, node_id, mhp_seq = ok_keys[0]
+        if state_datapoint.node_id != node_id:
+            import pdb
+            pdb.set_trace()
+            raise RuntimeError("Node ID ({}) of qubit state data point does not match node ID ({}) of corresponding create datapoint".format(state_datapoint.node_id, node_id))
 
+        # Add this qubit state datapoint to the data structure
+        ok_datapoint = creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq]
+        creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq] = {"ok": ok_datapoint, "state": state_datapoint}
 
 
 def sort_data_by_request(filename):
