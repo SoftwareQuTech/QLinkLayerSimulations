@@ -326,13 +326,13 @@ class EGPOKDataPoint(EGPDataPoint):
     def printable_data(self):
         to_print = "EGP OK Data-point:\n"
         to_print += "    Timestamp: {}\n".format(self.timestamp)
-        to_print += "    OK Type: {}\n".format("CK" if self.ok_type == NodeCentricEGP.CK_OK else "MD")
+        to_print += "    OK Type: {}\n".format("CK" if self.ok_type == EntInfoCreateKeepHeader.type else "MD")
         to_print += "    Node ID: {}\n".format(self.node_id)
         to_print += "    Create ID: {}\n".format(self.create_id)
         to_print += "    Origin ID: {}\n".format(self.origin_id)
         to_print += "    Other ID: {}\n".format(self.other_id)
         to_print += "    MHP Seq: {}\n".format(self.mhp_seq)
-        if self.ok_type == NodeCentricEGP.CK_OK:
+        if self.ok_type == EntInfoCreateKeepHeader.type:
             to_print += "    Logical ID: {}\n".format(self.logical_id)
             to_print += "    Goodness: {}\n".format(self.goodness)
             to_print += "    Goodness Time: {}\n".format(self.goodness_time)
