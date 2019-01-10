@@ -82,7 +82,7 @@ class MixedScenario(EGPSimulationScenario):
                 # TODO assuming only qubit 1
                 qubit_id = 1
                 fraction_of_cycles_for_init = init_delay / self.egp._cycles_per_initialization[qubit_id]
-                cycles_per_attempt *= 1 + fraction_of_cycles_for_init
+                cycles_per_attempt *= 1 / (1 - fraction_of_cycles_for_init)
                 # if params["store"]:
                 #     move_delay = self.egp.max_move_delay
                 #     cycles_per_attempt = scheduler._get_num_suspend_cycles(scheduler.mhp_full_cycle + move_delay)

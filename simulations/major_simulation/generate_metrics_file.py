@@ -3,6 +3,7 @@ import os
 import json
 import sqlite3
 import csv
+from math import ceil
 from collections import namedtuple
 
 from easysquid.toolbox import logger
@@ -223,6 +224,7 @@ def get_metrics_from_single_file(filename):
     fids_per_prio = {}
     qber_per_prio = {}
     latencies_per_prio_per_node = {}
+    attempts_per_prio = {i: 0 for i in range(3)}
     priorities = []
 
     for create_id, request_data in creates_and_oks_by_create_id.items():
@@ -264,6 +266,10 @@ def get_metrics_from_single_file(filename):
                 if node_id not in latencies_per_prio_per_node[priority]:
                     latencies_per_prio_per_node[priority][node_id] = []
                 latencies_per_prio_per_node[priority][node_id].append(latency)
+
+                # Attempts
+                ok_datapoint = ok_data["ok"]
+                attempts_per_prio[priority] += ok_datapoint.attempts
 
     avg_fid_per_prio = {priority: sum(fids)/len(fids) for priority, fids in fids_per_prio.items()}
 
@@ -313,7 +319,10 @@ def get_metrics_from_single_file(filename):
     with open(additional_data_filename, 'r') as f:
         additional_data = json.load(f)
     total_matrix_time = additional_data["total_real_time"]
-    print("p_succ = {}".format(additional_data["p_succ"]))
+    mhp_cycle = additional_data["mhp_t_cycle"]
+    print("Nr MHP cycles {}".format(ceil(total_matrix_time / mhp_cycle)))
+    print("P Succ per attempt = {}".format(additional_data["p_succ"]))
+    print("Attempts: " + "".join(["{} = {}, ".format(prio, attempts) for prio, attempts in attempts_per_prio.items()]))
 
     if "FIFO" in filename:
         avg_throughput_per_prio = {priority: nr_oks / (times_non_idle[0] * 1e-9) for priority, nr_oks in nr_oks_per_prio.items()}
