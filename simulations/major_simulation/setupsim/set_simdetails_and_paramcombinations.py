@@ -25,11 +25,11 @@ path_to_SimulaQron = "/".join(path_to_cqc___init__.split("/")[:-2])
 
 constant_params = {
     "max_sim_time": 0,
-    "max_wall_time": 0,
-    "max_mhp_cycle": 0,
+    "max_wall_time": 5 * 24 * 60 * 60 - 2 * 60,
+    "max_mhp_cycle": 10000,
     "t0": 0,
     "enable_pdb": False,
-    "wall_time_per_timestep": 30 * 60,
+    "wall_time_per_timestep": 5 * 60,
     "save_additional_data": True,
     "collect_queue_data": True,
     "request_cycle": 0,
@@ -59,12 +59,12 @@ configs = {"LAB_NC_NC": "lab/networks_no_cavity_no_conversion.json",
 # }
 
 num_pairs_dct = {"max1": 1,
-                 "max3": [1,3],
+                 "max3": [1, 3],
                  "max255": 255}
 
-p_req_fractions = {"ultra": 0.99,
-                   "high": 0.8,
-                   "low": 0.2}
+p_req_fractions = {"ultra": 1.5,
+                   "high": 0.99,
+                   "low": 0.7}
 
 origin_probs = {"originA": (1, 0),
                 "originB": (0, 1),
@@ -112,7 +112,7 @@ def single_type_request_params(type, config_file, origin_prob, p_fraction, num_p
     elif type == "MD":
         params = {"num_pairs": num_pairs,
                   "tmax_pair": 0,
-                  "min_fidelity": 0.9,
+                  "min_fidelity": 0.88,
                   "purpose_id": 0,
                   "priority": 2,
                   "store": False,
@@ -142,14 +142,14 @@ def single_type_request_params(type, config_file, origin_prob, p_fraction, num_p
     return request_params
 
 
-def mixed_request_params(probs, num_pairs):
+def mixed_request_params(config_file_path, origin_probs, p_fractions, num_pairs):
     request_params = {}
-    for type in probs.keys():
-        p = probs[type]
+    for type in origin_probs.keys():
+        # p = probs[type]
         num_pair = num_pairs[type]
 
         # Get params of this type
-        params = single_type_request_params(type, config_file_path, origin_probs[i], p_fractions[i], num_pair)
+        params = single_type_request_params(type, config_file_path, origin_probs[type], p_fractions[type], num_pair)
         request_params[type] = params
 
     return request_params
@@ -192,19 +192,21 @@ origin_prob = (1/2, 1/2)
 for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
     config = configs[config_name]
     config_file_path = os.path.join(config_dir, config)
-    p_succ = config_to_p_succ[config]
+    # p_succ = config_to_p_succ[config]
     for weights_name, sched_params in weights_dct.items():
         weights = sched_params[0]
         num_priorities = sched_params[1]
         for mix_name, mix in mixes.items():
-            p_fraction = p_req_fractions["high"]
-            probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
+            p_base_fraction = p_req_fractions["high"]
+            p_fractions = {type: m * p_base_fraction for type, m in mix.items()}
+            p_origins = {type: origin_prob[0] for type in p_fractions.keys()}
+            # probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
             if mix_name == "uniform":
                 num_pairs = {"NL": 1, "CK": 1, "MD": 1}
             else:
                 num_pairs = {"NL": [1, 3], "CK": [1, 3], "MD": [1, 255]}
-            request_paramsA = mixed_request_params(probs, num_pairs)
-            request_paramsB = mixed_request_params(probs, num_pairs)
+            request_paramsA = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
+            request_paramsB = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
             simulation_run_params = {"config": config_file_path,
                                      "request_paramsA": request_paramsA,
                                      "request_paramsB": request_paramsB,
@@ -217,7 +219,7 @@ for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
 # Added exaggerated classical noise scenario
 config_name = "QLINK_WC_WC_HIGH_C_LOSS"
 config = configs[config_name]
-p_succ = config_to_p_succ[config]
+# p_succ = config_to_p_succ[config]
 weights_name = "lowerWFQ"
 sched_params = weights_dct[weights_name]
 weights = sched_params[0]
@@ -225,10 +227,14 @@ num_priorities = sched_params[1]
 p_fraction = p_req_fractions["high"]
 mix_name = "uniform"
 mix = mixes[mix_name]
-probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
+origin_prob = (1/2, 1/2)
+p_base_fraction = p_req_fractions["high"]
+p_fractions = {type: m * p_base_fraction for type, m in mix.items()}
+p_origins = {type: origin_prob[0] for type in p_fractions.keys()}
+# probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
 num_pairs = {"NL": [1, 3], "CK": [1, 3], "MD": [1, 255]}
-request_paramsA = mixed_request_params(probs, num_pairs)
-request_paramsB = mixed_request_params(probs, num_pairs)
+request_paramsA = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
+request_paramsB = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
 simulation_run_params = {"config": config_file_path,
                          "request_paramsA": request_paramsA,
                          "request_paramsB": request_paramsB,
@@ -237,6 +243,10 @@ simulation_run_params = {"config": config_file_path,
 simulation_run_params.update(constant_params)
 run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
 paramcombinations[run_name] = simulation_run_params
+
+# TODO tmp
+key = list(paramcombinations.keys())[0]
+paramcombinations = {key: paramcombinations[key]}
 
 print(len(paramcombinations))
 
