@@ -24,11 +24,11 @@ path_to_SimulaQron = "/".join(path_to_cqc___init__.split("/")[:-2])
 
 constant_params = {
     "max_sim_time": 0,
-    "max_wall_time": 4 * 24 * 3600,
-    "max_mhp_cycle": 80,
+    "max_wall_time": 0,
+    "max_mhp_cycle": 0,
     "t0": 0,
     "enable_pdb": False,
-    "wall_time_per_timestep": 1 * 1,
+    "wall_time_per_timestep": 30 * 60,
     "save_additional_data": True,
     "collect_queue_data": True,
     "request_cycle": 0,
@@ -39,9 +39,9 @@ constant_params = {
 config_dir = "setupsim/config"
 
 configs = {"LAB_NC_NC": "lab/networks_no_cavity_no_conversion.json",
-           "QLINK_WC_WC": "qlink/networks_with_cavity_with_conversion.json"}
-           # "QLINK_WC_WC_HIGH_C_LOSS": "qlink/networks_with_cavity_with_conversion_high_c_loss.json",
-           # }
+           "QLINK_WC_WC": "qlink/networks_with_cavity_with_conversion.json",
+           "QLINK_WC_WC_HIGH_C_LOSS": "qlink/networks_with_cavity_with_conversion_high_c_loss.json",
+           }
 
 config_to_p_succ = {
     "no_noise/no_losses.json": 0.18962460137276416,
@@ -111,7 +111,7 @@ def single_type_request_params(type, prob, num_pairs):
     elif type == "MD":
         params = {"num_pairs": num_pairs,
                   "tmax_pair": 0,
-                  "min_fidelity": 0.6,
+                  "min_fidelity": 0.5,
                   "purpose_id": 0,
                   "priority": 2,
                   "store": False,
@@ -144,7 +144,7 @@ def mixed_request_params(probs, num_pairs):
 paramcombinations = {}
 
 # Single type requests
-for config_name, config in configs.items():
+for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
     config = configs[config_name]
     config_file_path = os.path.join(config_dir, config)
     p_succ = config_to_p_succ[config]
@@ -168,12 +168,12 @@ for config_name, config in configs.items():
                                              "num_priorities": 1
                                              }
                     simulation_run_params.update(constant_params)
-                    run_name = "{}_{}_{}_req_frac_{}_origin_{}".format(config_name, type, num_pairs_name, p_fraction_name, origin_prob_name)
+                    run_name = "{}_{}_{}_req_frac_{}_origin_{}_weights_FIFO".format(config_name, type, num_pairs_name, p_fraction_name, origin_prob_name)
                     paramcombinations[run_name] = simulation_run_params
 
 # Mixed requests
 origin_prob = (1/2, 1/2)
-for config_name, config in configs.items():
+for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
     config = configs[config_name]
     config_file_path = os.path.join(config_dir, config)
     p_succ = config_to_p_succ[config]
@@ -181,7 +181,8 @@ for config_name, config in configs.items():
         weights = sched_params[0]
         num_priorities = sched_params[1]
         for mix_name, mix in mixes.items():
-            probs = {type: origin_prob[0] * p_succ * m for type, m in mix.items()}
+            p_fraction = p_req_fractions["high"]
+            probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
             if mix_name == "uniform":
                 num_pairs = {"NL": 1, "CK": 1, "MD": 1}
             else:
@@ -196,6 +197,30 @@ for config_name, config in configs.items():
             simulation_run_params.update(constant_params)
             run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
             paramcombinations[run_name] = simulation_run_params
+
+# Added exaggerated classical noise scenario
+config_name = "QLINK_WC_WC_HIGH_C_LOSS"
+config = configs[config_name]
+p_succ = config_to_p_succ[config]
+weights_name = "lowerWFQ"
+sched_params = weights_dct[weights_name]
+weights = sched_params[0]
+num_priorities = sched_params[1]
+p_fraction = p_req_fractions["high"]
+mix_name = "uniform"
+mix = mixes[mix_name]
+probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
+num_pairs = {"NL": [1, 3], "CK": [1, 3], "MD": [1, 255]}
+request_paramsA = mixed_request_params(probs, num_pairs)
+request_paramsB = mixed_request_params(probs, num_pairs)
+simulation_run_params = {"config": config_file_path,
+                         "request_paramsA": request_paramsA,
+                         "request_paramsB": request_paramsB,
+                         "egp_queue_weights": weights,
+                         "num_priorities": num_priorities}
+simulation_run_params.update(constant_params)
+run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
+paramcombinations[run_name] = simulation_run_params
 
 print(len(paramcombinations))
 

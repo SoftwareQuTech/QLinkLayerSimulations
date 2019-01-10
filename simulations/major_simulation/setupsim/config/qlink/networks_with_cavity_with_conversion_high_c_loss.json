@@ -8,10 +8,10 @@
     "heralded1": {
       "type": "node_centric_heralded_fibre_connection",
       "parameters": {
-        "lengthA": 0.001,
-        "lengthB": 0.001,
+        "lengthA": 10,
+        "lengthB": 15,
         "p_loss_init": 0,
-        "p_loss_length": 0,
+        "p_loss_length": 0.5,
         "time_window": 25,
         "c": 206753.41931034482,
         "c_noise_model": "default",
@@ -19,24 +19,29 @@
         "q_noise_model": "default",
         "q_loss_model": "default",
         "bandwidth": 1000,
-        "dark_rate": 0,
-        "detection_eff": 1,
-        "visibility": 1,
+        "dark_rate": 20,
+        "detection_eff": 0.8,
+        "visibility": 0.9,
         "t0": 0,
-        "c_prob_loss_A": 0.0,
-        "c_prob_loss_B": 0.0,
+        "c_prob_loss_A": 0.0001,
+        "c_prob_loss_B": 0.0001,
         "c_prob_error_A": 0.0,
-        "c_prob_error_B": 0.0
+        "c_prob_error_B": 0.0,
+        "delay_A": [
+          48366.79380373205,
+          96733.58760746408
+        ]
       }
     },
     "classical1": {
       "type": "classical_fibre_connection",
       "parameters": {
-        "length": 0.002,
+        "length": 25,
         "loss_model": "default",
         "noise_model": "default",
         "c": 206753.41931034482,
-        "bandwidth": 1000
+        "bandwidth": 1000,
+        "c_prob_loss": 0.0001
       }
     }
   },
@@ -172,11 +177,11 @@
               837,
               640
             ],
-            "tau_emission": 12,
+            "tau_emission": 6.48,
             "time_window": 40,
             "delta_phi": 10.606601717798211,
-            "p_zero_phonon": 1,
-            "collection_eff": 1,
+            "p_zero_phonon": 0.46,
+            "collection_eff": 0.004425660112387056,
             "p_double_exc": 0.04
           },
           "photon_emission_delay": 5500.0

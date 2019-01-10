@@ -3,7 +3,7 @@
 #
 from easysquid.toolbox import logger, EasySquidException
 from netsquid.qubits import qubitapi as qapi
-from netsquid.components.instructions import INSTR_MEASURE, INSTR_Z
+from netsquid.components.instructions import INSTR_MEASURE, INSTR_Z, INSTR_INIT
 
 
 class QuantumMemoryManagement:
@@ -61,6 +61,22 @@ class QuantumMemoryManagement:
 
     def get_measurement_delay(self, qubit_id):
         return self.node.qmemory.get_instruction_duration(INSTR_MEASURE, [qubit_id])
+
+    def get_memory_init_delay(self, qubit_id):
+        return self.node.qmemory.get_instruction_duration(INSTR_INIT, [qubit_id])
+
+    def get_qubit_T1_T2(self, qubit_id):
+        q = self.node.qmemory._memory_positions[qubit_id]
+        try:
+            T1 = q.noise_model.T1
+        except AttributeError:
+            T1 = 0
+        try:
+            T2 = q.noise_model.T2
+        except AttributeError:
+            T2 = 0
+
+        return T1, T2
 
     def qubit_reserved(self, id):
         """

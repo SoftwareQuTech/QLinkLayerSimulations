@@ -79,7 +79,7 @@ class StrictPriorityRequestScheduler(Scheduler):
         self.curr_aid = None  # The absolute queue ID of the current request being handled
         self.curr_gen = None  # The current generation being handled
         self.prev_requests = []  # Previous requests (for filtering delayed communications)
-        self.max_prev_requests = 5  # Number of previous requests to store
+        self.max_prev_requests = 20  # Number of previous requests to store
 
         # Suspended generation tracking
         self.num_suspended_cycles = 0
@@ -155,12 +155,25 @@ class StrictPriorityRequestScheduler(Scheduler):
         """
         # Calculate the new cycle number mod the max
         self.mhp_cycle_number = (self.mhp_cycle_number + 1) % self.max_mhp_cycle_number
-        logger.debug("Incremented MHP cycle to {}".format(self.mhp_cycle_number))
+        logger.debug("Node {} : Incremented MHP cycle to {}".format(self.distQueue.node.name, self.mhp_cycle_number))
         self.distQueue.update_mhp_cycle_number(self.mhp_cycle_number, self.max_mhp_cycle_number)
 
         # Decrement any suspended cycles
         if self.num_suspended_cycles > 0:
+            logger.debug("Node {} : suspended cycles decreased from {} to {}".format(self.distQueue.node.name, self.num_suspended_cycles, self.num_suspended_cycles - 1))
             self.num_suspended_cycles -= 1
+
+    # def has_CK_requests(self):
+    #     """
+    #     Returns True if scheduler has any CK requests (i.e. non-measure-directly currently in any queue
+    #     otherwise False.
+    #     :return: bool
+    #     """
+    #     for queue in self.distQueue.queueList:
+    #         for queue_item in queue.queue.values():
+    #             if not queue_item.request.measure_directly:
+    #                 return True
+    #     return False
 
     def get_schedule_cycle(self, request):
         """
@@ -316,8 +329,14 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         # Update the number of suspended cycles if it exceeds the amount we are currently suspended for
         if num_suspended_cycles > self.num_suspended_cycles:
-            logger.debug("Suspending generation for {} cycles".format(num_suspended_cycles))
+            logger.debug("Node {} : Suspending generation for {} cycles".format(self.distQueue.node.name, num_suspended_cycles))
             self.num_suspended_cycles = num_suspended_cycles
+
+    def resume_generation(self):
+        """
+        Clears suspend by force (in the case that an mhp reply came back and we want to resume early)
+        """
+        self.num_suspended_cycles = 0
 
     def suspended(self):
         """
@@ -380,20 +399,16 @@ class StrictPriorityRequestScheduler(Scheduler):
                 self.free_gen_resources(self.curr_gen.aid)
 
             next_gen = self.get_next_gen_template()
-            logger.debug("Scheduler has next gen {}".format(next_gen))
-
-        # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
-        if not self.is_handling_measure_directly() and next_gen.flag:
-            suspend_time = self.mhp_full_cycle
-            logger.debug("Next generation attempt after {}".format(suspend_time))
-            self.suspend_generation(suspend_time)
+            if next_gen.flag:
+                logger.debug("Node {} : Scheduler has next gen {}".format(self.distQueue.node.name, next_gen))
 
         return next_gen
 
-    def get_default_gen(self):
+    @staticmethod
+    def get_default_gen():
         """
         Returns the default gen template which is an info request
-        :return: tuple
+        :return: :obj:`qlinklayer.scheduler.SchedulerGen`
             Represents a gen template for an info request
         """
         return SchedulerGen(flag=False, aid=None, comm_q=None, storage_q=None, param=None)
@@ -525,9 +540,10 @@ class StrictPriorityRequestScheduler(Scheduler):
             comm_q = self.curr_gen.comm_q
             storage_q = self.curr_gen.storage_q
             if comm_q != storage_q:
-                self.qmm.free_qubit(comm_q)
+                self.qmm.vacate_qubit(comm_q)
 
-            self.curr_gen = None
+            # TODO shouldn't remove current gen right? If MD
+            # self.curr_gen = None
 
         else:
             request = self.get_request(aid)
@@ -553,9 +569,9 @@ class StrictPriorityRequestScheduler(Scheduler):
         """
         if self.is_generating_aid(aid):
             # Get the used qubit info and free unused resources
-            self.qmm.free_qubit(self.curr_gen.comm_q)
+            self.qmm.vacate_qubit(self.curr_gen.comm_q)
             if self.curr_gen.comm_q != self.curr_gen.storage_q:
-                self.qmm.free_qubit(self.curr_gen.storage_q)
+                self.qmm.vacate_qubit(self.curr_gen.storage_q)
 
             self.my_free_memory = self.qmm.get_free_mem_ad()
 
@@ -610,16 +626,19 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         # Check if this is a request currently being processed
         if self.is_generating_aid(aid):
-            logger.debug("Cleared current gen")
+            logger.debug("Cleared current gen {}".format(self.curr_gen))
 
             # Vacate the reserved locations within the QMM
             self.qmm.vacate_qubit(self.curr_gen.comm_q)
             self.qmm.vacate_qubit(self.curr_gen.storage_q)
-            self.curr_gen = None
+
+            # TODO why do we do this?
+            # self.curr_gen = None
 
         # If this item timed out need to remove from the queue
         qid, qseq = aid
         if self.curr_aid == aid:
+            logger.debug("Cleared current aid {}".format(self.curr_aid))
             self.curr_aid = None
 
         if self.distQueue.contains_item(qid, qseq):
@@ -699,7 +718,9 @@ class StrictPriorityRequestScheduler(Scheduler):
             Qubit IDs to use for the communication process ad storage process
         """
         if request.store and not request.measure_directly:
-            comm_q, storage_q = self.qmm.reserve_entanglement_pair()
+            # TODO we only pick qubit 1 for storage
+            # comm_q, storage_q = self.qmm.reserve_entanglement_pair()
+            comm_q, storage_q = 0, 1
         else:
             comm_q = self.qmm.reserve_communication_qubit()
             storage_q = comm_q

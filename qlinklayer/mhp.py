@@ -155,8 +155,13 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
             self._reset_incoming()
             return
 
-        incoming_request = self._construct_request(sender, classical, qubit)
-        self._process_incoming_request(sender, incoming_request)
+        if classical is not None:
+            incoming_request = self._construct_request(sender, classical, qubit)
+            self._process_incoming_request(sender, incoming_request)
+
+        else:
+            if qubit is not None:
+                self._drop_qubit(qubit)
 
     @abc.abstractmethod
     def _construct_request(self, sender, classical, qubit):
@@ -770,7 +775,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         :return: None
         """
         try:
-            logger.debug("{} Beginning entanglement attempt".format(self.node.nodeID))
+            logger.debug("{} Beginning entanglement attempt".format(self.node.name))
             NodeCentricMHP.run_protocol(self)
 
         except Exception:
@@ -785,6 +790,9 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
         """
         # Extract info from the message
         respM, passM = reply_message.response_data, reply_message.pass_data
+
+        logger.debug("Node {} : Recived message from midpoint, respM = {} and passM = {}".format(self.node.name,
+                                                                                                 respM, passM))
 
         # Got some kind of command
         if isinstance(respM, int):
@@ -872,7 +880,7 @@ class NodeCentricMHPServiceProtocol(MHPServiceProtocol, NodeCentricMHP):
             # Construct the information to pass to our peer
             pass_info = self.aid
             self._previous_aid = self.aid
-            logger.debug("Sending pass info: {}".format(pass_info))
+            logger.debug("Node {} : Sending pass info: {}".format(self.node.name, pass_info))
 
             # Send info to the heralding station
             self.send_msg(self.node.nodeID, self.conn.CMD_PRODUCE, pass_info, photon)

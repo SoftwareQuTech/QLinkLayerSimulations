@@ -156,9 +156,13 @@ while true; do
     # Schedule the simulation
     if [ "$PROFILING" == 'y' ]; then
         profile_file="${resultsdir}/${timestamp}_key_${actual_key}_run_${runindex}.prof"
-        python3 -m cProfile -o $profile_file $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
+        (
+            python3 -m cProfile -o $profile_file $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
+        ) &> "${resultsdir}/${timestamp}_key_${actual_key}_run_${runindex}_log.out"
     else
-        python3 $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
+       (
+            python3 $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
+       ) &> "${resultsdir}/${timestamp}_key_${actual_key}_run_${runindex}_log.out"
     fi
 
     if [ "$RUNONCLUSTER" == 'y' ]; then

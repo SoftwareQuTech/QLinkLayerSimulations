@@ -30,7 +30,7 @@ class TestSimulations(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls._reset_folder(cls.results_folder, make_new=False)
+        # cls._reset_folder(cls.results_folder, make_new=False)
 
         # Reset files
         set_simdetails_and_paramcombinations.main(ask_for_input=False)

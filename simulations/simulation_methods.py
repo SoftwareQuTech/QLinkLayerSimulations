@@ -3,6 +3,7 @@ import pdb
 import json
 from time import time
 import math
+import logging
 from os.path import exists
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
@@ -14,6 +15,8 @@ from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.specific_scenarios import MixedScenario
 from simulations._get_configs_from_easysquid import NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
+
+logger.setLevel(logging.INFO)
 
 # Here we add an entry into the Connection structure in Easysquid Easynetwork to give us access to load up configs
 # for the simulation using connections defined here in the QLinkLayer
@@ -81,12 +84,14 @@ def setup_data_collection(scenarioA, scenarioB, collection_duration, dir_path, c
 
     # Hook up the datasequences to the events in that occur
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CREATE, ds=create_ds)
-    pm.addEventAny([scenarioA] * 2, [scenarioA._EVT_CK_OK, scenarioA._EVT_MD_OK], ds=ok_ds)
+    pm.addEvent(scenarioA, scenarioA._EVT_CK_OK, ds=ok_ds)
+    pm.addEvent(scenarioA, scenarioA._EVT_MD_OK, ds=ok_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_CK_OK, ds=state_ds)
     pm.addEvent(source=scenarioA, evtType=scenarioA._EVT_ERR, ds=err_ds)
 
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CREATE, ds=create_ds)
-    pm.addEventAny([scenarioB] * 2, [scenarioB._EVT_CK_OK, scenarioA._EVT_MD_OK], ds=ok_ds)
+    pm.addEvent(scenarioB, scenarioB._EVT_CK_OK, ds=ok_ds)
+    pm.addEvent(scenarioB, scenarioB._EVT_MD_OK, ds=ok_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_CK_OK, ds=state_ds)
     pm.addEvent(source=scenarioB, evtType=scenarioB._EVT_ERR, ds=err_ds)
 

@@ -54,7 +54,7 @@ class MixedScenario(EGPSimulationScenario):
 
         # For data collection
         self.ok_storage = []
-        self.entangled_qstates = {}
+        self.entangled_qubits = {}
         self.node_measurement_storage = {}
         self.err_storage = []
 
@@ -75,7 +75,14 @@ class MixedScenario(EGPSimulationScenario):
                 cycles_per_attempt = 1
             else:
                 scheduler = self.egp.scheduler
-                cycles_per_attempt = scheduler._get_num_suspend_cycles(scheduler.mhp_full_cycle)
+                avg_correction_delay = (self.egp.this_corr_delay + self.egp.peer_corr_delay) / 4
+                if params["store"]:
+                    move_delay = self.egp.max_move_delay
+                    cycles_per_attempt = scheduler._get_num_suspend_cycles(scheduler.mhp_full_cycle + move_delay +
+                                                                           avg_correction_delay)
+                else:
+                    cycles_per_attempt = scheduler._get_num_suspend_cycles(scheduler.mhp_full_cycle +
+                                                                           avg_correction_delay)
 
             prob = self.scenario_probs[scenario]
             probabilities.append(prob / (cycles_per_attempt * num_pairs[scenario]))
@@ -136,12 +143,14 @@ class MixedScenario(EGPSimulationScenario):
         :param result: bytes
             CQC OK information returned by the EGP
         """
+
+        logger.debug("Node {} got an OK message".format(self.node.name))
+
         # Store data for retrieval
         self.ok_storage.append(result)
 
         # Unpack result
         cqc_header, cqc_xtra_qubit_header, cqc_ent_info_header = self.unpack_cqc_ok(result)
-        create_id = cqc_ent_info_header.create_id
         creator_id = cqc_ent_info_header.ip_A
         peer_id = cqc_ent_info_header.ip_B
         mhp_seq = cqc_ent_info_header.mhp_seq
@@ -151,23 +160,12 @@ class MixedScenario(EGPSimulationScenario):
             measure_directly = False
 
             logical_id = cqc_xtra_qubit_header.qubit_id
+            midpoint_outcome = self.egp.midpoint_outcome
 
-            # Store the qubit state for collection
-            self.store_qstate(logical_id, create_id, peer_id, mhp_seq)
-
-            # Measure the logical qubit in the result
-            [outcome], _ = self.node.qmem.measure([logical_id])
-            # outcome = self.node.qmem.measure([logical_id])
-            # print(outcome)
-
-            meas_data = (0, outcome)
-
-            now = sim_time()
-            logger.info("{} measured {} for ent_id {} at time {}".format(self.node.nodeID, outcome, ent_id, now))
+            self.entangled_qubits[ent_id] = (midpoint_outcome, self.node.qmem.pop(logical_id)[0])
 
             # Free the qubit for the EGP
-            self.qmm.free_qubit(logical_id)
-
+            self.qmm.vacate_qubit(logical_id)
         elif isinstance(cqc_ent_info_header, EntInfoMeasDirectHeader):
             measure_directly = True
 
@@ -177,11 +175,11 @@ class MixedScenario(EGPSimulationScenario):
             # Store the basis/bit choice and the midpoint outcomes for QubErr or key generation
             meas_data = (basis, outcome)
 
+            # Store the measurement result for data collection
+            self.node_measurement_storage[ent_id] = meas_data
+
         else:
             raise ValueError("Unknown ent info header class")
-
-        # Store the measurement result for data collection
-        self.node_measurement_storage[ent_id] = meas_data
 
         if measure_directly:
             logger.debug("Scheduling measure directly OK event now.")

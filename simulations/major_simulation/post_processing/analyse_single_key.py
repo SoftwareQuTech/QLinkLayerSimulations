@@ -47,6 +47,8 @@ def main(filebasename):
     for file_path in file_paths:
         analyse_single_file(file_path, no_plot=True, save_figs=True, save_output=True, analysis_folder=analysis_folder)
 
+    # Create all_data
+
 
 if __name__ == '__main__':
     filebasename = sys.argv[1]

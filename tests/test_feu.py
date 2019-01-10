@@ -90,11 +90,11 @@ class TestSingleClickFidelityEstimationUnit(unittest.TestCase):
 
         self.assertEqual(self.feuA.achievable_fidelities, self.feuB.achievable_fidelities)
         self.assertEqual(self.feuA.achievable_fidelities[0][0], 0.1)
-        self.assertTrue(isclose(self.feuA.achievable_fidelities[0][1], 0.8614038170052276))
+        self.assertAlmostEqual(self.feuA.achievable_fidelities[0][1], 0.8671423723534686, places=3)
         self.assertEqual(self.feuA.achievable_fidelities[1][0], 0.3)
-        self.assertTrue(isclose(self.feuA.achievable_fidelities[1][1], 0.6800331800062903))
+        self.assertAlmostEqual(self.feuA.achievable_fidelities[1][1], 0.6800331800062903, places=3)
 
-        self.assertTrue(isclose(self.feuA.get_max_fidelity(), 0.8614038170052276))
+        self.assertAlmostEqual(self.feuA.get_max_fidelity(), 0.8671423723534686, places=3)
 
         protoA = self.feuA.mhp_service.get_node_proto(self.feuA.node)
         protoA.set_allowed_bright_state_populations([0.1, 0.2])

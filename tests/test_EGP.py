@@ -19,7 +19,7 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.CRITICAL)
 
 
 def store_result(storage, result):
@@ -471,9 +471,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         delayB = lengthB * 1e9 / c
         delayAM = lengthA * 1e9 / c
         mhp_cycle_period = 1.1
-        num_cyclesAM = delayAM / mhp_cycle_period
-        num_cyclesB = delayB / mhp_cycle_period
-        delayMA = (2 * num_cyclesB - num_cyclesAM) * mhp_cycle_period
+        delayMA = (2 * delayB - delayAM)
         mhp_conn = NodeCentricMHPHeraldedConnection(nodeA=alice, nodeB=bob, lengthA=lengthA, lengthB=lengthB,
                                                     delay_A=[delayAM, delayMA], time_window=time_window,
                                                     use_time_window=True, t_cycle=mhp_cycle_period)

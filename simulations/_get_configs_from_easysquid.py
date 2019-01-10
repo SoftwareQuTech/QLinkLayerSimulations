@@ -15,19 +15,20 @@ import easysquid
 path_to_this_file = os.path.realpath(__file__)
 path_to_this_folder = "/".join(path_to_this_file.split("/")[:-1])
 path_to_this_config_folder = os.path.join(path_to_this_folder, "create_measure_simulation/setupsim/config")
+other_folders = [os.path.join(path_to_this_folder, conf_folder) for conf_folder in ["major_simulation/setupsim/config"]]
 
 NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibre_connection"
 
 
-def _remove_current_files():
-    for folder in os.listdir(path_to_this_config_folder):
-        dst = os.path.join(path_to_this_config_folder, folder)
+def _remove_current_files(path):
+    for folder in os.listdir(path):
+        dst = os.path.join(path, folder)
         if os.path.exists(dst):
             shutil.rmtree(dst)
 
 
 def copy_files_from_easysquid():
-    _remove_current_files()
+    _remove_current_files(path_to_this_config_folder)
 
     path_to_easysquid___init__ = os.path.abspath(easysquid.__file__)
     path_to_easysquid = "/".join(path_to_easysquid___init__.split("/")[:-2])
@@ -39,6 +40,18 @@ def copy_files_from_easysquid():
         shutil.copytree(src, dst)
 
 
+def copy_qlink_wc_wc_high_loss():
+    path_to_easysquid___init__ = os.path.abspath(easysquid.__file__)
+    path_to_easysquid = "/".join(path_to_easysquid___init__.split("/")[:-2])
+
+    path_to_network_configs = os.path.join(path_to_easysquid, "config/networks/NV")
+    qlink_path = "qlink/networks_with_cavity_with_conversion.json"
+    qlink_high_c_loss_path = "qlink/networks_with_cavity_with_conversion_high_c_loss.json"
+    easysquid_qlink_wc_wc_path = os.path.join(path_to_network_configs, qlink_path)
+    qlinklayer_qlink_wc_wc_path = os.path.join(path_to_this_config_folder, qlink_high_c_loss_path)
+    shutil.copy(easysquid_qlink_wc_wc_path, qlinklayer_qlink_wc_wc_path)
+
+
 def change_connnection_type():
     for dirpath, dirname, filenames in os.walk(path_to_this_config_folder):
         for filename in filenames:
@@ -48,11 +61,39 @@ def change_connnection_type():
             with open(file_path, 'r') as f:
                 config_dct = json.load(f)
 
+            # Set electron T2 to zero
+            for q in config_dct["qpd_config"]["default"]["parameters"]["qubits"]:
+                if q["qubit_type"] == "electron":
+                    q["noise_model"]["T1T2"]["T2"] = 1000000.0
+
             # Get the connection config name of the mhp connection
             conn_config_name = _get_conn_config_name_of_mhp_conn(config_dct)
 
             # Update the type to use node centric heralded fibre connection
             config_dct["conn_configs"][conn_config_name]["type"] = NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
+
+            # Add virtual delay to shorter length fibre to  make sure messages delivered in same mhp cycle
+            cycle_period = config_dct["conn_configs"][conn_config_name]["parameters"].get("t_cycle", None)
+            if cycle_period is None:
+                device_config = config_dct["qpd_config"]["default"]
+                photon_time = device_config["parameters"]["photon_emission"]["photon_emission_delay"]
+                meas_time = device_config["parameters"]["gates"]["electron_gates"]["measurement_op"]["operation_time"]
+                time_window = config_dct["conn_configs"][conn_config_name]["parameters"]["time_window"]
+                cycle_period = max(photon_time + meas_time, time_window)
+                cycle_period += cycle_period / 10
+
+            lengthA = config_dct["conn_configs"][conn_config_name]["parameters"]["lengthA"]
+            lengthB = config_dct["conn_configs"][conn_config_name]["parameters"]["lengthB"]
+            c = config_dct["conn_configs"][conn_config_name]["parameters"]["c"]
+            delayA = 1e9 * lengthA / c
+            delayB = 1e9 * lengthB / c
+            delay_max, delay_min = max(delayA, delayB), min(delayA, delayB)
+            virtual_delay = (2 * delay_max - delay_min)
+            delay_spec = [delay_min, virtual_delay]
+            if lengthA < lengthB:
+                config_dct["conn_configs"][conn_config_name]["parameters"]["delay_A"] = delay_spec
+            elif lengthB < lengthA:
+                config_dct["conn_configs"][conn_config_name]["parameters"]["delay_B"] = delay_spec
 
             # Update the comment in the file
             config_dct["AutoGenerate"].append("This file was then later modified by /path/to/QLinkLayer/simulations/"
@@ -167,10 +208,48 @@ def _update_no_noise_file(path_to_file):
         json.dump(config_dct, f, indent=2)
 
 
+def add_loss_qlink_wc_wc():
+    qlink_wc_wc_path = "qlink/networks_with_cavity_with_conversion.json"
+    qlink_high_c_loss_path = "qlink/networks_with_cavity_with_conversion_high_c_loss.json"
+    qlinklayer_qlink_wc_wc_path = os.path.join(path_to_this_config_folder, qlink_wc_wc_path)
+    qlinklayer_qlink_wc_wc_high_c_loss_path = os.path.join(path_to_this_config_folder, qlink_high_c_loss_path)
+
+    # Read config file
+    with open(qlinklayer_qlink_wc_wc_path, 'r') as f:
+        config_dct = json.load(f)
+
+    # Get the connection config name of the mhp connection
+    conn_config_name = _get_conn_config_name_of_mhp_conn(config_dct)
+
+    # Add noise to the mhp and classical communications
+    mhp_p_loss_A = 1e-4
+    mhp_p_loss_B = 1e-4
+    classical_p_loss = 1e-4
+    config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_A"] = mhp_p_loss_A
+    config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_B"] = mhp_p_loss_B
+    config_dct["conn_configs"]["classical1"]["parameters"]["c_prob_loss"] = classical_p_loss
+
+    # Write to high loss config
+    with open(qlinklayer_qlink_wc_wc_high_c_loss_path, 'w') as f:
+        json.dump(config_dct, f, indent=2)
+
+
+def copy_files_to_other_folders():
+    for other_folder in other_folders:
+        _remove_current_files(other_folder)
+        for folder in os.listdir(path_to_this_config_folder):
+            src = os.path.join(path_to_this_config_folder, folder)
+            dst = os.path.join(other_folder, folder)
+            shutil.copytree(src, dst)
+
+
 def main():
     copy_files_from_easysquid()
+    copy_qlink_wc_wc_high_loss()
     change_connnection_type()
     make_no_loss_and_no_noise_files()
+    add_loss_qlink_wc_wc()
+    copy_files_to_other_folders()
 
 
 if __name__ == '__main__':

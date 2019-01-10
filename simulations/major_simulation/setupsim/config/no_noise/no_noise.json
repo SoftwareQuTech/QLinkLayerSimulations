@@ -12,7 +12,7 @@
         "lengthB": 0.001,
         "p_loss_init": 0,
         "p_loss_length": 0,
-        "time_window": 40,
+        "time_window": 25,
         "c": 206753.41931034482,
         "c_noise_model": "default",
         "c_loss_model": "default",
@@ -22,7 +22,11 @@
         "dark_rate": 0,
         "detection_eff": 1,
         "visibility": 1,
-        "t0": 0
+        "t0": 0,
+        "c_prob_loss_A": 0.0,
+        "c_prob_loss_B": 0.0,
+        "c_prob_error_A": 0.0,
+        "c_prob_error_B": 0.0
       }
     },
     "classical1": {
@@ -84,7 +88,8 @@
             "measurement_op": {
               "noise_model": {
                 "MEASURE_QUANTUMNM": {
-                  "error_rate": 0
+                  "prob_error_0": 0,
+                  "prob_error_1": 0
                 }
               },
               "operation_time": 3700.0
