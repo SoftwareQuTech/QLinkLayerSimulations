@@ -3,6 +3,10 @@ from numpy import kron, sqrt
 from netsquid.qubits import dm_fidelity
 from qlinklayer.toolbox import LinkLayerException
 from netsquid.qubits.ketstates import s00, s01, s10, s11, b01, b11
+from easysquid.easynetwork import setup_physical_network, Connections
+from qlinklayer.mhp import SimulatedNodeCentricMHPService, NodeCentricMHPHeraldedConnection
+from simulations._get_configs_from_easysquid import NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
+
 
 # Density matrices
 dm00 = kron(s00.H, s00)  # |00><00|
@@ -294,3 +298,66 @@ class SingleClickFidelityEstimationUnit(FidelityEstimationUnit):
         est_nr_attempts = 1 / p_succ
 
         return est_nr_attempts
+
+
+def estimate_success_probability(config_file, alphaA=None, alphaB=None):
+    """
+    Estimates the success probability of an entanglement generation attempt for a given config file and bright
+    state populations.
+    If either alphaA or alphaB is None, then alpha is assumed to be the same for the two nodes.
+    :param config_file: ste
+    :param alphaA: None or float
+    :param alphaB: None or float
+    :return: float
+    """
+    Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
+    Connections._CONN_BY_NAME[Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION] = NodeCentricMHPHeraldedConnection
+
+    network = setup_physical_network(config_file)
+    alice = network.get_node_by_id(0)
+    bob = network.get_node_by_id(1)
+    mhp_conn = network.get_connection(alice, bob, "mhp_conn")
+    mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob, conn=mhp_conn)
+    feuA = SingleClickFidelityEstimationUnit(alice, mhp_service)
+
+    return feuA._estimate_success_probability(alphaA=alphaA, alphaB=alphaB)
+
+
+def get_assigned_brigh_state_population(config_file, min_fidelity=0, allowed_alphasA=None, allowed_alphasB=None,
+                                        nodeID=0):
+    """
+    Returns the bright state population which would be assigned to a request with the given min_fidelity.
+    allowed_alphasA and allowed_alphasB are the allowed bright state popoulations at the two nodes.
+    If either allowed_alphasA or allowed_alphasB is None, then alpha is assumed to be the same for the two nodes.
+    :param config_file: ste
+    :param min_fidelity: float
+    :param allowed_alphasA: None or float or list
+    :param allowed_alphasB: None or float or list
+    :return: float
+    """
+    Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
+    Connections._CONN_BY_NAME[Connections.NODE_CENTRIC_HERALDED_FIBRE_CONNECTION] = NodeCentricMHPHeraldedConnection
+
+    network = setup_physical_network(config_file)
+    alice = network.get_node_by_id(0)
+    bob = network.get_node_by_id(1)
+    mhp_conn = network.get_connection(alice, bob, "mhp_conn")
+    if allowed_alphasA is None:
+        if allowed_alphasB is None:
+            raise ValueError("Both allowed_alphasA and allowed_alphasB cannot be None")
+        else:
+            allowed_alphasA = allowed_alphasB
+    else:
+        if allowed_alphasB is None:
+            allowed_alphasB = allowed_alphasA
+    mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob, conn=mhp_conn, alphaA=allowed_alphasA,
+                                                 alphaB=allowed_alphasB)
+
+    if nodeID == 0:
+        feu = SingleClickFidelityEstimationUnit(alice, mhp_service)
+    elif nodeID == 1:
+        feu = SingleClickFidelityEstimationUnit(bob, mhp_service)
+    else:
+        raise ValueError("Unknown node ID {}".format(nodeID))
+
+    return feu.select_bright_state(min_fidelity=min_fidelity)

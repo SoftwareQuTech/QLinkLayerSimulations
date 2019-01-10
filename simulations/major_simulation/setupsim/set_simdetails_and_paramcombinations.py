@@ -2,6 +2,7 @@ import os
 
 import qlinklayer
 import SimulaQron.cqc
+from qlinklayer.feu import estimate_success_probability, get_assigned_brigh_state_population
 
 #######################
 # Mandatory paramaters
@@ -32,8 +33,8 @@ constant_params = {
     "save_additional_data": True,
     "collect_queue_data": True,
     "request_cycle": 0,
-    "alphaA": [0.1, 0.3],
-    "alphaB": [0.1, 0.3]
+    "alphaA": [0.05, 0.1, 0.3],
+    "alphaB": [0.05, 0.1, 0.3]
 }
 
 config_dir = "setupsim/config"
@@ -43,19 +44,19 @@ configs = {"LAB_NC_NC": "lab/networks_no_cavity_no_conversion.json",
            "QLINK_WC_WC_HIGH_C_LOSS": "qlink/networks_with_cavity_with_conversion_high_c_loss.json",
            }
 
-config_to_p_succ = {
-    "no_noise/no_losses.json": 0.18962460137276416,
-    "no_noise/no_noise.json": 0.19,
-    "lab/networks_no_cavity_no_conversion.json": 7.015991568047906e-05,
-    "lab/networks_no_cavity_with_conversion.json": 2.1629224382238053e-05,
-    "lab/networks_with_cavity_no_conversion.json": 0.0011008895034067229,
-    "lab/networks_with_cavity_with_conversion.json": 0.00033126325807618113,
-    "qlink/networks_no_cavity_no_conversion.json": 7.999995199289722e-07,
-    "qlink/networks_no_cavity_with_conversion.json": 5.944852544500876e-06,
-    "qlink/networks_with_cavity_no_conversion.json": 7.999995199289722e-07,
-    "qlink/networks_with_cavity_with_conversion.json": 8.243310647958359e-05,
-    "qlink/networks_with_cavity_with_conversion_high_c_loss.json": 8.243310647958359e-05
-}
+# config_to_p_succ = {
+#     "no_noise/no_losses.json": 0.18962460137276416,
+#     "no_noise/no_noise.json": 0.19,
+#     "lab/networks_no_cavity_no_conversion.json": 7.015991568047906e-05,
+#     "lab/networks_no_cavity_with_conversion.json": 2.1629224382238053e-05,
+#     "lab/networks_with_cavity_no_conversion.json": 0.0011008895034067229,
+#     "lab/networks_with_cavity_with_conversion.json": 0.00033126325807618113,
+#     "qlink/networks_no_cavity_no_conversion.json": 7.999995199289722e-07,
+#     "qlink/networks_no_cavity_with_conversion.json": 5.944852544500876e-06,
+#     "qlink/networks_with_cavity_no_conversion.json": 7.999995199289722e-07,
+#     "qlink/networks_with_cavity_with_conversion.json": 8.243310647958359e-05,
+#     "qlink/networks_with_cavity_with_conversion_high_c_loss.json": 8.243310647958359e-05
+# }
 
 num_pairs_dct = {"max1": 1,
                  "max3": [1,3],
@@ -87,7 +88,7 @@ weights_dct = {"FIFO": ([0], 1),
                }
 
 
-def single_type_request_params(type, prob, num_pairs):
+def single_type_request_params(type, config_file, origin_prob, p_fraction, num_pairs):
     if type == "NL":
         params = {"num_pairs": num_pairs,
                   "tmax_pair": 0,
@@ -111,7 +112,7 @@ def single_type_request_params(type, prob, num_pairs):
     elif type == "MD":
         params = {"num_pairs": num_pairs,
                   "tmax_pair": 0,
-                  "min_fidelity": 0.5,
+                  "min_fidelity": 0.9,
                   "purpose_id": 0,
                   "priority": 2,
                   "store": False,
@@ -121,7 +122,20 @@ def single_type_request_params(type, prob, num_pairs):
     else:
         raise ValueError("Unknown type")
 
-    request_params = {"prob": prob,
+    # Compute success probability
+    alphaA = get_assigned_brigh_state_population(config_file, params["min_fidelity"],
+                                                 allowed_alphasA=constant_params["alphaA"],
+                                                 allowed_alphasB=constant_params["alphaB"],
+                                                 nodeID=0)
+    alphaB = get_assigned_brigh_state_population(config_file, params["min_fidelity"],
+                                                 allowed_alphasA=constant_params["alphaA"],
+                                                 allowed_alphasB=constant_params["alphaB"],
+                                                 nodeID=1)
+    p_succ = estimate_success_probability(config_file, alphaA=alphaA, alphaB=alphaB)
+
+    req_prob = p_fraction * origin_prob * p_succ
+
+    request_params = {"prob": req_prob,
                       "params": params
                       }
 
@@ -135,7 +149,7 @@ def mixed_request_params(probs, num_pairs):
         num_pair = num_pairs[type]
 
         # Get params of this type
-        params = single_type_request_params(type, p, num_pair)
+        params = single_type_request_params(type, config_file_path, origin_probs[i], p_fractions[i], num_pair)
         request_params[type] = params
 
     return request_params
@@ -147,7 +161,7 @@ paramcombinations = {}
 for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
     config = configs[config_name]
     config_file_path = os.path.join(config_dir, config)
-    p_succ = config_to_p_succ[config]
+    # p_succ = estimate_success_probability(config_file_path)
     for type in ["NL", "CK", "MD"]:
         if type == "MD":
             num_pairs_names = ["max1", "max3", "max255"]
@@ -157,10 +171,12 @@ for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
             num_pairs = num_pairs_dct[num_pairs_name]
             for p_fraction_name, p_fraction in p_req_fractions.items():
                 for origin_prob_name, origin_prob in origin_probs.items():
-                    p_requestA = p_fraction * origin_prob[0] * p_succ
-                    p_requestB = p_fraction * origin_prob[1] * p_succ
-                    request_paramsA = {type: single_type_request_params(type, p_requestA, num_pairs)}
-                    request_paramsB = {type: single_type_request_params(type, p_requestB, num_pairs)}
+                    # p_requestA = p_fraction * origin_prob[0] * p_succ
+                    # p_requestB = p_fraction * origin_prob[1] * p_succ
+                    request_paramsA = {type: single_type_request_params(type, config_file_path, origin_prob[0],
+                                                                        p_fraction, num_pairs)}
+                    request_paramsB = {type: single_type_request_params(type, config_file_path, origin_prob[1],
+                                                                        p_fraction, num_pairs)}
                     simulation_run_params = {"config": config_file_path,
                                              "request_paramsA": request_paramsA,
                                              "request_paramsB": request_paramsB,
