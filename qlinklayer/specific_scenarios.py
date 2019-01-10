@@ -75,14 +75,11 @@ class MixedScenario(EGPSimulationScenario):
                 cycles_per_attempt = 1
             else:
                 scheduler = self.egp.scheduler
-                avg_correction_delay = (self.egp.this_corr_delay + self.egp.peer_corr_delay) / 4
                 if params["store"]:
                     move_delay = self.egp.max_move_delay
-                    cycles_per_attempt = scheduler._get_num_suspend_cycles(scheduler.mhp_full_cycle + move_delay +
-                                                                           avg_correction_delay)
+                    cycles_per_attempt = scheduler._get_num_suspend_cycles(scheduler.mhp_full_cycle + move_delay)
                 else:
-                    cycles_per_attempt = scheduler._get_num_suspend_cycles(scheduler.mhp_full_cycle +
-                                                                           avg_correction_delay)
+                    cycles_per_attempt = scheduler._get_num_suspend_cycles(scheduler.mhp_full_cycle)
 
             prob = self.scenario_probs[scenario]
             probabilities.append(prob / (cycles_per_attempt * num_pairs[scenario]))
