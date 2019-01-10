@@ -450,8 +450,13 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
         max_queue_len: Max queue length
         avg_queue_len: Average queue length
         tot_time_in_queue: Total time items spent in queue.
+        time_non_idle: Total time the queue was not empty, (non-idle)
     """
+    if len(raw_queue_data) == 0:
+        return [0], [0], 0, 0, 0, 0
+
     tot_time_in_queue = 0
+    time_non_idle = 0
     queue_lens = [0]
     times = [0]
     for entry in raw_queue_data:
@@ -460,6 +465,8 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
         change = data_point.change
         time_diff = time - times[-1]
         tot_time_in_queue += time_diff * queue_lens[-1]
+        if queue_lens[-1] > 0:
+            time_non_idle += time_diff
         queue_lens.append(queue_lens[-1] + change)
         times.append(time)
     if max_real_time is None:
@@ -480,9 +487,9 @@ def parse_raw_queue_data(raw_queue_data, max_real_time=None):
     if min(queue_lens) < 0:
         raise RuntimeError("Something went wrong, negative queue length")
     if tot_time_diff == 0:
-        return queue_lens, times, max(queue_lens), float('inf'), tot_time_in_queue
+        return queue_lens, times, max(queue_lens), float('inf'), tot_time_in_queue, time_non_idle
     else:
-        return queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue
+        return queue_lens, times, max(queue_lens), tot_time_in_queue / tot_time_diff, tot_time_in_queue, time_non_idle
 
 
 def plot_single_queue_data(queue_lens, times, color=None, label=None, clear_figure=True):
@@ -1023,14 +1030,14 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
 
     # Extract data from raw queue data
     if raw_queue_dataA:
-        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA = \
+        queue_lensA, qtimesA, max_queue_lenA, avg_queue_lenA, tot_time_in_queueA, _ = \
             parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
         prnt.print("")
         prnt.print("Max queue length at A: {}".format(max_queue_lenA))
         prnt.print("Average queue length at A: {}".format(avg_queue_lenA))
         prnt.print("Total time items spent in queue at A: {} ns".format(tot_time_in_queueA))
     if raw_queue_dataB:
-        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB = \
+        queue_lensB, qtimesB, max_queue_lenB, avg_queue_lenB, tot_time_in_queueB, _ = \
             parse_raw_queue_data(raw_queue_dataA, max_real_time=max_real_time)
         prnt.print("")
         prnt.print("Max queue length at B: {}".format(max_queue_lenB))
