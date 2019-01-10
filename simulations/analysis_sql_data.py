@@ -1090,13 +1090,15 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
             if entry.endswith('.db'):
                 # Initialize the printer
                 entry_results_path = results_path + "/" + entry
+                if analysis_folder is None:
+                    entry_analysis_folder = os.path.splitext(entry_results_path)[0] + "_analysis"
                 prnt = printer(results_path=entry_results_path, save_output=save_output,
-                               analysis_folder=analysis_folder)
+                               analysis_folder=entry_analysis_folder)
 
                 prnt.print("")
                 prnt.print("====================================")
                 analyse_single_file(entry_results_path, no_plot, max_real_time=max_real_time,
-                                    save_figs=save_figs, save_output=save_output, analysis_folder=analysis_folder)
+                                    save_figs=save_figs, save_output=save_output, analysis_folder=entry_analysis_folder)
                 prnt.print("====================================")
                 prnt.print("")
 
