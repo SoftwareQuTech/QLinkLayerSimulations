@@ -219,12 +219,13 @@ for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
 # Added exaggerated classical noise scenario
 config_name = "QLINK_WC_WC_HIGH_C_LOSS"
 config = configs[config_name]
+config_file_path = os.path.join(config_dir, config)
 # p_succ = config_to_p_succ[config]
 weights_name = "lowerWFQ"
 sched_params = weights_dct[weights_name]
 weights = sched_params[0]
 num_priorities = sched_params[1]
-p_fraction = p_req_fractions["high"]
+# p_fraction = p_req_fractions["high"]
 mix_name = "uniform"
 mix = mixes[mix_name]
 origin_prob = (1/2, 1/2)
@@ -243,10 +244,6 @@ simulation_run_params = {"config": config_file_path,
 simulation_run_params.update(constant_params)
 run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
 paramcombinations[run_name] = simulation_run_params
-
-# TODO tmp
-key = list(paramcombinations.keys())[0]
-paramcombinations = {key: paramcombinations[key]}
 
 print(len(paramcombinations))
 
