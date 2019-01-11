@@ -773,9 +773,6 @@ class NodeCentricEGP(EGP):
             # Get scheduler's next gen task
             gen = self.scheduler.next()
             self.scheduler.inc_cycle()
-            # if gen.flag:
-                # if self.node.qmem._memory_positions[1]._qubit is None:
-                    # print(self.node.qmem._memory_positions)
 
             if gen.flag:
                 if gen.storage_q != gen.comm_q:
@@ -1139,8 +1136,6 @@ class NodeCentricEGP(EGP):
             # Store the aid and basis for retrieval post measurement
             self.measurement_info.append((self.scheduler.curr_aid, basis, comm_q))
 
-            # Suspend generation while the measurement is in progress
-            self.scheduler.suspend_generation(self.max_measurement_delay)
             prgm.apply(INSTR_MEASURE, q, output_key="m")
             # self.node.qmem.set_program_done_callback(self._handle_measurement_outcome, prgm=prgm)
 
