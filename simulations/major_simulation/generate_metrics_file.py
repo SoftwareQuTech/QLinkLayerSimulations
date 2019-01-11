@@ -277,7 +277,7 @@ def get_metrics_from_single_file(filename):
 
     avg_qber_per_prio = {}
     for priority, qbersxyz in qber_per_prio.items():
-        avg_qber_per_prio[priority] = {basis: sum(qbers)/len(qbers) for basis, qbers in qbersxyz.items()}
+        avg_qber_per_prio[priority] = {basis: sum(qbers)/len(qbers) if len(qbers) > 0 else 0 for basis, qbers in qbersxyz.items()}
         avg_qber_per_prio[priority]["fid"] = 1 - sum(avg_qber_per_prio[priority].values()) / 2
 
     avg_latencies_per_prio_per_node = {}
