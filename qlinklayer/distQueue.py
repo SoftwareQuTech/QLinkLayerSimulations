@@ -747,7 +747,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if self.is_full(qid):
             logger.error("Specified local queue is full, cannot add request")
             if self.add_callback:
-                self.add_callback(result=(self.DQ_ERR, qid, None request))
+                self.add_callback(result=(self.DQ_ERR, qid, None, request))
             raise LinkLayerException()
 
         if (self.acksWaiting < self.myWsize) and (len(self.backlogAdd) == 0):
