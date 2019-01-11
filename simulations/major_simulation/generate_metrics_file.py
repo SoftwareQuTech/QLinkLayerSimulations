@@ -268,8 +268,10 @@ def get_metrics_from_single_file(filename):
                 latencies_per_prio_per_node[priority][node_id].append(latency)
 
                 # Attempts
-                ok_datapoint = ok_data["ok"]
-                attempts_per_prio[priority] += ok_datapoint.attempts
+                # Only collect for one node
+                if node_id == 0:
+                    ok_datapoint = ok_data["ok"]
+                    attempts_per_prio[priority] += ok_datapoint.attempts
 
     avg_fid_per_prio = {priority: sum(fids)/len(fids) for priority, fids in fids_per_prio.items()}
 
@@ -320,9 +322,13 @@ def get_metrics_from_single_file(filename):
         additional_data = json.load(f)
     total_matrix_time = additional_data["total_real_time"]
     mhp_cycle = additional_data["mhp_t_cycle"]
-    print("Nr MHP cycles {}".format(ceil(total_matrix_time / mhp_cycle)))
+    total_mhp_cycles = ceil(total_matrix_time / mhp_cycle)
+    cycles_non_idle = times_non_idle[0] / mhp_cycle
+    print("Nr MHP cycles non idle {}".format(cycles_non_idle))
+    print("Nr MHP cycles {}".format(total_mhp_cycles))
     print("P Succ per attempt = {}".format(additional_data["p_succ"]))
     print("Attempts: " + "".join(["{} = {}, ".format(prio, attempts) for prio, attempts in attempts_per_prio.items()]))
+    print("Cycles per attempts: " + "".join(["{} = {}, ".format(prio, cycles_non_idle / attempts) for prio, attempts in attempts_per_prio.items() if attempts > 0]))
 
     if "FIFO" in filename:
         avg_throughput_per_prio = {priority: nr_oks / (times_non_idle[0] * 1e-9) for priority, nr_oks in nr_oks_per_prio.items()}
