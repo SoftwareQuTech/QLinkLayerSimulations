@@ -1259,7 +1259,12 @@ class NodeCentricEGP(EGP):
         logger.debug("Measured {} on qubit".format(outcome))
 
         # If the request did not time out during the measurement then store the result
-        aid, basis, comm_q = self.measurement_info.pop(0)
+        try:
+            aid, basis, comm_q = self.measurement_info.pop(0)
+        except IndexError:
+            logger.error("No measurement info when handling measurement")
+            return
+
         if self.scheduler.has_request(aid):
         # if self.scheduler.curr_gen:
             # Free the communication qubit
