@@ -972,9 +972,12 @@ class NodeCentricEGP(EGP):
 
                         # If handling a measure directly request we need to throw away the measurement result
                         if creq.measure_directly and self.scheduler.has_request(aid):
-                            m, basis = self.measurement_results[aid].pop(0)
-                            logger.debug("Removing measurement outcome {} in basis {} for aid {} (failed attempt)"
-                                        .format(m, basis, aid))
+                            try:
+                                m, basis = self.measurement_results[aid].pop(0)
+                                logger.debug("Removing measurement outcome {} in basis {} for aid {} (failed attempt)"
+                                             .format(m, basis, aid))
+                            except IndexError:
+                                pass
 
                 elif midpoint_outcome in [1, 2]:
                     # Check if we need to time out this request
@@ -1055,7 +1058,12 @@ class NodeCentricEGP(EGP):
                     # Clear the request
                     self.scheduler.clear_request(aid=local_aid)
                     if request.measure_directly:
-                        self._remove_measurement_data(aid)
+                        # Pop the earliest measurement results if it exists
+                        try:
+                            self.measurement_results[local_aid].pop(0)
+                        except IndexError:
+                            pass
+                        # self._remove_measurement_data(aid)
 
                     # Alert higher layer protocols
                     self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
@@ -1086,9 +1094,13 @@ class NodeCentricEGP(EGP):
         # Check if the corresponding request is measure directly
         if creq.measure_directly:
             # Grab the result and correct
-            m, basis = self.measurement_results[aid].pop(0)
-            logger.debug("Removing measurement outcome {} in basis {} for aid {} (successful attempt)"
-                        .format(m, basis, aid))
+            try:
+                m, basis = self.measurement_results[aid].pop(0)
+                logger.debug("Removing measurement outcome {} in basis {} for aid {} (successful attempt)"
+                             .format(m, basis, aid))
+            except IndexError:
+                logger.warning("Trying to grab a measurement result but there are no there")
+                return
 
             # Flip this outcome in the case we need to apply a correction
             creator = not (self.dqp.master ^ creq.master_request)
@@ -1239,8 +1251,8 @@ class NodeCentricEGP(EGP):
             if self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
                 self.move_info = None
 
-            else:
-                self.measurement_info.pop(0)
+            # else:
+            #     self.measurement_results.pop(0)
 
     def _handle_measurement_outcome(self):
         """
