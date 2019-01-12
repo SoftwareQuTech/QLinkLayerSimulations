@@ -553,6 +553,7 @@ class EGPLocalQueueSequence(EGPDataSequence):
         else:
             raise ValueError("Unknown event triggered collection of queue length")
 
+        print(data)
         return data, True
 
 
