@@ -292,6 +292,10 @@ class NodeCentricEGP(EGP):
         self.measurement_results = defaultdict(list)
         self.corrected_measurements = defaultdict(list)
 
+        # Count MHP cycles used by a gen
+        self._used_MHP_cycles = {}
+        self._current_create_id = None
+
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
                                  alphaA=None, alphaB=None):
         """
@@ -775,6 +779,16 @@ class NodeCentricEGP(EGP):
             self.scheduler.inc_cycle()
 
             if gen.flag:
+                # Keep track of used MHP cycles per request (data collection)
+                qid, qseq = self.scheduler.curr_aid
+                request = self.scheduler.distQueue.local_peek(qid, qseq).request
+                create_id = request.create_id
+                self._current_create_id = create_id
+                if create_id not in self._used_MHP_cycles:
+                    self._used_MHP_cycles[create_id] = 1
+                else:
+                    self._used_MHP_cycles[create_id] += 1
+
                 if gen.storage_q != gen.comm_q:
                     # Check that storage qubit is already initialized
                     if self._memory_needs_initialization(gen.storage_q):
@@ -792,6 +806,10 @@ class NodeCentricEGP(EGP):
                 return True
 
             else:
+                # Keep track of used MHP cycles per request (data collection)
+                if self._current_create_id is not None:
+                    if self.scheduler.suspended() or self.scheduler.qmm.is_busy():
+                        self._used_MHP_cycles[self._current_create_id] += 1
                 return False
 
         except Exception:
