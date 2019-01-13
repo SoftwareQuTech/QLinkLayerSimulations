@@ -11,6 +11,9 @@ import math
 import matplotlib.pyplot as plt
 import os
 import sys
+import logging
+
+logger.setLevel(logging.INFO)
 
 
 class printer:
@@ -1163,13 +1166,15 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
 
     # Check if results_path is a single .db file or a folder containing such
     if results_path.endswith('.db'):
+        logger.info("Analysing {}".format(results_path))
         analyse_single_file(results_path, no_plot, max_real_time=max_real_time, save_figs=save_figs,
                             save_output=save_output, analysis_folder=analysis_folder)
     else:
         if results_path.endswith('/'):
             results_path = results_path[:-1]
-        for entry in os.listdir(results_path):
+        for entry in sorted(os.listdir(results_path)):
             if entry.endswith('.db'):
+                logger.info("Analysing {}".format(entry))
                 # Initialize the printer
                 entry_results_path = results_path + "/" + entry
                 if analysis_folder is None:
