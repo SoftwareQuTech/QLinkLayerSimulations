@@ -293,7 +293,7 @@ def get_metrics_from_single_file(filename):
         for node_id, latencies in latencies_per_node.items():
             avg_latencies_per_prio_per_node[priority][node_id] = sum(latencies) / len(latencies)
 
-    avg_cycles_per_attempt_per_prio = {priority: sum(c_p_a) / len(c_p_a) for priority, c_p_a in cycles_per_attempt_per_prio.items()}
+    avg_cycles_per_attempt_per_prio = {priority: sum(c_p_a) / len(c_p_a) if len(c_p_a) > 0 else None for priority, c_p_a in cycles_per_attempt_per_prio.items()}
 
     #################
     # Queue Lengths #
@@ -338,6 +338,7 @@ def get_metrics_from_single_file(filename):
     print("P Succ per attempt = {}".format(additional_data["p_succ"]))
     print("Attempts: " + "".join(["{} = {}, ".format(prio, attempts) for prio, attempts in attempts_per_prio.items()]))
     print("Cycles per attempts: " + "".join(["{} = {}, ".format(prio, cycles_non_idle / attempts) for prio, attempts in attempts_per_prio.items() if attempts > 0]))
+    print("Cycles per attempts (real): " + "".join(["{} = {}, ".format(prio, c_p_a) for prio, c_p_a in avg_cycles_per_attempt_per_prio.items()]))
 
     if "FIFO" in filename:
         avg_throughput_per_prio = {priority: nr_oks / (times_non_idle[0] * 1e-9) for priority, nr_oks in nr_oks_per_prio.items()}
