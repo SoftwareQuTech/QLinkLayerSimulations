@@ -108,6 +108,9 @@ class LocalQueue(Entity):
             The request item that we are storing within the queue
         :return: None
         """
+        if self.is_full():
+            logger.error("Attempted to add item to full local queue!")
+            raise LinkLayerException()
 
         lq = self.get_new_queue_item(request, seq)
         self.queue[seq] = lq
@@ -424,7 +427,6 @@ class _EGPLocalQueueItem(_LocalQueueItem):
         :param max_cycle: int
             The max MHP cycle
         """
-        logger.debug("Updating to MHP cycle {}".format(current_cycle))
         if self.timeout_cycle is not None:
             if check_schedule_cycle_bounds(current_cycle, max_cycle, self.timeout_cycle):
                 logger.debug("Item timed out, calling callback")

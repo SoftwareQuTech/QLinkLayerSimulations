@@ -6,7 +6,7 @@ import logging
 from random import randint
 from collections import defaultdict
 from qlinklayer.scheduler import SchedulerRequest
-from qlinklayer.distQueue import DistributedQueue, FilteredDistributedQueue, EGPDistributedQueue
+from qlinklayer.distQueue import DistributedQueue, FilteredDistributedQueue, EGPDistributedQueue, WFQDistributedQueue
 from qlinklayer.toolbox import LinkLayerException
 from qlinklayer.localQueue import EGPLocalQueue
 from easysquid.qnode import QuantumNode
@@ -16,7 +16,7 @@ from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.DEBUG)
 
 
 class FastTestProtocol(TimedProtocol):
@@ -554,6 +554,73 @@ class TestDistributedQueue(unittest.TestCase):
 
         self.assertEqual(len(storage), 257)
         self.assertEqual(storage[-1], (dq2.DQ_REJECT, 2, 0, dq2.maxSeq + 1))
+
+    def test_excessive_full_queue(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=25)
+
+        wSize = 2
+        maxSeq = 6
+        dq = WFQDistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True, accept_all=True, myWsize=wSize,
+                                 otherWsize=wSize, maxSeq=maxSeq)
+        dq2 = WFQDistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True, accept_all=True, myWsize=wSize,
+                                 otherWsize=wSize, maxSeq=maxSeq)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        from easysquid.puppetMaster import PM_Controller
+        from qlinklayer.datacollection import EGPLocalQueueSequence
+        from qlinklayer.scheduler import WFQSchedulerRequest
+
+        pm = PM_Controller()
+        ds = EGPLocalQueueSequence(name="EGP Local Queue A {}".format(0), dbFile='test.db')
+
+        pm.addEvent(dq.queueList[0], dq.queueList[0]._EVT_ITEM_ADDED, ds=ds)
+        pm.addEvent(dq.queueList[0], dq.queueList[0]._EVT_ITEM_REMOVED, ds=ds)
+
+        storage = []
+
+        def callback(result):
+            storage.append(result)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        dq.callback = callback
+        dq2.callback = callback
+        for i in range(1, 3*dq2.maxSeq):
+            for j in range(3*dq2.maxSeq):
+                try:
+                    r = WFQSchedulerRequest(0, 0, 0, 0, j+1, 0, 0, 0, True, False, False, True)
+                    if j % i:
+                        dq.add(request=r, qid=0)
+                    else:
+                        dq2.add(request=r, qid=0)
+                except Exception as e:
+                    pass
+
+            sim_run(i*1000000)
+
+            for seq in range(dq.maxSeq):
+                qitem = dq.queueList[0].queue.get(seq)
+                q2item = dq2.queueList[0].queue.get(seq)
+                self.assertEqual(qitem.request, q2item.request)
+
+            self.assertEqual(len(dq.backlogAdd), 0)
+            self.assertEqual(len(dq2.backlogAdd), 0)
+
+            for j in range(dq.maxSeq):
+                dq.remove_item(0, j)
+                dq2.remove_item(0, j)
 
 
 class TestFilteredDistributedQueue(unittest.TestCase):

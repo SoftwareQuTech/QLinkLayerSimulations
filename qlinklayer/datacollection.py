@@ -215,7 +215,7 @@ class EGPOKSequence(EGPDataSequence):
         self._attempt_collectors = attempt_collectors
 
     def get_column_names(self):
-        return ["Timestamp", "Node ID", "OK_TYPE", "CQC_OK", "Attempts", "Success"]
+        return ["Timestamp", "Node ID", "OK_TYPE", "CQC_OK", "Attempts", "Used Cycles", "Success"]
 
     def getData(self, time, source=None):
         scenario = source[0]
@@ -256,7 +256,11 @@ class EGPOKSequence(EGPDataSequence):
         else:
             nr_attempts = -1
 
-        data = [node_id, ok_type, ok, nr_attempts]
+        # Get number of used MHP cycles
+        used_cycles = scenario.egp._used_MHP_cycles.pop(create_id)
+        scenario.egp._current_create_id = None
+
+        data = [node_id, ok_type, ok, nr_attempts, used_cycles]
         return [data, True]
 
 
@@ -282,6 +286,7 @@ class EGPOKDataPoint(EGPDataPoint):
             self.goodness_time = None
             self.create_time = None
             self.attempts = None
+            self.used_cycles = None
             self.success = None
 
     def from_raw_data(self, data):
@@ -290,7 +295,8 @@ class EGPOKDataPoint(EGPDataPoint):
         self.ok_type = data[2]
         ok = data[3]
         self.attempts = data[4]
-        self.success = data[5]
+        self.used_cycles = data[5]
+        self.success = data[6]
 
         if self.ok_type == EntInfoMeasDirectHeader.type:
             (self.create_id, ent_id, self.measurement_outcome, self.measurement_basis, self.goodness,
@@ -319,6 +325,7 @@ class EGPOKDataPoint(EGPDataPoint):
             self.goodness_time = data.goodness_time
             self.create_time = data.create_time
             self.attempts = data.attempts
+            self.used_cycles = data.used_cycles
             self.success = data.success
         else:
             raise ValueError("'data' is not an instance of this class")
@@ -341,6 +348,7 @@ class EGPOKDataPoint(EGPDataPoint):
             to_print += "    Measurement Basis: {}\n".format(self.measurement_basis)
         to_print += "    Create Time: {}\n".format(self.create_time)
         to_print += "    Attempts: {}\n".format(self.attempts)
+        to_print += "    Used Cycles: {}\n".format(self.used_cycles)
         to_print += "    Success: {}\n".format(self.success)
         return to_print
 
@@ -545,6 +553,7 @@ class EGPLocalQueueSequence(EGPDataSequence):
         else:
             raise ValueError("Unknown event triggered collection of queue length")
 
+        print(data)
         return data, True
 
 

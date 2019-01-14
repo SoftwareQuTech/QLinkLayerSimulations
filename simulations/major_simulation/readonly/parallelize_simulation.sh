@@ -103,4 +103,4 @@ TMP_DIR=$(readlink -f $TMP_DIR)
 sbatch --out="${resultsdir}/archiving_log.out" --dependency=afterany:${SLURM_JOB_ID} $archivejobfile $SIMULATION_DIR ${SLURM_JOB_ID} $TMP_DIR $resultsdir $POST_PROC $timestamp $OUTPUTDIRNAME $paramsetfile $PARTITION
 
 
-srun sh $SIMULATION_DIR/readonly/run_simulation.sh -rd $resultsdir -td $TMP_DIR -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc y -pp $POST_PROC
+srun -W 600 sh $SIMULATION_DIR/readonly/run_simulation.sh -rd $resultsdir -td $TMP_DIR -sd $SIMULATION_DIR -ts $timestamp -lf $logfiledestination -ol $OUTPUTLOGFILE -lc $LOGTOCONSOLE -pr $PROFILING -rc y -pp $POST_PROC

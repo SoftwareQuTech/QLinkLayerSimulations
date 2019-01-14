@@ -3,6 +3,7 @@ import os
 import json
 import sqlite3
 import csv
+from math import ceil
 from collections import namedtuple
 
 from easysquid.toolbox import logger
@@ -192,11 +193,13 @@ def get_metrics_from_single_file(filename):
     ##########################
 
     nr_oks_per_prio = {i: 0 for i in range(3)}
+    nr_reqs_per_prio = {i: 0 for i in range(3)}
     nr_outstanding_req_per_prio = {i: 0 for i in range(3)}
     nr_outstanding_pairs_per_prio = {i: 0 for i in range(3)}
     for create_id, create_data in creates_and_oks_by_create_id.items():
         node_id = 0
         priority = create_data["create"].priority
+        nr_reqs_per_prio[priority] += 1
         if node_id in create_data["oks"]:
             oks = create_data["oks"][node_id]
             nr_oks_per_prio[priority] += len(oks)
@@ -223,6 +226,8 @@ def get_metrics_from_single_file(filename):
     fids_per_prio = {}
     qber_per_prio = {}
     latencies_per_prio_per_node = {}
+    attempts_per_prio = {i: 0 for i in range(3)}
+    cycles_per_attempt_per_prio = {i: [] for i in range(3)}
     priorities = []
 
     for create_id, request_data in creates_and_oks_by_create_id.items():
@@ -265,11 +270,21 @@ def get_metrics_from_single_file(filename):
                     latencies_per_prio_per_node[priority][node_id] = []
                 latencies_per_prio_per_node[priority][node_id].append(latency)
 
+                # Attempts
+                # Only collect for one node
+                if node_id == 0:
+                    ok_datapoint = ok_data["ok"]
+                    attempts_per_prio[priority] += ok_datapoint.attempts
+
+                # Cycles per attempt
+                ok_datapoint = ok_data["ok"]
+                cycles_per_attempt_per_prio[priority].append(ok_datapoint.used_cycles / ok_datapoint.attempts)
+
     avg_fid_per_prio = {priority: sum(fids)/len(fids) for priority, fids in fids_per_prio.items()}
 
     avg_qber_per_prio = {}
     for priority, qbersxyz in qber_per_prio.items():
-        avg_qber_per_prio[priority] = {basis: sum(qbers)/len(qbers) for basis, qbers in qbersxyz.items()}
+        avg_qber_per_prio[priority] = {basis: sum(qbers)/len(qbers) if len(qbers) > 0 else 0 for basis, qbers in qbersxyz.items()}
         avg_qber_per_prio[priority]["fid"] = 1 - sum(avg_qber_per_prio[priority].values()) / 2
 
     avg_latencies_per_prio_per_node = {}
@@ -277,6 +292,8 @@ def get_metrics_from_single_file(filename):
         avg_latencies_per_prio_per_node[priority] = {}
         for node_id, latencies in latencies_per_node.items():
             avg_latencies_per_prio_per_node[priority][node_id] = sum(latencies) / len(latencies)
+
+    avg_cycles_per_attempt_per_prio = {priority: sum(c_p_a) / len(c_p_a) if len(c_p_a) > 0 else None for priority, c_p_a in cycles_per_attempt_per_prio.items()}
 
     #################
     # Queue Lengths #
@@ -313,7 +330,15 @@ def get_metrics_from_single_file(filename):
     with open(additional_data_filename, 'r') as f:
         additional_data = json.load(f)
     total_matrix_time = additional_data["total_real_time"]
-    print("p_succ = {}".format(additional_data["p_succ"]))
+    mhp_cycle = additional_data["mhp_t_cycle"]
+    total_mhp_cycles = ceil(total_matrix_time / mhp_cycle)
+    cycles_non_idle = times_non_idle[0] / mhp_cycle
+    print("Nr MHP cycles non idle {}".format(cycles_non_idle))
+    print("Nr MHP cycles {}".format(total_mhp_cycles))
+    print("P Succ per attempt = {}".format(additional_data["p_succ"]))
+    print("Attempts: " + "".join(["{} = {}, ".format(prio, attempts) for prio, attempts in attempts_per_prio.items()]))
+    print("Cycles per attempts: " + "".join(["{} = {}, ".format(prio, cycles_non_idle / attempts) for prio, attempts in attempts_per_prio.items() if attempts > 0]))
+    print("Cycles per attempts (real): " + "".join(["{} = {}, ".format(prio, c_p_a) for prio, c_p_a in avg_cycles_per_attempt_per_prio.items()]))
 
     if "FIFO" in filename:
         avg_throughput_per_prio = {priority: nr_oks / (times_non_idle[0] * 1e-9) for priority, nr_oks in nr_oks_per_prio.items()}
@@ -344,10 +369,12 @@ def get_metrics_from_single_file(filename):
         else:
             raise RuntimeError("Unkown priority {}".format(priority))
 
+        metrics["NrReqs_Prio{}".format(prio_name)] = nr_reqs_per_prio[priority]
         metrics["NrOKs_Prio{}".format(prio_name)] = nr_oks_per_prio[priority]
         metrics["NrRemReq_Prio{}".format(prio_name)] = nr_outstanding_req_per_prio[priority]
         metrics["NrRemPairs_Prio{}".format(prio_name)] = nr_outstanding_pairs_per_prio[priority]
         metrics["AvgThroughp_Prio{} (1/s)".format(prio_name)] = avg_throughput_per_prio[priority]
+        metrics["AvgCyc_per_Att_Prio{}".format(prio_name)] = avg_cycles_per_attempt_per_prio[priority]
 
         try:
             avg_latencies_per_node = avg_latencies_per_prio_per_node[priority]
@@ -410,7 +437,8 @@ def main(results_folder):
         print(csv_filename)
         with open(csv_filename, 'w', newline='') as f:
             fieldnames = ["Name", "NumErrors", "TotalMatrixT (s)"] + ["QueueIdle_QID{}".format(qid) for qid in range(3)]
-            fieldnames += sum([["Nr{}_Prio{}".format(what_nr, p) for p in ["NL", "CK", "MD"]] for what_nr in ["OKs", "RemReq", "RemPairs"]], [])
+            fieldnames += ["AvgCyc_per_Att_Prio{}".format(p) for p in ["NL", "CK", "MD"]]
+            fieldnames += sum([["Nr{}_Prio{}".format(what_nr, p) for p in ["NL", "CK", "MD"]] for what_nr in ["Reqs", "OKs", "RemReq", "RemPairs"]], [])
             fieldnames += [fieldname for fieldname in all_metrics[0].keys() if fieldname not in fieldnames]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
 

@@ -292,6 +292,10 @@ class NodeCentricEGP(EGP):
         self.measurement_results = defaultdict(list)
         self.corrected_measurements = defaultdict(list)
 
+        # Count MHP cycles used by a gen
+        self._used_MHP_cycles = {}
+        self._current_create_id = None
+
     def connect_to_peer_protocol(self, other_egp, egp_conn=None, mhp_service=None, mhp_conn=None, dqp_conn=None,
                                  alphaA=None, alphaB=None):
         """
@@ -773,11 +777,18 @@ class NodeCentricEGP(EGP):
             # Get scheduler's next gen task
             gen = self.scheduler.next()
             self.scheduler.inc_cycle()
-            # if gen.flag:
-                # if self.node.qmem._memory_positions[1]._qubit is None:
-                    # print(self.node.qmem._memory_positions)
 
             if gen.flag:
+                # Keep track of used MHP cycles per request (data collection)
+                qid, qseq = self.scheduler.curr_aid
+                request = self.scheduler.distQueue.local_peek(qid, qseq).request
+                create_id = request.create_id
+                self._current_create_id = create_id
+                if create_id not in self._used_MHP_cycles:
+                    self._used_MHP_cycles[create_id] = 1
+                else:
+                    self._used_MHP_cycles[create_id] += 1
+
                 if gen.storage_q != gen.comm_q:
                     # Check that storage qubit is already initialized
                     if self._memory_needs_initialization(gen.storage_q):
@@ -795,6 +806,10 @@ class NodeCentricEGP(EGP):
                 return True
 
             else:
+                # Keep track of used MHP cycles per request (data collection)
+                if self._current_create_id is not None:
+                    if self.scheduler.suspended() or self.scheduler.qmm.is_busy():
+                        self._used_MHP_cycles[self._current_create_id] += 1
                 return False
 
         except Exception:
@@ -957,9 +972,12 @@ class NodeCentricEGP(EGP):
 
                         # If handling a measure directly request we need to throw away the measurement result
                         if creq.measure_directly and self.scheduler.has_request(aid):
-                            m, basis = self.measurement_results[aid].pop(0)
-                            logger.debug("Removing measurement outcome {} in basis {} for aid {} (failed attempt)"
-                                        .format(m, basis, aid))
+                            try:
+                                m, basis = self.measurement_results[aid].pop(0)
+                                logger.debug("Removing measurement outcome {} in basis {} for aid {} (failed attempt)"
+                                             .format(m, basis, aid))
+                            except IndexError:
+                                pass
 
                 elif midpoint_outcome in [1, 2]:
                     # Check if we need to time out this request
@@ -1040,7 +1058,12 @@ class NodeCentricEGP(EGP):
                     # Clear the request
                     self.scheduler.clear_request(aid=local_aid)
                     if request.measure_directly:
-                        self._remove_measurement_data(aid)
+                        # Pop the earliest measurement results if it exists
+                        try:
+                            self.measurement_results[local_aid].pop(0)
+                        except IndexError:
+                            pass
+                        # self._remove_measurement_data(aid)
 
                     # Alert higher layer protocols
                     self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
@@ -1071,9 +1094,13 @@ class NodeCentricEGP(EGP):
         # Check if the corresponding request is measure directly
         if creq.measure_directly:
             # Grab the result and correct
-            m, basis = self.measurement_results[aid].pop(0)
-            logger.debug("Removing measurement outcome {} in basis {} for aid {} (successful attempt)"
-                        .format(m, basis, aid))
+            try:
+                m, basis = self.measurement_results[aid].pop(0)
+                logger.debug("Removing measurement outcome {} in basis {} for aid {} (successful attempt)"
+                             .format(m, basis, aid))
+            except IndexError:
+                logger.warning("Trying to grab a measurement result but there are no there")
+                return
 
             # Flip this outcome in the case we need to apply a correction
             creator = not (self.dqp.master ^ creq.master_request)
@@ -1139,8 +1166,6 @@ class NodeCentricEGP(EGP):
             # Store the aid and basis for retrieval post measurement
             self.measurement_info.append((self.scheduler.curr_aid, basis, comm_q))
 
-            # Suspend generation while the measurement is in progress
-            self.scheduler.suspend_generation(self.max_measurement_delay)
             prgm.apply(INSTR_MEASURE, q, output_key="m")
             # self.node.qmem.set_program_done_callback(self._handle_measurement_outcome, prgm=prgm)
 
@@ -1226,8 +1251,8 @@ class NodeCentricEGP(EGP):
             if self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
                 self.move_info = None
 
-            else:
-                self.measurement_info.pop(0)
+            # else:
+            #     self.measurement_results.pop(0)
 
     def _handle_measurement_outcome(self):
         """
@@ -1246,7 +1271,12 @@ class NodeCentricEGP(EGP):
         logger.debug("Measured {} on qubit".format(outcome))
 
         # If the request did not time out during the measurement then store the result
-        aid, basis, comm_q = self.measurement_info.pop(0)
+        try:
+            aid, basis, comm_q = self.measurement_info.pop(0)
+        except IndexError:
+            logger.error("No measurement info when handling measurement")
+            return
+
         if self.scheduler.has_request(aid):
         # if self.scheduler.curr_gen:
             # Free the communication qubit
