@@ -365,10 +365,10 @@ def plot_error_data(error_by_code, results_path, no_plot=False, save_figs=False,
         plt.clf()
 
     for error_code, errors in error_by_code.items():
-        timestamps = sum([[error.timestamp] * 2 for error in errors], [])
-        nr_errors = sum([[i, i+1] for i in range(len(errors))], [])
+        timestamps = [error.timestamp for error in errors]
         label = "Error {}".format(error_code)
-        plt.plot(timestamps, nr_errors, label=label)
+        n_bins = 50
+        plt.hist(timestamps, n_bins, density=True, histtype='step', cumulative=True, label=label)
 
     plt.ylabel("Nr errors")
     plt.xlabel("Matrix time (ns)")
