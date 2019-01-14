@@ -112,7 +112,8 @@ def single_type_request_params(type, config_file, origin_prob, p_fraction, num_p
     elif type == "MD":
         params = {"num_pairs": num_pairs,
                   "tmax_pair": 0,
-                  "min_fidelity": 0.88,
+                  # "min_fidelity": 0.88,
+                  "min_fidelity": 0.8,
                   "purpose_id": 0,
                   "priority": 2,
                   "store": False,
