@@ -208,30 +208,36 @@ def _update_no_noise_file(path_to_file):
         json.dump(config_dct, f, indent=2)
 
 
-def add_loss_qlink_wc_wc():
-    qlink_wc_wc_path = "qlink/networks_with_cavity_with_conversion.json"
-    qlink_high_c_loss_path = "qlink/networks_with_cavity_with_conversion_high_c_loss.json"
-    qlinklayer_qlink_wc_wc_path = os.path.join(path_to_this_config_folder, qlink_wc_wc_path)
-    qlinklayer_qlink_wc_wc_high_c_loss_path = os.path.join(path_to_this_config_folder, qlink_high_c_loss_path)
+def add_loss_qlink_wc_wc(p_c_loss):
+    if isinstance(p_c_loss, (list, tuple)):
+        for p in p_c_loss:
+            add_loss_qlink_wc_wc(p)
+    elif isinstance(p_c_loss, float):
+        qlink_wc_wc_path = "qlink/networks_with_cavity_with_conversion.json"
+        qlink_high_c_loss_path = "qlink/networks_with_cavity_with_conversion_high_c_loss_{:.0e}.json".format(p_c_loss)
+        qlinklayer_qlink_wc_wc_path = os.path.join(path_to_this_config_folder, qlink_wc_wc_path)
+        qlinklayer_qlink_wc_wc_high_c_loss_path = os.path.join(path_to_this_config_folder, qlink_high_c_loss_path)
 
-    # Read config file
-    with open(qlinklayer_qlink_wc_wc_path, 'r') as f:
-        config_dct = json.load(f)
+        # Read config file
+        with open(qlinklayer_qlink_wc_wc_path, 'r') as f:
+            config_dct = json.load(f)
 
-    # Get the connection config name of the mhp connection
-    conn_config_name = _get_conn_config_name_of_mhp_conn(config_dct)
+        # Get the connection config name of the mhp connection
+        conn_config_name = _get_conn_config_name_of_mhp_conn(config_dct)
 
-    # Add noise to the mhp and classical communications
-    mhp_p_loss_A = 1e-4
-    mhp_p_loss_B = 1e-4
-    classical_p_loss = 1e-4
-    config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_A"] = mhp_p_loss_A
-    config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_B"] = mhp_p_loss_B
-    config_dct["conn_configs"]["classical1"]["parameters"]["c_prob_loss"] = classical_p_loss
+        # Add noise to the mhp and classical communications
+        mhp_p_loss_A = p_c_loss
+        mhp_p_loss_B = p_c_loss
+        classical_p_loss = p_c_loss
+        config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_A"] = mhp_p_loss_A
+        config_dct["conn_configs"][conn_config_name]["parameters"]["c_prob_loss_B"] = mhp_p_loss_B
+        config_dct["conn_configs"]["classical1"]["parameters"]["c_prob_loss"] = classical_p_loss
 
-    # Write to high loss config
-    with open(qlinklayer_qlink_wc_wc_high_c_loss_path, 'w') as f:
-        json.dump(config_dct, f, indent=2)
+        # Write to high loss config
+        with open(qlinklayer_qlink_wc_wc_high_c_loss_path, 'w') as f:
+            json.dump(config_dct, f, indent=2)
+    else:
+        raise TypeError("p_c_loss needs to be list, tuple or float")
 
 
 def copy_files_to_other_folders():
@@ -245,10 +251,11 @@ def copy_files_to_other_folders():
 
 def main():
     copy_files_from_easysquid()
-    copy_qlink_wc_wc_high_loss()
+    # copy_qlink_wc_wc_high_loss()
     change_connnection_type()
     make_no_loss_and_no_noise_files()
-    add_loss_qlink_wc_wc()
+    p_c_loss = [10**(-i) for i in range(4, 11)]
+    add_loss_qlink_wc_wc(p_c_loss)
     copy_files_to_other_folders()
 
 
