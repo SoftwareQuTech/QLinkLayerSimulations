@@ -4,14 +4,16 @@ import shutil
 import json
 import glob
 import logging
-
+from math import floor
 from easysquid.toolbox import logger
+from easysquid.simulationinputparser import SimulationInputParser
 from simulations import _get_configs_from_easysquid
 from simulations.create_measure_simulation.readonly import create_simdetails_and_paramcombinations
 from simulations import create_measure_simulation
-from simulations.create_measure_simulation.setupsim import perform_single_simulation_run
+from simulations.create_measure_simulation.setupsim import perform_single_simulation_run, \
+    set_simdetails_and_paramcombinations
 from simulations import analysis_sql_data
-from simulations.create_measure_simulation.setupsim import set_simdetails_and_paramcombinations
+from simulations.simulation_methods import setup_physical_network, setup_network_protocols
 
 logger.setLevel(logging.CRITICAL)
 
@@ -161,6 +163,49 @@ class TestSimulations(unittest.TestCase):
         nr_of_analysis_files = len(
             glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*analysis_output.txt")))
         self.assertEqual(nr_of_analysis_files, 3)
+
+    def test_midpoint_rtt(self):
+        self._reset_folder(self.results_folder)
+        paramfile = os.path.join(os.path.dirname(__file__), "resources/paramcombinations.json")
+        shutil.copy(paramfile, self.results_folder)
+
+        # Load full_paramcombinations.json
+        with open(paramfile) as f:
+            paramcombinations = json.load(f)
+
+        for actualkey in paramcombinations.keys():
+            timestamp = "TEST_SIMULATION"
+            runindex = 0
+            params = [timestamp, self.results_folder, runindex, paramfile, actualkey]
+            sip = SimulationInputParser(params)
+
+            # extract the desired data from the SimulationInputParser
+            paramsdict = sip.inputdict
+
+            # Get path to simulation folder
+            path_to_here = os.path.dirname(os.path.abspath(__file__))
+            sim_dir = "/".join(path_to_here.split("/")[:-1] + ["simulations/create_measure_simulation"]) + "/"
+
+            # Get absolute path to config
+            abs_config_path = sim_dir + paramsdict["config"]
+
+            # Create the network
+            network = setup_physical_network(abs_config_path)
+
+            nodeA = network.get_node_by_id(0)
+            nodeB = network.get_node_by_id(1)
+            mhp_conn = network.get_connection(nodeA, nodeB, "mhp_conn")
+            mhp_conn.set_timings(t_cycle=0, t0=0)
+
+            # Setup entanglement generation protocols
+            egpA, egpB = setup_network_protocols(network)
+
+            rtt_delay = egpA.mhp_service.get_midpoint_rtt_delay(nodeA)
+            rtt_cycles = floor(rtt_delay / egpA.scheduler.mhp_cycle_period)
+            if "Lab" in actualkey:
+                self.assertEqual(rtt_cycles, 0)
+            elif "QLink" in actualkey:
+                self.assertEqual(rtt_cycles, 14)
 
 
 if __name__ == '__main__':

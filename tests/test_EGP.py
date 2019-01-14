@@ -19,7 +19,7 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.ERROR)
 
 
 def store_result(storage, result):
@@ -340,6 +340,8 @@ class TestNodeCentricEGP(unittest.TestCase):
         network.start()
 
         sim_run(500)
+        import pdb
+        pdb.set_trace()
 
         # Verify all the bits were generated
         self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits)
