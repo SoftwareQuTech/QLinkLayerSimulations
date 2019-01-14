@@ -257,7 +257,11 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             cmd = item[0]
             data = item[1]
 
-            self._process_cmd(cmd, data)
+            try:
+                self._process_cmd(cmd, data)
+            except:
+                logger.exception("{}: Error occurred processing cmd {} with data {}".format(self.node.nodeID, cmd,
+                                                                                            data))
 
     def _process_cmd(self, cmd, data):
         """
@@ -385,6 +389,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.acksWaiting -= 1
         if self.add_callback:
             self.add_callback(result=(self.DQ_REJECT, qid, qseq, request))
+
+        # Process backlog, and go idle if applicable
+        self._try_go_idle()
 
     def validate_ADD(self, data):
         """
@@ -744,8 +751,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
                 self.add_callback(result=(self.DQ_REJECT, qid, None, request))
                 return
 
-        if self.is_full(qid):
-            logger.error("Specified local queue is full, cannot add request")
+        if self.has_max_adds(qid):
+            logger.error("Specified local queue has maximum adds in flight, cannot add request")
             if self.add_callback:
                 self.add_callback(result=(self.DQ_ERR, qid, None, request))
             raise LinkLayerException()
@@ -783,6 +790,24 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
 
         return self.queueList[qid].is_full()
+
+    def has_max_adds(self, qid):
+        num_backlog_items = sum(1 for item in self.backlogAdd if item[1] == qid)
+        num_queue_items = self.queueList[qid].num_items()
+        num_acks_waiting = sum(1 for item in self.waitAddAcks.values() if item[0] == qid)
+        max_items = self.queueList[qid].maxSeq
+        logger.debug("{}: Checking full queue {}: Has {} items with {} items in backlog and {} outstanding add acks"
+                     .format(self.node.nodeID, qid, num_queue_items, num_backlog_items, num_acks_waiting))
+        if num_queue_items > max_items:
+            logger.error("Local queue {} overfull")
+
+        total_known_items = num_backlog_items + num_queue_items
+
+        # The slave only adds items when they are acknowledged so must count number of acks
+        if not self.master:
+            total_known_items += num_acks_waiting
+
+        return total_known_items >= max_items
 
     def remove_item(self, qid, qseq):
         """

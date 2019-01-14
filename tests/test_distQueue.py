@@ -561,8 +561,12 @@ class TestDistributedQueue(unittest.TestCase):
         node2 = QuantumNode("TestNode 2", 2)
         conn = ClassicalFibreConnection(node, node2, length=25)
 
-        dq = WFQDistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True, accept_all=True)
-        dq2 = WFQDistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True, accept_all=True)
+        wSize = 2
+        maxSeq = 6
+        dq = WFQDistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True, accept_all=True, myWsize=wSize,
+                                 otherWsize=wSize, maxSeq=maxSeq)
+        dq2 = WFQDistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True, accept_all=True, myWsize=wSize,
+                                 otherWsize=wSize, maxSeq=maxSeq)
         dq.connect_to_peer_protocol(dq2, conn)
 
         from easysquid.puppetMaster import PM_Controller
@@ -593,23 +597,30 @@ class TestDistributedQueue(unittest.TestCase):
 
         dq.callback = callback
         dq2.callback = callback
-        for i in range(5):
-            for j in range(2*dq2.maxSeq):
+        for i in range(1, 3*dq2.maxSeq):
+            for j in range(3*dq2.maxSeq):
                 try:
                     r = WFQSchedulerRequest(0, 0, 0, 0, j+1, 0, 0, 0, True, False, False, True)
-                    if j % 2:
+                    if j % i:
                         dq.add(request=r, qid=0)
                     else:
                         dq2.add(request=r, qid=0)
-                except:
+                except Exception as e:
                     pass
 
             sim_run(i*1000000)
-        import pdb
-        # inspect len(ds.statements)
-        # inspect len(dq.queueList[0].queue)
-        # inspect len(dq2.queueList[0].queue)
-        pdb.set_trace()
+
+            for seq in range(dq.maxSeq):
+                qitem = dq.queueList[0].queue.get(seq)
+                q2item = dq2.queueList[0].queue.get(seq)
+                self.assertEqual(qitem.request, q2item.request)
+
+            self.assertEqual(len(dq.backlogAdd), 0)
+            self.assertEqual(len(dq2.backlogAdd), 0)
+
+            for j in range(dq.maxSeq):
+                dq.remove_item(0, j)
+                dq2.remove_item(0, j)
 
 
 class TestFilteredDistributedQueue(unittest.TestCase):
