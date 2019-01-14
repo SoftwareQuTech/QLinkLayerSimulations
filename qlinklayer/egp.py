@@ -919,6 +919,7 @@ class NodeCentricEGP(EGP):
 
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
+            self._remove_old_measurement_results(aid)
 
             # Check if an error occurred while processing a request
             if proto_err:
@@ -973,7 +974,7 @@ class NodeCentricEGP(EGP):
                         # If handling a measure directly request we need to throw away the measurement result
                         if creq.measure_directly and self.scheduler.has_request(aid):
                             try:
-                                m, basis = self.measurement_results[aid].pop(0)
+                                ecycle, m, basis = self.measurement_results[aid].pop(0)
                                 logger.debug("Removing measurement outcome {} in basis {} for aid {} (failed attempt)"
                                              .format(m, basis, aid))
                             except IndexError:
@@ -1095,7 +1096,7 @@ class NodeCentricEGP(EGP):
         if creq.measure_directly:
             # Grab the result and correct
             try:
-                m, basis = self.measurement_results[aid].pop(0)
+                ecycle, m, basis = self.measurement_results[aid].pop(0)
                 logger.debug("Removing measurement outcome {} in basis {} for aid {} (successful attempt)"
                              .format(m, basis, aid))
             except IndexError:
@@ -1190,8 +1191,8 @@ class NodeCentricEGP(EGP):
         logger.debug("Node {} : Moving comm_q {} to storage_q {}".format(self.node.name, comm_q, storage_q))
         if self.node.qmem._memory_positions[storage_q]._qubit is None:
             raise RuntimeError("No qubit before trying to swap")
+
         # Set a flag to make sure we catch replies that occur during the measurement
-        # self.emission_handling_in_progress = self.EMIT_HANDLER_CK
 
         # Reset init info of this storage qubit
         self._next_init_cycle.pop(storage_q)
@@ -1222,7 +1223,6 @@ class NodeCentricEGP(EGP):
         # Handle create and keep program
         elif self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
             raise RuntimeError("Shouldn't be handling CK after emission now")
-            # emit_aid, _ = self.move_info
 
         # Handle measure directly program
         else:
@@ -1254,6 +1254,17 @@ class NodeCentricEGP(EGP):
             # else:
             #     self.measurement_results.pop(0)
 
+    def _remove_old_measurement_results(self, aid):
+        cycle = self.scheduler.mhp_cycle_number
+        rtt_cycles = floor(self.mhp_service.get_midpoint_rtt_delay(self.node) / self.scheduler.mhp_cycle_period)
+        while self.measurement_results[aid]:
+            emission_cycle, basis, outcome = self.measurement_results[aid][0]
+            if emission_cycle >= cycle - rtt_cycles:
+                break
+            elif emission_cycle < cycle - rtt_cycles:
+                logger.warning("Failed to get expected reply, removing measurement result ")
+                self.measurement_results[aid].pop(0)
+
     def _handle_measurement_outcome(self):
         """
         Handles the measurement outcome from measureing the communication qubit
@@ -1266,6 +1277,7 @@ class NodeCentricEGP(EGP):
         self._current_prgm = None
 
         outcome = prgm.output["m"][0]
+
         # Saves measurement outcome
         self.emission_handling_in_progress = self.EMIT_HANDLER_NONE
         logger.debug("Measured {} on qubit".format(outcome))
@@ -1278,21 +1290,20 @@ class NodeCentricEGP(EGP):
             return
 
         if self.scheduler.has_request(aid):
-        # if self.scheduler.curr_gen:
             # Free the communication qubit
             # comm_q = self.scheduler.curr_gen.comm_q
             self.qmm.vacate_qubit(comm_q)
 
             # Store the measurement result
-            # aid, basis = self.measurement_info.pop(0)
-            self.measurement_results[aid].append((outcome, basis))
-            logger.debug("Adding measurement outcome {} in basis {} for aid {}"
-                        .format(outcome, basis, aid))
+            ecycle = self.scheduler.mhp_cycle_number
+            self.measurement_results[aid].append((ecycle, outcome, basis))
+            logger.debug("Adding measurement outcome {} in basis {} for aid {}".format(outcome, basis, aid))
 
             # If we received a reply for this attempt during measurement we can handle it immediately
             if self.mhp_reply:
                 self.handle_reply_mhp(self.mhp_reply)
                 self.mhp_reply = None
+
         elif self.scheduler.previous_request(aid):
             logger.debug("Handling measurement outcome from request that is already completed with aid {}".format(aid))
         else:
