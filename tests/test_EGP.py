@@ -206,12 +206,12 @@ class TestNodeCentricEGP(unittest.TestCase):
         _, create_id, ent_id, logical_id, _, _, _ = self.bob_results[1]
         self.assertEqual(create_id, bob_create_id)
         self.assertEqual(ent_id, (bob.nodeID, alice.nodeID, 1))
-        self.assertEqual(logical_id, 2)
+        self.assertEqual(logical_id, 1)
 
         _, create_id, ent_id, logical_id, _, _, _ = self.bob_results[2]
         self.assertEqual(create_id, bob_create_id)
         self.assertEqual(ent_id, (bob.nodeID, alice.nodeID, 2))
-        self.assertEqual(logical_id, 3)
+        self.assertEqual(logical_id, 1)
 
         self.check_memories(alice.qmem, bob.qmem, range(alice_pairs + bob_pairs))
 
@@ -1278,11 +1278,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = self.create_network(egpA, egpB)
         network.start()
 
+        import pdb
+        pdb.set_trace()
         sim_run(5)
+        pdb.set_trace()
 
         # Verify number of messages
         self.assertEqual(len(self.alice_results), 5)  # 2 errors, 2 expires, 1 ok
-        self.assertEqual(len(self.bob_results), 6)    # 2 errors, 2 expires, 3 ok's
+        self.assertEqual(len(self.bob_results), 5)    # 2 expires, 3 ok's
 
         # Verify that alice received an ERR_QUEUE_MISMATCH
         self.assertEqual(self.alice_results[0], (egpA.mhp.conn.ERR_QUEUE_MISMATCH, 0))
@@ -1428,10 +1431,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         
         # Check that alice received an error from the midpoint and expired the request
         self.assertEqual(self.alice_results[0], (egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER, 0))
-        self.assertEqual(self.alice_results[1], (egpA.ERR_EXPIRE, (0, 0)))
+        self.assertEqual(self.alice_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID, 0, 0)))
 
         # Check that bob also received an error from the midpoint
-        self.assertEqual(self.bob_results[1], (egpA.ERR_EXPIRE, (0, 0)))
+        self.assertEqual(self.bob_results[1], (egpA.ERR_EXPIRE, (create_idA, alice.nodeID, 0, 0)))
 
         # Verify that egp states synchronized
         self.assertEqual(egpA.mhp.conn.mhp_seq, egpA.expected_seq)
@@ -1492,14 +1495,14 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(self.bob_results[0][0:3], expected_ok_data)
 
         # Check that alice received an error from the midpoint and expired the request
-        expected_seq_range = (0, 0)
+        expected_data = (create_idA, alice.nodeID, 0, 0)
         self.assertEqual(self.alice_results[0], (egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER, 0))
-        self.assertEqual(self.alice_results[1], (egpA.ERR_EXPIRE, expected_seq_range))
+        self.assertEqual(self.alice_results[1], (egpA.ERR_EXPIRE, expected_data))
 
         # Check that bob also received an error from the midpoint
-        self.assertEqual(self.bob_results[1], (egpA.ERR_EXPIRE, expected_seq_range))
-        self.assertEqual(self.bob_results[2], (egpA.ERR_EXPIRE, expected_seq_range))
-        self.assertEqual(self.bob_results[3], (egpA.ERR_EXPIRE, expected_seq_range))
+        self.assertEqual(self.bob_results[1], (egpA.ERR_EXPIRE, expected_data))
+        self.assertEqual(self.bob_results[2], (egpA.ERR_EXPIRE, expected_data))
+        self.assertEqual(self.bob_results[3], (egpA.ERR_EXPIRE, expected_data))
 
         # Verify that egp states synchronized
         self.assertEqual(egpA.mhp.conn.mhp_seq, egpA.expected_seq)
