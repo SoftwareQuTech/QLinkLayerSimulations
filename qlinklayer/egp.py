@@ -491,7 +491,7 @@ class NodeCentricEGP(EGP):
         my_free_mem = self.qmm.get_free_mem_ad()
         self.send_msg(self.CMD_REQ_E, my_free_mem)
 
-    def send_expire_notification(self, aid, createID, originID, new_seq):
+    def send_expire_notification(self, aid, createID, originID, old_seq, new_seq):
         """
         Sends and expiration notification to our peer if MHP Sequence ordering becomes inconsistent
         :param aid: tuple (int, int)
@@ -506,7 +506,7 @@ class NodeCentricEGP(EGP):
         # Check if we are waiting for an acknowledgement for this expiry
         if aid not in self.waitExpireAcks:
             logger.error("Sending EXPIRE notification to peer")
-            self._send_exp_msg(aid, createID, originID, new_seq)
+            self._send_exp_msg(aid, createID, originID, old_seq, new_seq)
 
             # Schedule communication timeout to make sure we alert peer of expired request
             evt = self._schedule_after(2 * self.comm_delay, self._EVT_EXPIRE_ACK_TIMEOUT)
@@ -514,9 +514,9 @@ class NodeCentricEGP(EGP):
             self._wait_once(timeout_handler, event=evt)
 
             # Store information about expired request
-            self.waitExpireAcks[aid] = (createID, originID, new_seq)
+            self.waitExpireAcks[aid] = (createID, originID, old_seq, new_seq)
 
-    def _send_exp_msg(self, aid, createID, originID, new_seq):
+    def _send_exp_msg(self, aid, createID, originID, old_seq, new_seq):
         """
         Sends an expire message to our peer
         :param aid: tuple of (int, int)
@@ -528,7 +528,7 @@ class NodeCentricEGP(EGP):
         :param new_seq: int
             The local sequence number we have
         """
-        self.send_msg(self.CMD_EXPIRE, (aid, createID, originID, new_seq))
+        self.send_msg(self.CMD_EXPIRE, (aid, createID, originID, old_seq, new_seq))
 
     def expire_ack_timeout(self, evt, aid):
         """
@@ -543,10 +543,10 @@ class NodeCentricEGP(EGP):
             logger.warning("Did not receive expire ACK in time, retransmitting")
 
             # Remove local information of the expire message
-            createID, originID, expire_seq = self.waitExpireAcks.pop(aid)
+            createID, originID, seq_start, seq_end = self.waitExpireAcks.pop(aid)
 
             # Reattempt expiration and include up to date sequence info
-            self.send_expire_notification(aid, createID, originID, self.expected_seq)
+            self.send_expire_notification(aid, createID, originID, seq_start, seq_end)
 
     def cmd_EXPIRE(self, data):
         """
@@ -561,7 +561,7 @@ class NodeCentricEGP(EGP):
         :return:
         """
         logger.error("Got EXPIRE command from peer for request {}".format(data))
-        aid, createID, originID, new_seq = data
+        aid, createID, originID, old_seq, new_seq = data
 
         # If our peer is ahead of us we should update
         if new_seq > self.expected_seq:
@@ -577,7 +577,7 @@ class NodeCentricEGP(EGP):
                 self._remove_measurement_data(aid)
 
         # Alert higher layer protocols
-        self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
+        self.issue_err(err=self.ERR_EXPIRE, err_data=(old_seq, new_seq - 1))
 
         # Let our peer know we expired
         self._send_exp_ack(aid)
@@ -776,7 +776,6 @@ class NodeCentricEGP(EGP):
 
             # Get scheduler's next gen task
             gen = self.scheduler.next()
-            self.scheduler.inc_cycle()
 
             if gen.flag:
                 # Keep track of used MHP cycles per request (data collection)
@@ -803,14 +802,15 @@ class NodeCentricEGP(EGP):
 
                 # Store the gen for pickup by mhp
                 self.mhp_service.put_ready_data(self.node.nodeID, gen)
-                return True
 
             else:
                 # Keep track of used MHP cycles per request (data collection)
                 if self._current_create_id is not None:
                     if self.scheduler.suspended() or self.scheduler.qmm.is_busy():
                         self._used_MHP_cycles[self._current_create_id] += 1
-                return False
+
+            self.scheduler.inc_cycle()
+            return gen.flag
 
         except Exception:
             logger.exception("Error occurred when triggering MHP!")
@@ -1030,8 +1030,8 @@ class NodeCentricEGP(EGP):
                 # Check if we have knowledge of our peers current request
                 rqid, rqseq = remote_aid
                 if not self.dqp.contains_item(rqid, rqseq):
-                    self.send_expire_notification(aid=remote_aid, createID=None, originID=None,
-                                                  new_seq=self.expected_seq)
+                    self.send_expire_notification(aid=remote_aid, createID=None, originID=None, old_seq=None,
+                                                  new_seq=None)
             else:
                 local_aid = aid
 
@@ -1041,11 +1041,9 @@ class NodeCentricEGP(EGP):
 
             # Check if we may have lost a message
             if mhp_seq >= self.expected_seq:
-                # Update our expected seq
-                self.expected_seq = mhp_seq
-
                 # Issue an expire for the request
                 request = self.scheduler.get_request(local_aid)
+                new_mhp_seq = mhp_seq + 1
                 if request is not None:
                     if self.dqp.master ^ request.master_request:
                         originID = self.get_otherID()
@@ -1054,7 +1052,7 @@ class NodeCentricEGP(EGP):
 
                     createID = request.create_id
                     self.send_expire_notification(aid=local_aid, createID=createID, originID=originID,
-                                                  new_seq=self.expected_seq)
+                                                  old_seq=self.expected_seq, new_seq=new_mhp_seq)
 
                     # Clear the request
                     self.scheduler.clear_request(aid=local_aid)
@@ -1067,7 +1065,10 @@ class NodeCentricEGP(EGP):
                         # self._remove_measurement_data(aid)
 
                     # Alert higher layer protocols
-                    self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
+                    self.issue_err(err=self.ERR_EXPIRE, err_data=(self.expected_seq, mhp_seq))
+
+                # Update our expected seq, because error came back we should expect the subsequent seq
+                self.expected_seq = new_mhp_seq
 
     def _handle_generation_reply(self, r, mhp_seq, aid):
         """
@@ -1191,8 +1192,6 @@ class NodeCentricEGP(EGP):
         logger.debug("Node {} : Moving comm_q {} to storage_q {}".format(self.node.name, comm_q, storage_q))
         if self.node.qmem._memory_positions[storage_q]._qubit is None:
             raise RuntimeError("No qubit before trying to swap")
-
-        # Set a flag to make sure we catch replies that occur during the measurement
 
         # Reset init info of this storage qubit
         self._next_init_cycle.pop(storage_q)
@@ -1365,7 +1364,10 @@ class NodeCentricEGP(EGP):
                 else:
                     creatorID = self.node.nodeID
                 self.send_expire_notification(aid=aid, createID=request.create_id, originID=creatorID,
-                                              new_seq=new_mhp_seq)
+                                              old_seq=self.expected_seq, new_seq=new_mhp_seq)
+
+                # Alert higher layer protocols
+                self.issue_err(err=self.ERR_EXPIRE, err_data=(self.expected_seq, new_mhp_seq - 1))
 
                 # Clear the request
                 self.scheduler.clear_request(aid=aid)

@@ -369,7 +369,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         Handle incoming error messages.
         """
-        logger.debug("Error Received, Data: {}".format(data))
+        logger.error("Error Received, Data: {}".format(data))
         self.status = self.STAT_IDLE
 
     def cmd_ERR_REJ(self, data):
@@ -417,7 +417,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         [nodeID, cseq, qid, qseq, request] = data
         if nodeID != self.otherID:
-            logger.debug("ADD ERROR Got ADD request from node that isn't our peer!")
+            logger.warning("ADD ERROR Got ADD request from node that isn't our peer!")
             self.send_error(self.CMD_ERR_UNKNOWN_ID)
             return False
         return True
@@ -452,7 +452,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # If we have seen this comms_seq before retransmit the absolute queue id
             elif cseq in self.transmitted_aid:
                 tqseq, tqid = self.transmitted_aid[cseq]
-                logger.debug("Retransmitting ADD ACK for comms seq {} queue ID {} queue seq {}"
+                logger.warning("Retransmitting ADD ACK for comms seq {} queue ID {} queue seq {}"
                              .format(cseq, tqid, tqseq))
                 self.send_ADD_ACK(cseq, tqseq, tqid)
                 return False
@@ -460,7 +460,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             else:
                 # We have already seen this number
                 # TODO is this what we want?
-                logger.debug("ADD ERROR Duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
+                logger.error("ADD ERROR Duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
                              .format(nodeID, cseq, qid, qseq))
                 self.send_error(self.CMD_ERR_DUPLICATE_SEQ)
                 return False
@@ -476,13 +476,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         [nodeID, cseq, qid, qseq, request] = data
         if not (self._valid_qid(qid)):
-            logger.debug("ADD ERROR No such queue from {} comms seq {} queue ID {} queue seq {}"
+            logger.error("ADD ERROR No such queue from {} comms seq {} queue ID {} queue seq {}"
                          .format(nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_NOSUCH_Q)
             return False
 
         elif self.is_full(qid):
-            logger.debug("ADD ERROR from {} comms seq {} queue ID {} is full!".format(nodeID, cseq, qid))
+            logger.error("ADD ERROR from {} comms seq {} queue ID {} is full!".format(nodeID, cseq, qid))
             self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
             return False
 
@@ -500,10 +500,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Duplicate sequence number
             # TODO is this what we want?
             if self.contains_item(qid, qseq):
-                logger.debug("ADD ERROR duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
-                             .format(nodeID, cseq, qid, qseq))
-                self.send_error(self.CMD_ERR_DUPLICATE_QSEQ)
-                return False
+                # Because the master is adding an item to this slot it means that the item contained locally does not
+                # exist in the master.  To synchronize the queues we replace the item.
+                logger.error("ADD ERROR duplicate sequence number from master {} comms seq {} queue ID {} queue seq {},"
+                             " replacing queue item".format(nodeID, cseq, qid, qseq))
+                self.remove_item(qid, qseq)
+
         return True
 
     def _validate_request(self, data):
@@ -517,7 +519,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if request is None:
             # Request details missing
             # TODO is this what we want?
-            logger.debug("ADD ERROR missing request from {} comms seq {} queue ID {} queue seq {}"
+            logger.error("ADD ERROR missing request from {} comms seq {} queue ID {} queue seq {}"
                          .format(nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_NOREQ)
             return False
@@ -654,6 +656,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Remove item from waiting acks
         self.waitAddAcks.pop(ackd_id, None)
+
+        if ackd_id in self.transmitted_aid:
+            self.transmitted_aid.pop(ackd_id)
 
         # We are now waiting for one ack less
         self.acksWaiting = self.acksWaiting - 1
@@ -1101,7 +1106,7 @@ class FilteredDistributedQueue(DistributedQueue):
         [nodeID, cseq, qid, qseq, request] = data
         # Are we accepting request adds from this peer?
         if not self.accept_all and request.purpose_id not in self.accept_rules[nodeID]:
-            logger.debug("ADD ERROR not accepting requests with purpose id {} from node {}".format(request.purpose_id,
+            logger.error("ADD ERROR not accepting requests with purpose id {} from node {}".format(request.purpose_id,
                                                                                                    nodeID))
             self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
             return False
