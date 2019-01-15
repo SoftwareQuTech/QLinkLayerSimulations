@@ -4,6 +4,7 @@ from types import MethodType
 from netsquid.simutil import sim_run, sim_reset
 from util.config_paths import ConfigPathStorage
 from easysquid.easynetwork import setup_physical_network
+from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.specific_scenarios import MixedScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
@@ -17,7 +18,12 @@ class TestScenario(unittest.TestCase):
         alice = network.get_node_by_id(0)
         bob = network.get_node_by_id(1)
         mhp_conn = network.get_connection(alice, bob, "mhp_conn")
-        self.egp = NodeCentricEGP(alice, mhp_conn)
+        egp_conn = network.get_connection(alice, bob, "egp_conn")
+        dqp_conn = network.get_connection(alice, bob, "dqp_conn")
+        mhp_service = SimulatedNodeCentricMHPService("mhp_service", alice, bob, conn=mhp_conn)
+        self.egp = NodeCentricEGP(alice)
+        other_egp = NodeCentricEGP(bob)
+        self.egp.connect_to_peer_protocol(other_egp, egp_conn, mhp_service, mhp_conn, dqp_conn)
 
         network.start()
 

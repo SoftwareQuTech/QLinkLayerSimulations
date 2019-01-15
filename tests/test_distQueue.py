@@ -146,8 +146,8 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(50000)
 
         # Check the Queue contains ordered elements from Alice and Bob
-        qA = aliceDQ.queueList[0].queue
-        qB = bobDQ.queueList[0].queue
+        qA = aliceDQ.queueList[0].sequence_to_item
+        qB = bobDQ.queueList[0].sequence_to_item
 
         # First they should have the same length
         self.assertGreater(len(qA), 0)
@@ -186,8 +186,8 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(1000)
 
         # Check the Queue contains ordered elements from Alice and Bob
-        qA = aliceDQ.queueList[0].queue
-        qB = bobDQ.queueList[0].queue
+        qA = aliceDQ.queueList[0].sequence_to_item
+        qB = bobDQ.queueList[0].sequence_to_item
 
         # First they should have the same length
         self.assertGreater(len(qA), 0)
@@ -228,8 +228,8 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(5000)
 
         # Check the Queue contains ordered elements from Alice and Bob
-        qA = aliceDQ.queueList[0].queue
-        qB = bobDQ.queueList[0].queue
+        qA = aliceDQ.queueList[0].sequence_to_item
+        qB = bobDQ.queueList[0].sequence_to_item
 
         # First they should have the same length
         self.assertGreater(len(qA), 0)
@@ -258,7 +258,8 @@ class TestDistributedQueue(unittest.TestCase):
 
         aliceDQ.add_callback = add_callback
 
-        aliceProto = TestProtocol(alice, aliceDQ, 1)
+        num_adds = 100
+        aliceProto = TestProtocol(alice, aliceDQ, 1, maxNum=num_adds)
 
         nodes = [alice, bob]
 
@@ -272,8 +273,7 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(5000)
 
         expected_qid = 0
-        num_adds = 100
-        expected_results = [(aliceDQ.DQ_TIMEOUT, expected_qid, None, [alice.name, qseq]) for qseq in range(num_adds)]
+        expected_results = [(aliceDQ.DQ_TIMEOUT, expected_qid, qseq, [alice.name, qseq]) for qseq in range(num_adds)]
 
         # Check that all attempted add's timed out
         self.assertEqual(self.callback_storage, expected_results)
@@ -283,7 +283,8 @@ class TestDistributedQueue(unittest.TestCase):
 
         # Check that all of the local queues are empty
         for local_queue in aliceDQ.queueList:
-            self.assertEqual(local_queue.queue, {})
+            self.assertEqual(local_queue.queue, [])
+            self.assertEqual(local_queue.sequence_to_item, {})
 
         # Check that we incremented the comms_seq
         self.assertEqual(aliceDQ.comms_seq, num_adds)
@@ -458,8 +459,8 @@ class TestDistributedQueue(unittest.TestCase):
         # Check the Queue contains ordered elements from Alice and Bob
         queueA = aliceDQ.queueList[0]
         queueB = bobDQ.queueList[0]
-        qA = queueA.queue
-        qB = queueB.queue
+        qA = queueA.sequence_to_item
+        qB = queueB.sequence_to_item
 
         # Make all the items ready
         for seq in qA:
@@ -492,8 +493,8 @@ class TestDistributedQueue(unittest.TestCase):
         # Check that we can pop the remaining items in the correct order
         remaining = set(range(len(qB))) - rqseqs
         for qseq in remaining:
-            self.assertEqual(aliceDQ.queueList[rqid].popSeq, qseq)
             q_item = aliceDQ.local_pop(rqid)
+            self.assertEqual(q_item.seq, qseq)
             self.assertIsNotNone(q_item)
 
     def test_full_queue(self):
@@ -614,8 +615,8 @@ class TestDistributedQueue(unittest.TestCase):
             sim_run(i*1000000)
 
             for seq in range(dq.maxSeq):
-                qitem = dq.queueList[0].queue.get(seq)
-                q2item = dq2.queueList[0].queue.get(seq)
+                qitem = dq.queueList[0].sequence_to_item.get(seq)
+                q2item = dq2.queueList[0].sequence_to_item.get(seq)
                 self.assertEqual(qitem.request, q2item.request)
 
             self.assertEqual(len(dq.backlogAdd), 0)
@@ -771,7 +772,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         # Test that we can now add a request with the rule in place
         bobDQ.add_accept_rule(nodeID=alice.nodeID, purpose_id=0)
         aliceDQ.add(request)
-        expected_qseq += 1
+        expected_qseq = 0
         sim_run(4)
         self.assertIsNotNone(self.result)
         reported_request = self.result[-1]

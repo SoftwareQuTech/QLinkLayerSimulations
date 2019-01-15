@@ -1166,10 +1166,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = self.create_network(egpA, egpB)
         network.start()
 
-        import pdb
-        pdb.set_trace()
         sim_run(20)
-        pdb.set_trace()
         # Check that we were able to get the first generation of alice's request completed
         self.assertEqual(self.alice_results[0], self.bob_results[0])
 
@@ -1280,10 +1277,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = self.create_network(egpA, egpB)
         network.start()
 
-        import pdb
-        pdb.set_trace()
         sim_run(5)
-        pdb.set_trace()
 
         # Verify number of messages
         self.assertEqual(len(self.alice_results), 5)  # 2 errors, 2 expires, 1 ok
