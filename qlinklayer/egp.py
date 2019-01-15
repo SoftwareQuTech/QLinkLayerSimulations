@@ -1090,7 +1090,7 @@ class NodeCentricEGP(EGP):
                         # self._remove_measurement_data(aid)
 
                     # Alert higher layer protocols
-                    self.issue_err(err=self.ERR_EXPIRE, err_data=(self.expected_seq, mhp_seq))
+                    self.issue_err(err=self.ERR_EXPIRE, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=mhp_seq)
 
                 # Update our expected seq, because error came back we should expect the subsequent seq
                 self.expected_seq = new_mhp_seq
@@ -1392,7 +1392,7 @@ class NodeCentricEGP(EGP):
                                               old_seq=self.expected_seq, new_seq=new_mhp_seq)
 
                 # Alert higher layer protocols
-                self.issue_err(err=self.ERR_EXPIRE, err_data=(self.expected_seq, new_mhp_seq - 1))
+                self.issue_err(err=self.ERR_EXPIRE, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=new_mhp_seq - 1)
 
                 # Clear the request
                 self.scheduler.clear_request(aid=aid)
@@ -1557,6 +1557,6 @@ class NodeCentricEGP(EGP):
         :param evt: obj `~qlinklayer.scheduler.SchedulerRequest`
             The request (used to get the Create ID)
         """
-        self.issue_err(err=self.ERR_TIMEOUT, err_data=request.create_id)
+        self.issue_err(err=self.ERR_TIMEOUT, create_id=request.create_id)
         if request.measure_directly:
             self._remove_measurement_data(aid)
