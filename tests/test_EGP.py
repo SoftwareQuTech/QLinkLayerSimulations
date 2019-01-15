@@ -20,7 +20,7 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.DEBUG)
 
 
 def store_result(storage, result):
@@ -1210,6 +1210,7 @@ class TestNodeCentricEGP(unittest.TestCase):
                                           self.bob_results))
 
         # Check that we were able to complete the request
+        pdb.set_trace()
         self.assertEqual(len(alice_gens_post_error), bob_pairs)
         self.assertEqual(len(alice_gens_post_error), len(bob_gens_post_error))
 

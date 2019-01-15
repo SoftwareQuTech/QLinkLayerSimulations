@@ -563,6 +563,9 @@ class NodeCentricEGP(EGP):
         logger.error("Got EXPIRE command from peer for request {}".format(data))
         aid, createID, originID, old_seq, new_seq = data
 
+        # Alert higher layer protocols
+        self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID, old_seq, new_seq - 1))
+
         # If our peer is ahead of us we should update
         if new_seq > self.expected_seq:
             logger.debug("Updated expected sequence to {}".format(new_seq))
@@ -575,9 +578,6 @@ class NodeCentricEGP(EGP):
             self.scheduler.clear_request(aid)
             if request.measure_directly:
                 self._remove_measurement_data(aid)
-
-        # Alert higher layer protocols
-        self.issue_err(err=self.ERR_EXPIRE, err_data=(old_seq, new_seq - 1))
 
         # Let our peer know we expired
         self._send_exp_ack(aid)
@@ -792,6 +792,7 @@ class NodeCentricEGP(EGP):
                     # Check that storage qubit is already initialized
                     if self._memory_needs_initialization(gen.storage_q):
                         self.initialize_storage(gen.storage_q)
+                        self.scheduler.inc_cycle()
                         return False
 
                 # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
@@ -1030,8 +1031,8 @@ class NodeCentricEGP(EGP):
                 # Check if we have knowledge of our peers current request
                 rqid, rqseq = remote_aid
                 if not self.dqp.contains_item(rqid, rqseq):
-                    self.send_expire_notification(aid=remote_aid, createID=None, originID=None, old_seq=None,
-                                                  new_seq=None)
+                    self.send_expire_notification(aid=remote_aid, createID=None, originID=None, old_seq=self.expected_seq,
+                                                  new_seq=self.expected_seq)
             else:
                 local_aid = aid
 
