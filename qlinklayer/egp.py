@@ -778,9 +778,12 @@ class NodeCentricEGP(EGP):
         if there are any requests and to receive a request to process
         """
         try:
+
             # Request memory update when out of resources
             if not self.scheduler.other_has_resources():
                 self.request_other_free_memory()
+
+            self.scheduler.inc_cycle()
 
             # Get scheduler's next gen task
             gen = self.scheduler.next()
@@ -800,7 +803,6 @@ class NodeCentricEGP(EGP):
                     # Check that storage qubit is already initialized
                     if self._memory_needs_initialization(gen.storage_q):
                         self.initialize_storage(gen.storage_q)
-                        self.scheduler.inc_cycle()
                         return False
 
                 # If we are storing the qubit prevent additional attempts until we have a reply or have timed out
@@ -818,7 +820,6 @@ class NodeCentricEGP(EGP):
                     if self.scheduler.suspended() or self.scheduler.qmm.is_busy():
                         self._used_MHP_cycles[self._current_create_id] += 1
 
-            self.scheduler.inc_cycle()
             return gen.flag
 
         except Exception:
@@ -1090,7 +1091,7 @@ class NodeCentricEGP(EGP):
                         # self._remove_measurement_data(aid)
 
                     # Alert higher layer protocols
-                    self.issue_err(err=self.ERR_EXPIRE, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=mhp_seq)
+                    self.issue_err(err=self.ERR_EXPIRE, create_id=createID, origin_id=originID, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=mhp_seq)
 
                 # Update our expected seq, because error came back we should expect the subsequent seq
                 self.expected_seq = new_mhp_seq

@@ -32,7 +32,7 @@ class TestSimulations(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # cls._reset_folder(cls.results_folder, make_new=False)
+        cls._reset_folder(cls.results_folder, make_new=False)
 
         # Reset files
         set_simdetails_and_paramcombinations.main(ask_for_input=False)
@@ -161,8 +161,9 @@ class TestSimulations(unittest.TestCase):
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
 
         nr_of_analysis_files = len(
-            glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*analysis_output.txt")))
-        self.assertEqual(nr_of_analysis_files, 3)
+            glob.glob(os.path.join(os.path.dirname(__file__), "test_simulation_tmp/*/analysis_output.txt")))
+
+        self.assertEqual(nr_of_analysis_files, 4)
 
     def test_midpoint_rtt(self):
         self._reset_folder(self.results_folder)

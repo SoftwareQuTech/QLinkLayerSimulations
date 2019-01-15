@@ -474,7 +474,7 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
             # Check the absolute queue id's from both ends of the connection
             if not self._has_same_aid():
-                logger.debug("Absolute queue IDs don't match!")
+                logger.warning("Absolute queue IDs don't match!")
                 self._send_notification_to_both(self.ERR_QUEUE_MISMATCH)
                 self._drop_qubit(qubit)
                 self._reset_incoming()
