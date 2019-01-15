@@ -145,7 +145,7 @@ class EGP(EasyProtocol):
         # Process message demanding on command
         self.commandHandlers[cmd](data)
 
-    def issue_err(self, err, err_data=None):
+    def issue_err(self, err, create_id=None, origin_id=None, old_exp_mhp_seq=None, new_exp_mhp_seq=None):
         """
         Issues an error back to higher layer protocols with the error code that prevented
         successful generation of entanglement
@@ -154,9 +154,13 @@ class EGP(EasyProtocol):
         :return: obj any
             The error info
         """
+        err_data = []
+        for d in [create_id, origin_id, old_exp_mhp_seq, new_exp_mhp_seq]:
+            if d is None:
+                err_data.append(-1)
+            else:
+                err_data.append(d)
         logger.debug("Issuing error {} with data {}".format(err, err_data))
-        if err_data is None:
-            err_data = 0
 
         if self.err_callback:
             self.err_callback(result=(err, err_data))
@@ -291,6 +295,10 @@ class NodeCentricEGP(EGP):
         self.mhp_reply = None
         self.measurement_results = defaultdict(list)
         self.corrected_measurements = defaultdict(list)
+
+        # Queue mismatch information
+        self._previous_mismatch = None
+        self._nr_of_mismatch = None
 
         # Count MHP cycles used by a gen
         self._used_MHP_cycles = {}
@@ -564,7 +572,7 @@ class NodeCentricEGP(EGP):
         aid, createID, originID, old_seq, new_seq = data
 
         # Alert higher layer protocols
-        self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID, old_seq, new_seq - 1))
+        self.issue_err(err=self.ERR_EXPIRE, create_id=createID, origin_id=originID, old_exp_mhp_seq=old_seq, new_exp_mhp_seq=new_seq - 1)
 
         # If our peer is ahead of us we should update
         if new_seq > self.expected_seq:
@@ -757,7 +765,7 @@ class NodeCentricEGP(EGP):
             # Otherwise bubble up the DQP error
             else:
                 logger.error("Error occurred adding request to distributed queue!")
-                self.issue_err(err=status, err_data=creq.create_id)
+                self.issue_err(err=status, create_id=creq.create_id)
 
         except Exception:
             logger.exception("Error occurred processing DQP add callback!")
@@ -994,7 +1002,7 @@ class NodeCentricEGP(EGP):
 
         except Exception:
             logger.exception("An error occurred handling MHP Reply!")
-            self.issue_err(err=self.ERR_OTHER, err_data=self.ERR_OTHER)
+            self.issue_err(err=self.ERR_OTHER)
 
     def _extract_mhp_reply(self, result):
         """
@@ -1028,11 +1036,27 @@ class NodeCentricEGP(EGP):
                 aidA, aidB = aid
                 local_aid, remote_aid = (aidA, aidB) if self.node.nodeID == self.mhp.conn.nodeA.nodeID else (aidB, aidA)
 
-                # Check if we have knowledge of our peers current request
-                rqid, rqseq = remote_aid
-                if not self.dqp.contains_item(rqid, rqseq):
-                    self.send_expire_notification(aid=remote_aid, createID=None, originID=None, old_seq=self.expected_seq,
-                                                  new_seq=self.expected_seq)
+                # Increment mismatch counter if we received this before
+                if aid == self._previous_mismatch:
+                    self._nr_of_mismatch += 1
+                else:
+                    self._previous_mismatch = aid
+                    self._nr_of_mismatch = 1
+
+                max_nr_mismatch = int(1.5 * self.scheduler.mhp_full_cycle / self.scheduler.mhp_cycle_period)
+                if self._nr_of_mismatch > max_nr_mismatch:
+                    for a in aid:
+                        qid, qseq = a
+                        if self.dqp.contains_item(qid, qseq):
+                            req = self.dqp.remove_item(qid, qseq).request
+                            if self.dqp.master ^ req.master_request:
+                                originID = self.get_otherID()
+                            else:
+                                originID = self.node.nodeID
+                            self.send_expire_notification(aid=a, createID=req.create_id, originID=originID, old_seq=self.expected_seq, new_seq=self.expected_seq)
+                            self.issue_err(err=self.ERR_EXPIRE, create_id=req.create_id, origin_id=originID, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=self.expected_seq - 1)
+                        else:
+                            self.send_expire_notification(aid=a, createID=None, originID=None, old_seq=self.expected_seq, new_seq=self.expected_seq)
             else:
                 local_aid = aid
 

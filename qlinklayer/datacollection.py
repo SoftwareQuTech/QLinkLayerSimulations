@@ -67,12 +67,13 @@ class EGPErrorSequence(EGPDataSequence):
     """
 
     def get_column_names(self):
-        return ["Timestamp", "Node ID", "Error Code", "Success"]
+        return ["Timestamp", "Node ID", "Error Code", "Create ID", "Origin ID", "Old Exp MHP Seq", "New Exp MHP Seq", "Success"]
 
     def getData(self, time, source=None):
         error_source = source[0]
         error_code, error_info = error_source.get_error()
-        return [(error_source.egp.node.nodeID, error_code), True]
+        data = [error_source.egp.node.nodeID, error_code] + list(error_info)
+        return [data, True]
 
 
 class EGPErrorDataPoint(EGPDataPoint):
@@ -86,6 +87,10 @@ class EGPErrorDataPoint(EGPDataPoint):
             self.timestamp = None
             self.node_id = None
             self.error_code = None
+            self.create_id = None
+            self.origin_id = None
+            self.old_exp_mhp_seq = None
+            self.new_exp_mhp_seq = None
             self.success = None
 
     def from_raw_data(self, data):
@@ -93,7 +98,11 @@ class EGPErrorDataPoint(EGPDataPoint):
             self.timestamp = data[0]
             self.node_id = data[1]
             self.error_code = data[2]
-            self.success = data[3]
+            self.create_id = data[3]
+            self.origin_id = data[4]
+            self.old_exp_mhp_seq = data[5]
+            self.new_exp_mhp_seq = data[6]
+            self.success = data[7]
         except IndexError:
             raise ValueError("Cannot parse data")
 
@@ -102,6 +111,10 @@ class EGPErrorDataPoint(EGPDataPoint):
             self.timestamp = data.timestamp
             self.node_id = data.node_id
             self.error_code = data.error_code
+            self.create_id = data.create_id
+            self.origin_id = data.origin_id
+            self.old_exp_mhp_seq = data.old_exp_mhp_seq
+            self.new_exp_mhp_seq = data.new_exp_mhp_seq
             self.success = data.success
         else:
             raise ValueError("'data' is not an instance of this class")
@@ -111,6 +124,10 @@ class EGPErrorDataPoint(EGPDataPoint):
         to_print += "    Timestamp: {}\n".format(self.timestamp)
         to_print += "    Node ID: {}\n".format(self.node_id)
         to_print += "    Error Code: {}\n".format(self.error_code)
+        to_print += "    Create ID: {}\n".format(self.create_id)
+        to_print += "    Origin ID: {}\n".format(self.origin_id)
+        to_print += "    Old Exp MHP Seq: {}\n".format(self.old_exp_mhp_seq)
+        to_print += "    New Exp MHP Seq: {}\n".format(self.new_exp_mhp_seq)
         to_print += "    Success: {}\n".format(self.success)
 
 
