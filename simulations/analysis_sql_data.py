@@ -4,13 +4,16 @@ from collections import defaultdict
 import numpy as np
 from easysquid.toolbox import logger
 from qlinklayer.datacollection import EGPCreateDataPoint, EGPOKDataPoint, EGPStateDataPoint, \
-    EGPQubErrDataPoint, EGPLocalQueueDataPoint
+    EGPQubErrDataPoint, EGPLocalQueueDataPoint, EGPErrorDataPoint
 from netsquid.simutil import SECOND
 import json
 import math
 import matplotlib.pyplot as plt
 import os
 import sys
+import logging
+
+logger.setLevel(logging.INFO)
 
 
 class printer:
@@ -312,6 +315,69 @@ def parse_quberr_from_sql(results_path, max_real_time=None):
         avg_Y_err = None
 
     return (avg_Z_err, Z_data_points), (avg_X_err, X_data_points), (avg_Y_err, Y_data_points)
+
+
+def parse_errors_from_sql(results_path, max_real_time=None):
+    """
+    Sort the errors by their error-code.
+    :param results_path: The path to the SQL file
+    :type results_path: str
+    :param max_real_time: float or None
+        If specified, don't include any entries after max_real_time
+    :return: Dictionary of keys being error_codes, and values the error data point
+    :rtype: dict
+    """
+    error_data = parse_table_data_from_sql(results_path, "EGP_Errors", max_real_time=max_real_time)
+
+    error_by_code = {}
+    nr_errors = 0
+    for entry in error_data:
+        data_point = EGPErrorDataPoint(entry)
+        error_code = data_point.error_code
+        if error_code not in error_by_code:
+            error_by_code[error_code] = []
+        error_by_code[error_code].append(data_point)
+
+    # Sort the data by timestamp
+    for error_code, errors in error_by_code.items():
+        error_by_code[error_code] = sorted(errors, key=lambda error: error.timestamp)
+        nr_errors += len(errors)
+
+    return error_by_code, nr_errors
+
+
+def plot_error_data(error_by_code, results_path, no_plot=False, save_figs=False, analysis_folder=None, clear_figure=True):
+    """
+    Plots the cumulative errors by error code as a function of matrix time.
+    :param error_by_code: dict
+        From parse_errors_from_sql
+    :param results_path: str
+    :param no_plot: bool
+    :param save_figs: bool
+    :param analysis_folder: str
+    :param clear_figure: bool
+    :return: None
+    """
+    if no_plot and (not save_figs):
+        return
+
+    if clear_figure:
+        plt.clf()
+
+    for error_code, errors in error_by_code.items():
+        timestamps = [error.timestamp for error in errors]
+        label = "Error {}".format(error_code)
+        n_bins = 50
+        plt.hist(timestamps, n_bins, density=True, histtype='step', cumulative=True, label=label)
+
+    plt.ylabel("Nr errors")
+    plt.xlabel("Matrix time (ns)")
+    plt.legend(loc="upper right")
+
+    if save_figs:
+        save_plot("errors.pdf", results_path, analysis_folder=analysis_folder)
+    if not no_plot:
+        plt.show()
 
 
 def calc_throughput(all_gens, window=1):
@@ -781,6 +847,9 @@ def get_data_from_single_file(path_to_file, max_real_time=None):
     raw_queue_dataA = parse_table_data_from_sql(path_to_file, "EGP_Local_Queue_A", max_real_time=max_real_time)
     raw_queue_dataB = parse_table_data_from_sql(path_to_file, "EGP_Local_Queue_B", max_real_time=max_real_time)
 
+    # Errors
+    error_by_code, nr_errors = parse_errors_from_sql(path_to_file, max_real_time=max_real_time)
+
     if all_gens:
         data_dct["all_gens"] = all_gens
     if gen_times:
@@ -799,6 +868,7 @@ def get_data_from_single_file(path_to_file, max_real_time=None):
         data_dct["raw_queue_dataA"] = raw_queue_dataA
     if raw_queue_dataB:
         data_dct["raw_queue_dataB"] = raw_queue_dataB
+    data_dct["nr_errors"] = nr_errors
 
     return data_dct
 
@@ -878,6 +948,9 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     raw_queue_dataA = parse_table_data_from_sql(results_path, "EGP_Local_Queue_A_0", max_real_time=max_real_time)
     raw_queue_dataB = parse_table_data_from_sql(results_path, "EGP_Local_Queue_B_0", max_real_time=max_real_time)
 
+    # Get error data
+    error_by_code, nr_errors = parse_errors_from_sql(results_path, max_real_time=max_real_time)
+
     prnt.print("-------------------")
     prnt.print("|Simulation data: |")
     prnt.print("-------------------")
@@ -906,6 +979,7 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
                                                                                    additional_data["alphaB"]))
     except KeyError:
         pass
+    prnt.print("Nr of errors was {}".format(nr_errors))
     prnt.print("")
 
     prnt.print("-----------------------")
@@ -1058,6 +1132,10 @@ def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_fi
     if all_gens:
         plot_throughput(all_gens, results_path, no_plot=no_plot, save_figs=save_figs, analysis_folder=analysis_folder)
 
+    if error_by_code:
+        plot_error_data(error_by_code, results_path, no_plot=no_plot, save_figs=save_figs,
+                        analysis_folder=analysis_folder)
+
 
 def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output=False, analysis_folder=None):
     if results_path is None:
@@ -1088,13 +1166,15 @@ def main(results_path, no_plot, max_real_time=None, save_figs=False, save_output
 
     # Check if results_path is a single .db file or a folder containing such
     if results_path.endswith('.db'):
+        logger.info("Analysing {}".format(results_path))
         analyse_single_file(results_path, no_plot, max_real_time=max_real_time, save_figs=save_figs,
                             save_output=save_output, analysis_folder=analysis_folder)
     else:
         if results_path.endswith('/'):
             results_path = results_path[:-1]
-        for entry in os.listdir(results_path):
+        for entry in sorted(os.listdir(results_path)):
             if entry.endswith('.db'):
+                logger.info("Analysing {}".format(entry))
                 # Initialize the printer
                 entry_results_path = results_path + "/" + entry
                 if analysis_folder is None:
