@@ -2,13 +2,13 @@
 # Scheduler
 #
 import abc
-from math import ceil
+from math import ceil, floor
 from collections import namedtuple
 from netsquid.simutil import sim_time
 from netsquid.pydynaa import Entity
 from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
-from qlinklayer.toolbox import LinkLayerException
+from qlinklayer.toolbox import LinkLayerException, check_schedule_cycle_bounds
 
 SchedulerRequest = namedtuple("Scheduler_request",
                               ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
@@ -98,6 +98,35 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         if isinstance(distQueue, EGPDistributedQueue):
             distQueue.set_timeout_callback(self._handle_item_timeout)
+
+    def _compare_mhp_cycle(self, cycle1, cycle2):
+        """
+        Returns -1 if cycle1 is considered earlier than cycle two.
+        Returns  0 if cycle1 is considered equal than cycle two.
+        Returns +1 if cycle1 is considered later than cycle two.
+        When is a cycle considered earlier than another?
+        Call 'opposite' the opposite number of the current cycle number i.e.
+            'opposite' = 'current_cycle_number' - int(nr_mhp_cycles / 2)
+        The 'opposite' is considered the smallest cycle and the others are ordered consecutively
+        :param cycle1: int
+        :param cycle2: int
+        :return: int
+            -1, 0 or +1
+        """
+        if cycle1 == cycle2:
+            return 0
+
+        # Compute opposite of current
+        opposite = self.mhp_cycle_number - int(self.max_mhp_cycle_number / 2)
+
+        # Shift numbers such that opposite is effectively 0
+        cycle1_shifted = (cycle1 - opposite) % self.max_mhp_cycle_number
+        cycle2_shifted = (cycle2 - opposite) % self.max_mhp_cycle_number
+
+        if cycle1_shifted < cycle2_shifted:
+            return -1
+        else:
+            return 1
 
     def set_timeout_callback(self, timeout_callback):
         """
@@ -248,6 +277,11 @@ class StrictPriorityRequestScheduler(Scheduler):
                     egp_request.max_time, self.mhp_cycle_period * self.max_mhp_cycle_number))
             return False
 
+        if timeout_cycle is not None:
+            if self._compare_mhp_cycle(timeout_cycle, schedule_cycle) < 1:
+                logger.warning("Request had to short max time to be satisfied, sched_cycle = {} and timeout_cycle = {}".format(schedule_cycle, timeout_cycle))
+                return False
+
         scheduler_request = self._get_scheduler_request(egp_request, create_id, schedule_cycle, timeout_cycle,
                                                         master_request=self.distQueue.master)
 
@@ -290,9 +324,9 @@ class StrictPriorityRequestScheduler(Scheduler):
         # Compute how many MHP from now that this request should time out
         if max_time < t_right:
             # This request will timeout before the next MHP cycle
-            mhp_cycles = 1
+            mhp_cycles = 0
         else:
-            mhp_cycles = int((max_time - t_right) / self.mhp_cycle_period) + 2
+            mhp_cycles = int((max_time - t_right) / self.mhp_cycle_period) + 1
 
         if mhp_cycles >= self.max_mhp_cycle_number:
             raise LinkLayerException(
@@ -782,7 +816,7 @@ class StrictPriorityRequestScheduler(Scheduler):
             True/False whether item is near timeout
         """
         min_cycles = ceil(self.mhp_full_cycle / self.mhp_cycle_period)
-        if queue_item.timeout_cycle is not None and queue_item.timeout_cycle - self.mhp_cycle_number < min_cycles:
+        if queue_item.timeout_cycle is not None and self._compare_mhp_cycle(queue_item.timeout_cycle, self.mhp_cycle_number + min_cycles) < 0:
             return True
 
         return False
@@ -852,34 +886,6 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
 
         self.last_virt_finish = [-1] * len(self.relative_weights)
 
-    def _compare_mhp_cycle(self, cycle1, cycle2):
-        """
-        Returns -1 if cycle1 is considered earlier than cycle two.
-        Returns  0 if cycle1 is considered equal than cycle two.
-        Returns +1 if cycle1 is considered later than cycle two.
-        When is a cycle considered earlier than another?
-        Call 'opposite' the opposite number of the current cycle number i.e.
-            'opposite' = 'current_cycle_number' - int(nr_mhp_cycles / 2)
-        The 'opposite' is considered the smallest cycle and the others are ordered consecutively
-        :param cycle1: int
-        :param cycle2: int
-        :return: int
-            -1, 0 or +1
-        """
-        if cycle1 == cycle2:
-            return 0
-
-        # Compute opposite of current
-        opposite = self.mhp_cycle_number - int(self.max_mhp_cycle_number / 2)
-
-        # Shift numbers such that opposite is effectively 0
-        cycle1_shifted = (cycle1 - opposite) % self.max_mhp_cycle_number
-        cycle2_shifted = (cycle2 - opposite) % self.max_mhp_cycle_number
-
-        if cycle1_shifted < cycle2_shifted:
-            return -1
-        else:
-            return 1
 
     def _get_largest_mhp_cycle(self):
         """

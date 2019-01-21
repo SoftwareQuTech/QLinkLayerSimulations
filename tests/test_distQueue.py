@@ -16,7 +16,7 @@ from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
 
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.CRITICAL)
 
 
 class FastTestProtocol(TimedProtocol):
@@ -146,8 +146,8 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(50000)
 
         # Check the Queue contains ordered elements from Alice and Bob
-        qA = aliceDQ.queueList[0].queue
-        qB = bobDQ.queueList[0].queue
+        qA = aliceDQ.queueList[0].sequence_to_item
+        qB = bobDQ.queueList[0].sequence_to_item
 
         # First they should have the same length
         self.assertGreater(len(qA), 0)
@@ -186,8 +186,8 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(1000)
 
         # Check the Queue contains ordered elements from Alice and Bob
-        qA = aliceDQ.queueList[0].queue
-        qB = bobDQ.queueList[0].queue
+        qA = aliceDQ.queueList[0].sequence_to_item
+        qB = bobDQ.queueList[0].sequence_to_item
 
         # First they should have the same length
         self.assertGreater(len(qA), 0)
@@ -228,8 +228,8 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(5000)
 
         # Check the Queue contains ordered elements from Alice and Bob
-        qA = aliceDQ.queueList[0].queue
-        qB = bobDQ.queueList[0].queue
+        qA = aliceDQ.queueList[0].sequence_to_item
+        qB = bobDQ.queueList[0].sequence_to_item
 
         # First they should have the same length
         self.assertGreater(len(qA), 0)
@@ -258,7 +258,8 @@ class TestDistributedQueue(unittest.TestCase):
 
         aliceDQ.add_callback = add_callback
 
-        aliceProto = TestProtocol(alice, aliceDQ, 1)
+        num_adds = 100
+        aliceProto = TestProtocol(alice, aliceDQ, 1, maxNum=num_adds)
 
         nodes = [alice, bob]
 
@@ -272,7 +273,6 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(5000)
 
         expected_qid = 0
-        num_adds = 100
         expected_results = [(aliceDQ.DQ_TIMEOUT, expected_qid, qseq, [alice.name, qseq]) for qseq in range(num_adds)]
 
         # Check that all attempted add's timed out
@@ -283,7 +283,8 @@ class TestDistributedQueue(unittest.TestCase):
 
         # Check that all of the local queues are empty
         for local_queue in aliceDQ.queueList:
-            self.assertEqual(local_queue.queue, {})
+            self.assertEqual(local_queue.queue, [])
+            self.assertEqual(local_queue.sequence_to_item, {})
 
         # Check that we incremented the comms_seq
         self.assertEqual(aliceDQ.comms_seq, num_adds)
@@ -458,8 +459,8 @@ class TestDistributedQueue(unittest.TestCase):
         # Check the Queue contains ordered elements from Alice and Bob
         queueA = aliceDQ.queueList[0]
         queueB = bobDQ.queueList[0]
-        qA = queueA.queue
-        qB = queueB.queue
+        qA = queueA.sequence_to_item
+        qB = queueB.sequence_to_item
 
         # Make all the items ready
         for seq in qA:
@@ -492,8 +493,8 @@ class TestDistributedQueue(unittest.TestCase):
         # Check that we can pop the remaining items in the correct order
         remaining = set(range(len(qB))) - rqseqs
         for qseq in remaining:
-            self.assertEqual(aliceDQ.queueList[rqid].popSeq, qseq)
             q_item = aliceDQ.local_pop(rqid)
+            self.assertEqual(q_item.seq, qseq)
             self.assertIsNotNone(q_item)
 
     def test_full_queue(self):
@@ -531,13 +532,16 @@ class TestDistributedQueue(unittest.TestCase):
             dq.add(request=0, qid=0)
 
         dq2.add_callback = callback
-        for j in range(dq2.maxSeq + 1):
+        for j in range(dq2.maxSeq):
             dq2.add(request=j + 1, qid=1)
 
         sim_run(2000)
 
+        with self.assertRaises(LinkLayerException):
+            dq2.add(request=dq2.maxSeq + 1, qid=1)
+
         self.assertEqual(len(storage), 257)
-        self.assertEqual(storage[-1], (dq2.DQ_REJECT, 1, 0, dq2.maxSeq + 1))
+        self.assertEqual(storage[-1], (dq2.DQ_ERR, 1, None, dq2.maxSeq + 1))
         storage = []
 
         for j in range(dq.maxSeq):
@@ -611,8 +615,8 @@ class TestDistributedQueue(unittest.TestCase):
             sim_run(i*1000000)
 
             for seq in range(dq.maxSeq):
-                qitem = dq.queueList[0].queue.get(seq)
-                q2item = dq2.queueList[0].queue.get(seq)
+                qitem = dq.queueList[0].sequence_to_item.get(seq)
+                q2item = dq2.queueList[0].sequence_to_item.get(seq)
                 self.assertEqual(qitem.request, q2item.request)
 
             self.assertEqual(len(dq.backlogAdd), 0)
@@ -621,6 +625,52 @@ class TestDistributedQueue(unittest.TestCase):
             for j in range(dq.maxSeq):
                 dq.remove_item(0, j)
                 dq2.remove_item(0, j)
+
+    def test_full_wraparound(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=25)
+
+        wSize = 2
+        maxSeq = 6
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True, myWsize=wSize,
+                                 otherWsize=wSize, maxSeq=maxSeq)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True, myWsize=wSize,
+                                  otherWsize=wSize, maxSeq=maxSeq)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        storage = []
+
+        def callback(result):
+            storage.append(result)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        for timestep in range(1, maxSeq+1):
+            dq.add(timestep, 0)
+            sim_run(timestep * 1000000)
+            dq.queueList[0].queue[timestep - 1].ready = True
+            dq2.queueList[0].queue[timestep - 1].ready = True
+
+        dq.queueList[0].pop()
+        dq2.queueList[0].pop()
+        dq.add(maxSeq, 0)
+        sim_run(maxSeq * 100000)
+
+        dq.queueList[0].pop()
+        dq2.queueList[0].pop()
+        dq.queueList[0].pop()
+        dq2.queueList[0].pop()
 
 
 class TestFilteredDistributedQueue(unittest.TestCase):
@@ -722,7 +772,7 @@ class TestFilteredDistributedQueue(unittest.TestCase):
         # Test that we can now add a request with the rule in place
         bobDQ.add_accept_rule(nodeID=alice.nodeID, purpose_id=0)
         aliceDQ.add(request)
-        expected_qseq += 1
+        expected_qseq = 0
         sim_run(4)
         self.assertIsNotNone(self.result)
         reported_request = self.result[-1]

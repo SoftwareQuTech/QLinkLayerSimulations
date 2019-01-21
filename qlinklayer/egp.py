@@ -145,7 +145,7 @@ class EGP(EasyProtocol):
         # Process message demanding on command
         self.commandHandlers[cmd](data)
 
-    def issue_err(self, err, err_data=None):
+    def issue_err(self, err, create_id=None, origin_id=None, old_exp_mhp_seq=None, new_exp_mhp_seq=None):
         """
         Issues an error back to higher layer protocols with the error code that prevented
         successful generation of entanglement
@@ -154,9 +154,13 @@ class EGP(EasyProtocol):
         :return: obj any
             The error info
         """
+        err_data = []
+        for d in [create_id, origin_id, old_exp_mhp_seq, new_exp_mhp_seq]:
+            if d is None:
+                err_data.append(-1)
+            else:
+                err_data.append(d)
         logger.debug("Issuing error {} with data {}".format(err, err_data))
-        if err_data is None:
-            err_data = 0
 
         if self.err_callback:
             self.err_callback(result=(err, err_data))
@@ -291,6 +295,10 @@ class NodeCentricEGP(EGP):
         self.mhp_reply = None
         self.measurement_results = defaultdict(list)
         self.corrected_measurements = defaultdict(list)
+
+        # Queue mismatch information
+        self._previous_mismatch = None
+        self._nr_of_mismatch = None
 
         # Count MHP cycles used by a gen
         self._used_MHP_cycles = {}
@@ -491,7 +499,7 @@ class NodeCentricEGP(EGP):
         my_free_mem = self.qmm.get_free_mem_ad()
         self.send_msg(self.CMD_REQ_E, my_free_mem)
 
-    def send_expire_notification(self, aid, createID, originID, new_seq):
+    def send_expire_notification(self, aid, createID, originID, old_seq, new_seq):
         """
         Sends and expiration notification to our peer if MHP Sequence ordering becomes inconsistent
         :param aid: tuple (int, int)
@@ -506,7 +514,7 @@ class NodeCentricEGP(EGP):
         # Check if we are waiting for an acknowledgement for this expiry
         if aid not in self.waitExpireAcks:
             logger.error("Sending EXPIRE notification to peer")
-            self._send_exp_msg(aid, createID, originID, new_seq)
+            self._send_exp_msg(aid, createID, originID, old_seq, new_seq)
 
             # Schedule communication timeout to make sure we alert peer of expired request
             evt = self._schedule_after(2 * self.comm_delay, self._EVT_EXPIRE_ACK_TIMEOUT)
@@ -514,9 +522,9 @@ class NodeCentricEGP(EGP):
             self._wait_once(timeout_handler, event=evt)
 
             # Store information about expired request
-            self.waitExpireAcks[aid] = (createID, originID, new_seq)
+            self.waitExpireAcks[aid] = (createID, originID, old_seq, new_seq)
 
-    def _send_exp_msg(self, aid, createID, originID, new_seq):
+    def _send_exp_msg(self, aid, createID, originID, old_seq, new_seq):
         """
         Sends an expire message to our peer
         :param aid: tuple of (int, int)
@@ -528,7 +536,7 @@ class NodeCentricEGP(EGP):
         :param new_seq: int
             The local sequence number we have
         """
-        self.send_msg(self.CMD_EXPIRE, (aid, createID, originID, new_seq))
+        self.send_msg(self.CMD_EXPIRE, (aid, createID, originID, old_seq, new_seq))
 
     def expire_ack_timeout(self, evt, aid):
         """
@@ -543,10 +551,10 @@ class NodeCentricEGP(EGP):
             logger.warning("Did not receive expire ACK in time, retransmitting")
 
             # Remove local information of the expire message
-            createID, originID, expire_seq = self.waitExpireAcks.pop(aid)
+            createID, originID, seq_start, seq_end = self.waitExpireAcks.pop(aid)
 
             # Reattempt expiration and include up to date sequence info
-            self.send_expire_notification(aid, createID, originID, self.expected_seq)
+            self.send_expire_notification(aid, createID, originID, seq_start, seq_end)
 
     def cmd_EXPIRE(self, data):
         """
@@ -561,7 +569,10 @@ class NodeCentricEGP(EGP):
         :return:
         """
         logger.error("Got EXPIRE command from peer for request {}".format(data))
-        aid, createID, originID, new_seq = data
+        aid, createID, originID, old_seq, new_seq = data
+
+        # Alert higher layer protocols
+        self.issue_err(err=self.ERR_EXPIRE, create_id=createID, origin_id=originID, old_exp_mhp_seq=old_seq, new_exp_mhp_seq=new_seq - 1)
 
         # If our peer is ahead of us we should update
         if new_seq > self.expected_seq:
@@ -575,9 +586,6 @@ class NodeCentricEGP(EGP):
             self.scheduler.clear_request(aid)
             if request.measure_directly:
                 self._remove_measurement_data(aid)
-
-        # Alert higher layer protocols
-        self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
 
         # Let our peer know we expired
         self._send_exp_ack(aid)
@@ -757,7 +765,7 @@ class NodeCentricEGP(EGP):
             # Otherwise bubble up the DQP error
             else:
                 logger.error("Error occurred adding request to distributed queue!")
-                self.issue_err(err=status, err_data=creq.create_id)
+                self.issue_err(err=status, create_id=creq.create_id)
 
         except Exception:
             logger.exception("Error occurred processing DQP add callback!")
@@ -770,13 +778,15 @@ class NodeCentricEGP(EGP):
         if there are any requests and to receive a request to process
         """
         try:
+
             # Request memory update when out of resources
             if not self.scheduler.other_has_resources():
                 self.request_other_free_memory()
 
+            self.scheduler.inc_cycle()
+
             # Get scheduler's next gen task
             gen = self.scheduler.next()
-            self.scheduler.inc_cycle()
 
             if gen.flag:
                 # Keep track of used MHP cycles per request (data collection)
@@ -803,14 +813,14 @@ class NodeCentricEGP(EGP):
 
                 # Store the gen for pickup by mhp
                 self.mhp_service.put_ready_data(self.node.nodeID, gen)
-                return True
 
             else:
                 # Keep track of used MHP cycles per request (data collection)
                 if self._current_create_id is not None:
                     if self.scheduler.suspended() or self.scheduler.qmm.is_busy():
                         self._used_MHP_cycles[self._current_create_id] += 1
-                return False
+
+            return gen.flag
 
         except Exception:
             logger.exception("Error occurred when triggering MHP!")
@@ -919,6 +929,7 @@ class NodeCentricEGP(EGP):
 
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
+            self._remove_old_measurement_results(aid)
 
             # Check if an error occurred while processing a request
             if proto_err:
@@ -973,7 +984,7 @@ class NodeCentricEGP(EGP):
                         # If handling a measure directly request we need to throw away the measurement result
                         if creq.measure_directly and self.scheduler.has_request(aid):
                             try:
-                                m, basis = self.measurement_results[aid].pop(0)
+                                ecycle, m, basis = self.measurement_results[aid].pop(0)
                                 logger.debug("Removing measurement outcome {} in basis {} for aid {} (failed attempt)"
                                              .format(m, basis, aid))
                             except IndexError:
@@ -992,7 +1003,7 @@ class NodeCentricEGP(EGP):
 
         except Exception:
             logger.exception("An error occurred handling MHP Reply!")
-            self.issue_err(err=self.ERR_OTHER, err_data=self.ERR_OTHER)
+            self.issue_err(err=self.ERR_OTHER)
 
     def _extract_mhp_reply(self, result):
         """
@@ -1026,11 +1037,27 @@ class NodeCentricEGP(EGP):
                 aidA, aidB = aid
                 local_aid, remote_aid = (aidA, aidB) if self.node.nodeID == self.mhp.conn.nodeA.nodeID else (aidB, aidA)
 
-                # Check if we have knowledge of our peers current request
-                rqid, rqseq = remote_aid
-                if not self.dqp.contains_item(rqid, rqseq):
-                    self.send_expire_notification(aid=remote_aid, createID=None, originID=None,
-                                                  new_seq=self.expected_seq)
+                # Increment mismatch counter if we received this before
+                if aid == self._previous_mismatch:
+                    self._nr_of_mismatch += 1
+                else:
+                    self._previous_mismatch = aid
+                    self._nr_of_mismatch = 1
+
+                max_nr_mismatch = int(1.5 * self.scheduler.mhp_full_cycle / self.scheduler.mhp_cycle_period)
+                if self._nr_of_mismatch > max_nr_mismatch:
+                    for a in aid:
+                        qid, qseq = a
+                        if self.dqp.contains_item(qid, qseq):
+                            req = self.dqp.remove_item(qid, qseq).request
+                            if self.dqp.master ^ req.master_request:
+                                originID = self.get_otherID()
+                            else:
+                                originID = self.node.nodeID
+                            self.send_expire_notification(aid=a, createID=req.create_id, originID=originID, old_seq=self.expected_seq, new_seq=self.expected_seq)
+                            self.issue_err(err=self.ERR_EXPIRE, create_id=req.create_id, origin_id=originID, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=self.expected_seq - 1)
+                        else:
+                            self.send_expire_notification(aid=a, createID=None, originID=None, old_seq=self.expected_seq, new_seq=self.expected_seq)
             else:
                 local_aid = aid
 
@@ -1040,11 +1067,9 @@ class NodeCentricEGP(EGP):
 
             # Check if we may have lost a message
             if mhp_seq >= self.expected_seq:
-                # Update our expected seq
-                self.expected_seq = mhp_seq
-
                 # Issue an expire for the request
                 request = self.scheduler.get_request(local_aid)
+                new_mhp_seq = mhp_seq + 1
                 if request is not None:
                     if self.dqp.master ^ request.master_request:
                         originID = self.get_otherID()
@@ -1053,7 +1078,7 @@ class NodeCentricEGP(EGP):
 
                     createID = request.create_id
                     self.send_expire_notification(aid=local_aid, createID=createID, originID=originID,
-                                                  new_seq=self.expected_seq)
+                                                  old_seq=self.expected_seq, new_seq=new_mhp_seq)
 
                     # Clear the request
                     self.scheduler.clear_request(aid=local_aid)
@@ -1066,7 +1091,10 @@ class NodeCentricEGP(EGP):
                         # self._remove_measurement_data(aid)
 
                     # Alert higher layer protocols
-                    self.issue_err(err=self.ERR_EXPIRE, err_data=(createID, originID))
+                    self.issue_err(err=self.ERR_EXPIRE, create_id=createID, origin_id=originID, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=mhp_seq)
+
+                # Update our expected seq, because error came back we should expect the subsequent seq
+                self.expected_seq = new_mhp_seq
 
     def _handle_generation_reply(self, r, mhp_seq, aid):
         """
@@ -1095,7 +1123,7 @@ class NodeCentricEGP(EGP):
         if creq.measure_directly:
             # Grab the result and correct
             try:
-                m, basis = self.measurement_results[aid].pop(0)
+                ecycle, m, basis = self.measurement_results[aid].pop(0)
                 logger.debug("Removing measurement outcome {} in basis {} for aid {} (successful attempt)"
                              .format(m, basis, aid))
             except IndexError:
@@ -1190,8 +1218,6 @@ class NodeCentricEGP(EGP):
         logger.debug("Node {} : Moving comm_q {} to storage_q {}".format(self.node.name, comm_q, storage_q))
         if self.node.qmem._memory_positions[storage_q]._qubit is None:
             raise RuntimeError("No qubit before trying to swap")
-        # Set a flag to make sure we catch replies that occur during the measurement
-        # self.emission_handling_in_progress = self.EMIT_HANDLER_CK
 
         # Reset init info of this storage qubit
         self._next_init_cycle.pop(storage_q)
@@ -1222,7 +1248,6 @@ class NodeCentricEGP(EGP):
         # Handle create and keep program
         elif self.emission_handling_in_progress == self.EMIT_HANDLER_CK:
             raise RuntimeError("Shouldn't be handling CK after emission now")
-            # emit_aid, _ = self.move_info
 
         # Handle measure directly program
         else:
@@ -1254,6 +1279,17 @@ class NodeCentricEGP(EGP):
             # else:
             #     self.measurement_results.pop(0)
 
+    def _remove_old_measurement_results(self, aid):
+        cycle = self.scheduler.mhp_cycle_number
+        rtt_cycles = floor(self.mhp_service.get_midpoint_rtt_delay(self.node) / self.scheduler.mhp_cycle_period)
+        while self.measurement_results[aid]:
+            emission_cycle, basis, outcome = self.measurement_results[aid][0]
+            if emission_cycle >= cycle - rtt_cycles:
+                break
+            elif emission_cycle < cycle - rtt_cycles:
+                logger.warning("Failed to get expected reply, removing measurement result ")
+                self.measurement_results[aid].pop(0)
+
     def _handle_measurement_outcome(self):
         """
         Handles the measurement outcome from measureing the communication qubit
@@ -1266,6 +1302,7 @@ class NodeCentricEGP(EGP):
         self._current_prgm = None
 
         outcome = prgm.output["m"][0]
+
         # Saves measurement outcome
         self.emission_handling_in_progress = self.EMIT_HANDLER_NONE
         logger.debug("Measured {} on qubit".format(outcome))
@@ -1278,21 +1315,20 @@ class NodeCentricEGP(EGP):
             return
 
         if self.scheduler.has_request(aid):
-        # if self.scheduler.curr_gen:
             # Free the communication qubit
             # comm_q = self.scheduler.curr_gen.comm_q
             self.qmm.vacate_qubit(comm_q)
 
             # Store the measurement result
-            # aid, basis = self.measurement_info.pop(0)
-            self.measurement_results[aid].append((outcome, basis))
-            logger.debug("Adding measurement outcome {} in basis {} for aid {}"
-                        .format(outcome, basis, aid))
+            ecycle = self.scheduler.mhp_cycle_number
+            self.measurement_results[aid].append((ecycle, outcome, basis))
+            logger.debug("Adding measurement outcome {} in basis {} for aid {}".format(outcome, basis, aid))
 
             # If we received a reply for this attempt during measurement we can handle it immediately
             if self.mhp_reply:
                 self.handle_reply_mhp(self.mhp_reply)
                 self.mhp_reply = None
+
         elif self.scheduler.previous_request(aid):
             logger.debug("Handling measurement outcome from request that is already completed with aid {}".format(aid))
         else:
@@ -1354,7 +1390,10 @@ class NodeCentricEGP(EGP):
                 else:
                     creatorID = self.node.nodeID
                 self.send_expire_notification(aid=aid, createID=request.create_id, originID=creatorID,
-                                              new_seq=new_mhp_seq)
+                                              old_seq=self.expected_seq, new_seq=new_mhp_seq)
+
+                # Alert higher layer protocols
+                self.issue_err(err=self.ERR_EXPIRE, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=new_mhp_seq - 1)
 
                 # Clear the request
                 self.scheduler.clear_request(aid=aid)
@@ -1519,6 +1558,6 @@ class NodeCentricEGP(EGP):
         :param evt: obj `~qlinklayer.scheduler.SchedulerRequest`
             The request (used to get the Create ID)
         """
-        self.issue_err(err=self.ERR_TIMEOUT, err_data=request.create_id)
+        self.issue_err(err=self.ERR_TIMEOUT, create_id=request.create_id)
         if request.measure_directly:
             self._remove_measurement_data(aid)

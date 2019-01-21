@@ -238,9 +238,9 @@ class MHPHeraldedConnection(HeraldedFibreConnection):
 
         # Send messages back to the nodes
         logger.debug("Sending messages to A: {} and B: {}".format(dataA, dataB))
-
         self._send_to_node(self.nodeA, dataA)
         self._send_to_node(self.nodeB, dataB)
+
         self._reset_incoming()
 
         if outcome in [1, 2]:
@@ -474,7 +474,7 @@ class NodeCentricMHPHeraldedConnection(MHPHeraldedConnection):
 
             # Check the absolute queue id's from both ends of the connection
             if not self._has_same_aid():
-                logger.debug("Absolute queue IDs don't match!")
+                logger.warning("Absolute queue IDs don't match!")
                 self._send_notification_to_both(self.ERR_QUEUE_MISMATCH)
                 self._drop_qubit(qubit)
                 self._reset_incoming()
@@ -1011,6 +1011,13 @@ class SimulatedNodeCentricMHPService(Service):
         node_proto = self.get_node_proto(node)
         channel = node_proto.conn.channel_to_node(node)
         return channel.compute_delay()
+
+    def get_midpoint_rtt_delay(self, node):
+        node_proto = self.get_node_proto(node)
+        tx_delay = node_proto.conn.channel_to_node(node).compute_delay()
+        rx_delay = node_proto.conn.channel_from_node(node).compute_delay()
+        window_delay = node_proto.conn.time_window / 2
+        return tx_delay + rx_delay + window_delay
 
     def get_comm_qubit_id(self, node):
         """

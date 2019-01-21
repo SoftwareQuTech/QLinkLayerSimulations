@@ -103,7 +103,7 @@
             }
         }
     },
-    "QLink_WC_WC_HRF": {
+    "QLink_WC_WC_HIGH_C_LOSS": {
         "request_cycle": 0,
         "max_sim_time": 0,
         "max_wall_time": 345600,
@@ -115,7 +115,7 @@
         "wall_time_per_timestep": 1,
         "save_additional_data": true,
         "collect_queue_data": true,
-        "config": "setupsim/config/qlink/networks_with_cavity_with_conversion.json",
+        "config": "setupsim/config/qlink/networks_with_cavity_with_conversion_high_c_loss_1e-04.json",
         "request_paramsA": {
             "reqs": {
                 "prob": 6.594648518366688e-05,

@@ -573,7 +573,7 @@ class TestTimings(unittest.TestCase):
 
     def test_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
-        request = EGPRequest(max_time=12)
+        request = EGPRequest(max_time=10 * 14)
 
         sim_run(1)
 
@@ -583,11 +583,11 @@ class TestTimings(unittest.TestCase):
 
         self.assertFalse(self.timeout_handler_called[0])
 
-        sim_run(19)
+        sim_run(10 * 13)
 
         self.assertFalse(self.timeout_handler_called[0])
 
-        sim_run(20.1)
+        sim_run(10 * 14 + 1)
 
         self.assertTrue(self.timeout_handler_called[0])
 
@@ -595,7 +595,7 @@ class TestTimings(unittest.TestCase):
         max_mhp_cycle_number = 10
 
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0, max_mhp_cycle_number=max_mhp_cycle_number)
-        request = EGPRequest(max_time=90)
+        request = EGPRequest(max_time=10 * 12)
 
         succ = self.test_scheduler.add_request(request)
 
@@ -603,20 +603,20 @@ class TestTimings(unittest.TestCase):
 
     def test_early_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
-        request = EGPRequest(max_time=1)
+        request = EGPRequest(max_time=10 * 12)
 
         sim_run(1)
 
         self.test_scheduler.add_request(request)
         self.assertFalse(self.timeout_handler_called[0])
 
-        sim_run(10.1)
+        sim_run(10 * 12 + 1)
 
         self.assertTrue(self.timeout_handler_called[0])
 
     def test_short_timeout(self):
         self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
-        request = EGPRequest(max_time=1)
+        request = EGPRequest(max_time=10 * 12)
 
         sim_run(9.9)
 
@@ -626,23 +626,7 @@ class TestTimings(unittest.TestCase):
 
         self.assertFalse(self.timeout_handler_called[0])
 
-        sim_run(20.1)
-
-        self.assertTrue(self.timeout_handler_called[0])
-
-    def test_multiple_timeout(self):
-        self.test_scheduler.configure_mhp_timings(10, 12, 0, 0)
-        request = EGPRequest(max_time=10)
-
-        sim_run(10)
-
-        self.test_scheduler.add_request(request)
-
-        sim_run(10.1)
-
-        self.assertFalse(self.timeout_handler_called[0])
-
-        sim_run(20.1)
+        sim_run(10 * 12 + 1)
 
         self.assertTrue(self.timeout_handler_called[0])
 

@@ -11,13 +11,11 @@ from easysquid.toolbox import logger
 
 class LocalQueue(Entity):
 
-    def __init__(self, wsize=None, maxSeq=None, throw_events=False):
+    def __init__(self, maxSeq=None, throw_events=False):
         """
         Local queue of items ordered by sequence number, incl some additional features
         Items have to manually be set to ready
 
-        :param wsize: int
-            Maximum number of items to hold in the queue at any one time
         :param maxSeq: int
             Largest possible sequence number before wraparound
         :param throw_events: bool
@@ -30,22 +28,9 @@ class LocalQueue(Entity):
         else:
             self.maxSeq = maxSeq
 
-        # Maximum number of items to hold in the queue at any one time
-        if wsize is None:
-            self.wsize = self.maxSeq
-        else:
-            assert wsize <= self.maxSeq
-            self.wsize = wsize
-
-        # Next sequence number to assign
-        self.nextSeq = 0
-
         # Actual queue
-        # TODO not a great data structure
-        self.queue = {}
-
-        # Current sequence number that can be consumed
-        self.popSeq = None
+        self.queue = []
+        self.sequence_to_item = {}
 
         self.throw_events = throw_events
         if self.throw_events:
@@ -82,19 +67,26 @@ class LocalQueue(Entity):
 
         # Check how many items are on the queue right now
         if self.is_full():
-            raise LinkLayerException("Local queue full: {}".format(len))
+            raise LinkLayerException("Local queue full: {}".format(len(self.queue)))
 
         # There is space, create a new queue item
-        seq = self.nextSeq
+        seq = self.get_next_sequence_number()
 
         logger.debug("Adding item with seq={} to local queue".format(seq))
 
         self.add_with_id(originID, seq, request)
 
-        # Increment the next sequence number to assign
-        self.nextSeq = (self.nextSeq + 1) % self.maxSeq
-
         return seq
+
+    def get_next_sequence_number(self):
+        """
+        Returns the an unused sequence number, shouldn't be used to order items in the queue.
+        :return: int
+        """
+        for seq in range(self.maxSeq):
+            if not self.contains(seq):
+                return seq
+        return None
 
     def add_with_id(self, originID, seq, request):
         """
@@ -113,10 +105,8 @@ class LocalQueue(Entity):
             raise LinkLayerException()
 
         lq = self.get_new_queue_item(request, seq)
-        self.queue[seq] = lq
-
-        if self.popSeq is None:
-            self.popSeq = seq
+        self.queue.append(lq)
+        self.sequence_to_item[seq] = lq
 
         if self.throw_events:
             logger.debug("Scheduling item added event now.")
@@ -142,19 +132,17 @@ class LocalQueue(Entity):
         :return: obj `~qlinklayer.localQueue.LocalQueueItem`
             The queue item that we removed if any, else None
         """
-        if seq in self.queue:
-            q = self.queue.pop(seq)
-            logger.debug("Removing item with seq={} from local queue".format(q.seq))
+        if seq in self.sequence_to_item:
+            item = self.sequence_to_item.pop(seq)
+            self.queue.remove(item)
+            logger.debug("Removing item with seq={} from local queue".format(seq))
 
             if self.throw_events:
                 logger.debug("Scheduling item removed event now.")
                 self._schedule_now(self._EVT_ITEM_REMOVED)
-                self._seqs_removed.append(q.seq)
+                self._seqs_removed.append(seq)
 
-            if seq == self.popSeq:
-                self.popSeq = self._get_next_pop_seq()
-
-            return q
+            return item
 
         else:
             logger.warning("Sequence number {} not found in local queue".format(seq))
@@ -170,13 +158,13 @@ class LocalQueue(Entity):
             return None
 
         # Get item off queue
-        q = self.queue[self.popSeq]
+        q = self.queue[0]
 
         if q.ready:
             # Item ready
 
             # Remove from queue
-            self.queue.pop(self.popSeq, None)
+            self.remove_item(q.seq)
 
             logger.debug("Removing item with seq={} to local queue".format(q.seq))
 
@@ -185,17 +173,8 @@ class LocalQueue(Entity):
                 self._schedule_now(self._EVT_ITEM_REMOVED)
                 self._seqs_removed.append(q.seq)
 
-            # Increment lower bound of sequence numbers to return next
-            self.popSeq = self._get_next_pop_seq()
-
             # Return item
             return q
-
-    def _get_next_pop_seq(self):
-        # Return the next item if available otherwise increment
-        if len(self.queue) == 0:
-            return None
-        return min(self.queue.keys())
 
     def peek(self, seq=None):
         """
@@ -208,9 +187,9 @@ class LocalQueue(Entity):
 
         if seq is None:
             # Get item off queue
-            return self.queue[self.popSeq]
+            return self.queue[0]
         else:
-            return self.queue.get(seq)
+            return self.sequence_to_item.get(seq)
 
     def contains(self, seq):
         """
@@ -219,17 +198,14 @@ class LocalQueue(Entity):
             The sequence number to check for
         :return: bool
         """
-        if seq in self.queue:
-            return True
-        else:
-            return False
+        return seq in self.sequence_to_item
 
     def ready(self, seq):
         """
         Mark the queue item with queue sequence number seq as ready
         """
         try:
-            queue_item = self.queue[seq]
+            queue_item = self.sequence_to_item[seq]
         except KeyError:
             logger.warning("Sequence number {} not found in local queue".format(seq))
             return
@@ -246,7 +222,7 @@ class LocalQueue(Entity):
         Mark the queue item with queue sequence number seq as acknowledged by remote node
         """
         try:
-            self.queue[seq].acked = True
+            self.sequence_to_item[seq].acked = True
             logger.debug("Item with seq {} is acknowledged".format(seq))
         except KeyError:
             logger.warning("Sequence number {} not found in local queue".format(seq))
@@ -256,13 +232,11 @@ class LocalQueue(Entity):
 
 class EGPLocalQueue(LocalQueue):
 
-    def __init__(self, qid=None, wsize=None, maxSeq=None, timeout_callback=None, throw_events=False):
+    def __init__(self, qid=None, maxSeq=None, timeout_callback=None, throw_events=False):
         """
         Local queue used by EGP. Supports timeout per MHP cycle
         :param qid: int
             The queue ID
-        :param wsize: int
-            Maximum number of items to hold in the queue at any one time
         :param maxSeq: int
             Largest possible sequence number before wraparound
         :param timeout_callback: func
@@ -270,7 +244,7 @@ class EGPLocalQueue(LocalQueue):
         :param throw_events: bool
             Whether to throw events or not when adding and removing entries (for data collection)
         """
-        super(EGPLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, throw_events=throw_events)
+        super(EGPLocalQueue, self).__init__(maxSeq=maxSeq, throw_events=throw_events)
 
         self.qid = qid
 
@@ -294,7 +268,7 @@ class EGPLocalQueue(LocalQueue):
         :return: None
         """
         logger.debug("Updating to MHP cycle {}".format(current_cycle))
-        for q_item in list(self.queue.values()):
+        for q_item in self.queue:
             q_item.update_mhp_cycle_number(current_cycle, max_cycle)
 
     def get_new_queue_item(self, request, seq):
@@ -323,7 +297,7 @@ class WFQLocalQueue(EGPLocalQueue):
 
 
 class TimeoutLocalQueue(LocalQueue):
-    def __init__(self, qid=None, wsize=None, maxSeq=None, throw_events=False):
+    def __init__(self, qid=None, maxSeq=None, throw_events=False):
         """
         Implements a local queue that supports timing out queue items asynchronously
         :param wsize: int
@@ -333,7 +307,7 @@ class TimeoutLocalQueue(LocalQueue):
         :param scheduleAfter: float
             Default schedule delay for added queue items
         """
-        super(TimeoutLocalQueue, self).__init__(wsize=wsize, maxSeq=maxSeq, throw_events=throw_events)
+        super(TimeoutLocalQueue, self).__init__(maxSeq=maxSeq, throw_events=throw_events)
         self._EVT_PROC_TIMEOUT = EventType("QUEUE ITEM REMOVED", "Triggers when an item has successfully been removed")
         self._EVT_SCHEDULE = EventType("LOCAL QUEUE SCHEDULE", "Triggers when a queue item is ready to be scheduled")
         self.timed_out_items = []
@@ -363,7 +337,7 @@ class TimeoutLocalQueue(LocalQueue):
         :param qseq: int
             Sequence number of the item we want to add a handler to
         """
-        queue_item = self.queue[qseq]
+        queue_item = self.sequence_to_item[qseq]
 
         # Only attach a handler if the item supports the timeout event
         if isinstance(queue_item, _TimeoutLocalQueueItem):
