@@ -78,11 +78,12 @@ def single_type_request_params(type, config_file, origin_prob, p_fraction, num_p
 
 constant_params = {
     "max_sim_time": 0,
-    "max_wall_time": 5 * 24 * 60 * 60 - 2 * 60,
-    "max_mhp_cycle": 10000,
+    # "max_wall_time": 24 * 60 * 60 - 2 * 60,
+    "max_wall_time": 10 * 60,
+    "max_mhp_cycle": 0,
     "t0": 0,
     "enable_pdb": False,
-    "wall_time_per_timestep": 5 * 60,
+    "wall_time_per_timestep": 1 * 60,
     "save_additional_data": True,
     "collect_queue_data": True,
     "request_cycle": 0,
@@ -106,8 +107,8 @@ num_pairs = [1, 3]
 paramcombinations = {}
 for type in ["MD", "NL"]:
     for p_fraction, p_fraction_name in zip([0.5, 0.6, 0.7, 0.8, 0.99], ["050", "060", "070", "080", "099"]):
-        request_paramsA = single_type_request_params(type, config_file_path, origin_prob, p_fraction, num_pairs)
-        request_paramsB = None
+        request_paramsA = {type: single_type_request_params(type, config_file_path, origin_prob, p_fraction, num_pairs)}
+        request_paramsB = {type: single_type_request_params(type, config_file_path, origin_prob, p_fraction, num_pairs)}
 
         simulation_run_params = {"config": config_file_path,
                                  "request_paramsA": request_paramsA,
