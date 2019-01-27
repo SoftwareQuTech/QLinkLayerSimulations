@@ -68,17 +68,17 @@ def main(results_files):
         last_plot = (i == num_files - 1)
         plot_throughput(results_file, last_plot=last_plot)
     plt.subplots_adjust(hspace=-0.2)
-    # plt.savefig("/Volumes/Untitled/Dropbox/my_linklayer/plots/thoughput_vs_time.png", bbox_inches='tight')
+    plt.savefig("/Volumes/Untitled/Dropbox/linklayer/Sigcomm/V3/figures/thoughput_vs_time.png", bbox_inches='tight')
     plt.show()
 
 if __name__ == '__main__':
     # results_files = sys.argv[1:]
-    # results_files = [
-    #     "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_uniform_weights_FIFO_run_0.db",
-    #     "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_uniform_weights_higherWFQ_run_0.db"
-    # ]
     results_files = [
-        "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_noNLmoreMD_weights_FIFO_run_0.db",
-        "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_noNLmoreMD_weights_higherWFQ_run_0.db"
+        "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_uniform_weights_FIFO_run_0.db",
+        "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_uniform_weights_higherWFQ_run_0.db"
     ]
+    # results_files = [
+    #     "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_noNLmoreMD_weights_FIFO_run_0.db",
+    #     "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_noNLmoreMD_weights_higherWFQ_run_0.db"
+    # ]
     main(results_files)
