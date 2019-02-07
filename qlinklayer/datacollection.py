@@ -383,7 +383,7 @@ class EGPStateSequence(EGPDataSequence):
 
     def get_column_names(self):
         matrix_columns = ["{}, {}, {}".format(i, j, k) for i in range(4) for j in range(4) for k in ['real', 'imag']]
-        return ["Timestamp", "Outcome 1", "Outcome 2"] + matrix_columns + ["Success"]
+        return ["Timestamp", "originID", "peerID", "MHP Seq", "Outcome 1", "Outcome 2"] + matrix_columns + ["Success"]
 
     def getData(self, time, source=None):
         scenario = source[0]
@@ -399,7 +399,7 @@ class EGPStateSequence(EGPDataSequence):
             qapi.discard(q1)
             qapi.discard(q2)
 
-            val = [r1, r2] + [n for sl in [[z.real, z.imag] for z in qstate.flat] for n in sl]
+            val = [r1, r2] + list(ent_id) + [n for sl in [[z.real, z.imag] for z in qstate.flat] for n in sl]
             return [val, r1 == r2]
         else:
             self._collected_ent_ids.append(ent_id)
@@ -415,6 +415,7 @@ class EGPStateDataPoint(EGPDataPoint):
                 self.from_raw_data(data)
         else:
             self.timestamp = None
+            self.ent_id = None
             self.outcome1 = None
             self.outcome2 = None
             self.density_matrix = None
@@ -425,19 +426,21 @@ class EGPStateDataPoint(EGPDataPoint):
             self.timestamp = data[0]
             self.outcome1 = data[1]
             self.outcome2 = data[2]
+            self.ent_id = tuple(data[3:6])
 
             # Construct the matrix
-            m_data = data[3:35]
+            m_data = data[6:38]
             density_matrix = np.matrix(
                 [[m_data[i] + 1j * m_data[i + 1] for i in range(k, k + 8, 2)] for k in range(0, len(m_data), 8)])
             self.density_matrix = density_matrix
-            self.success = data[35]
+            self.success = data[38]
         except IndexError:
             raise ValueError("Cannot parse data")
 
     def from_data_point(self, data):
         if isinstance(data, EGPStateDataPoint):
             self.timestamp = data.timestamp
+            self.ent_id = data.ent_id
             self.outcome1 = data.outcome1
             self.outcome2 = data.outcome2
             self.density_matrix = data.density_matrix
@@ -448,6 +451,7 @@ class EGPStateDataPoint(EGPDataPoint):
     def printable_data(self):
         to_print = "EGP State Data-point:\n"
         to_print += "    Timestamp: {}\n".format(self.timestamp)
+        to_print += "    Entanglement Identifier: {}\n".format(self.ent_id)
         to_print += "    Outcome 1: {}\n".format(self.outcome1)
         to_print += "    Outcome 2: {}\n".format(self.outcome2)
         to_print += "    Density Matrix: {}\n".format(self.density_matrix)
@@ -465,7 +469,7 @@ class EGPQubErrSequence(EGPDataSequence):
     """
 
     def get_column_names(self):
-        return ["Timestamp", "Z_err", "X_err", "Y_err", "Success"]
+        return ["Timestamp", "originID", "peerID", "MHP Seq", "Z_err", "X_err", "Y_err", "Success"]
 
     def getData(self, time, source=None):
         # Get scenarios
@@ -476,14 +480,14 @@ class EGPQubErrSequence(EGPDataSequence):
         ent_id, meas_dataA = scenarioA.get_measurement(remove=False)
         if ent_id is None:
             # No data yet
-            return [[-1, -1, -1], False]
+            return [[-1, -1, -1, -1, -1, -1], False]
 
         # Check if B also got the measurement data yet
         _, meas_dataB = scenarioB.get_measurement(ent_id=ent_id, remove=True)
 
         if meas_dataB is None:
             # B hasn't received the corresponding OK yet, try next time
-            return [[-1, -1, -1], False]
+            return [[-1, -1, -1, -1, -1, -1], False]
 
         # Got measurement data from both A and B, delete entry from A
         scenarioA.get_measurement(ent_id=ent_id, remove=True)
@@ -498,15 +502,15 @@ class EGPQubErrSequence(EGPDataSequence):
 
         # Check if equal basis choices
         if basis_choiceA != basis_choiceB:
-            return [-1, -1, -1], False
+            return list(ent_id) + [-1, -1, -1], False
 
         error = 1 if bit_choiceA != bit_choiceB else 0
         if basis_choiceA == 0:  # Standard basis
-            return [error, -1, -1], True
+            return list(ent_id) + [error, -1, -1], True
         elif basis_choiceA == 1:  # Hadamard basis
-            return [-1, error, -1], True
+            return list(ent_id) + [-1, error, -1], True
         else:
-            return [-1, -1, error], True
+            return list(ent_id) + [-1, -1, error], True
 
 
 class EGPQubErrDataPoint(EGPDataPoint):
@@ -518,6 +522,7 @@ class EGPQubErrDataPoint(EGPDataPoint):
                 self.from_raw_data(data)
         else:
             self.timestamp = None
+            self.ent_id = None
             self.z_err = None
             self.x_err = None
             self.y_err = None
@@ -526,16 +531,18 @@ class EGPQubErrDataPoint(EGPDataPoint):
     def from_raw_data(self, data):
         try:
             self.timestamp = data[0]
-            self.z_err = data[1]
-            self.x_err = data[2]
-            self.y_err = data[3]
-            self.success = data[4]
+            self.ent_id = tuple(data[1:4])
+            self.z_err = data[4]
+            self.x_err = data[5]
+            self.y_err = data[6]
+            self.success = data[7]
         except IndexError:
             raise ValueError("Cannot parse data")
 
     def from_data_point(self, data):
         if isinstance(data, EGPQubErrDataPoint):
             self.timestamp = data.timestamp
+            self.ent_id = data.ent_id
             self.z_err = data.z_err
             self.x_err = data.x_err
             self.y_err = data.y_err
@@ -546,6 +553,7 @@ class EGPQubErrDataPoint(EGPDataPoint):
     def printable_data(self):
         to_print = "EGP QubErr Data-point:\n"
         to_print += "    Timestamp: {}\n".format(self.timestamp)
+        to_print += "    Entanglement Identifier: {}\n".format(self.ent_id)
         to_print += "    Z Error: {}\n".format(self.z_err)
         to_print += "    X Error: {}\n".format(self.x_err)
         to_print += "    Y Error: {}\n".format(self.y_err)
