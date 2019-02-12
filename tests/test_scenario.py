@@ -7,7 +7,7 @@ from easysquid.easynetwork import setup_physical_network
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.specific_scenarios import MixedScenario
-from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
+from cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
 
 class TestScenario(unittest.TestCase):

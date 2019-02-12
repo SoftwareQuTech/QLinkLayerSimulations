@@ -7,7 +7,7 @@ from netsquid.simutil import warn_deprecated
 from netsquid.qubits import qubitapi as qapi
 from qlinklayer.egp import NodeCentricEGP, EGP
 from qlinklayer.scenario import MeasureBeforeSuccessScenario, MeasureAfterSuccessScenario
-from SimulaQron.cqc.backend.entInfoHeader import EntInfoMeasDirectHeader, EntInfoCreateKeepHeader
+from cqc.backend.entInfoHeader import EntInfoMeasDirectHeader, EntInfoCreateKeepHeader
 
 
 class EGPDataSequence(PM_SQLDataSequence, metaclass=abc.ABCMeta):

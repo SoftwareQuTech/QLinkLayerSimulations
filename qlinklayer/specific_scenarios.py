@@ -4,7 +4,7 @@ from netsquid.pydynaa import EventType
 from netsquid.simutil import sim_time
 from easysquid.toolbox import logger
 from qlinklayer.scenario import EGPSimulationScenario
-from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
+from cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
 
 class MixedScenario(EGPSimulationScenario):

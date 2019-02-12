@@ -18,10 +18,10 @@ from qlinklayer.qmm import QuantumMemoryManagement
 from qlinklayer.feu import SingleClickFidelityEstimationUnit
 from qlinklayer.mhp import SimulatedNodeCentricMHPService
 from easysquid.toolbox import logger
-from SimulaQron.cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, \
+from cqc.backend.cqcHeader import CQCHeader, CQCEPRRequestHeader, CQC_HDR_LENGTH, CQC_CMD_HDR_LENGTH, \
     CQC_VERSION, CQC_TP_EPR_OK, CQCCmdHeader, CQC_TP_COMMAND, CQC_CMD_EPR, CQC_EPR_REQ_LENGTH, CQCXtraQubitHeader,\
     CQC_XTRA_QUBIT_HDR_LENGTH
-from SimulaQron.cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader,\
+from cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader,\
     ENT_INFO_MEAS_DIRECT_LENGTH, ENT_INFO_CREATE_KEEP_LENGTH
 
 

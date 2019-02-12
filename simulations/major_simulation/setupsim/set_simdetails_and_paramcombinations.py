@@ -1,7 +1,7 @@
 import os
 
 import qlinklayer
-import SimulaQron.cqc
+from simulaqron.toolbox import get_simulaqron_path
 from qlinklayer.feu import estimate_success_probability, get_assigned_brigh_state_population
 
 #######################
@@ -16,8 +16,7 @@ outputdirname = "CREATE_and_measure"
 path_to_qlinklayer___init__ = os.path.abspath(qlinklayer.__file__)
 path_to_qlinklayer = "/".join(path_to_qlinklayer___init__.split("/")[:-2])
 
-path_to_cqc___init__ = os.path.abspath(SimulaQron.cqc.__file__)
-path_to_SimulaQron = "/".join(path_to_cqc___init__.split("/")[:-2])
+path_to_SimulaQron = get_simulaqron_path.main()
 
 #########################
 # Optional parameters
