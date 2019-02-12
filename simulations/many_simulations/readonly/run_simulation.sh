@@ -163,6 +163,7 @@ while true; do
        (
             python3 $runsimulation $timestamp $TMP_DIR $runindex $paramcombinationsfile $actual_key
        ) &> "${resultsdir}/${timestamp}_key_${actual_key}_run_${runindex}_log.out"
+       # ) 2>&1 | tee "${resultsdir}/${timestamp}_key_${actual_key}_run_${runindex}_log.out"
     fi
 
     if [ "$RUNONCLUSTER" == 'y' ]; then

@@ -18,7 +18,7 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.specific_scenarios import MixedScenario
 from simulations._get_configs_from_easysquid import NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
 
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Here we add an entry into the Connection structure in Easysquid Easynetwork to give us access to load up configs
 # for the simulation using connections defined here in the QLinkLayer
@@ -304,7 +304,6 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                 info_message += "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle)
                 logger.info(info_message)
 
-            clean_log_files(os.path.split(results_path)[0])
 
             # Save additional data relevant for the simulation
             if save_additional_data:
@@ -329,9 +328,14 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                 logger.info("Max wall time reached, ending simulation.")
                 break
 
+            clean_log_files(results_path, sim_dir)
+
         stop_time = time()
         logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time,
                                                                                              sim_time() / SECOND))
+
+        clean_log_files(results_path, sim_dir)
+
     # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
     except Exception:
         logger.exception("Something went wrong. Ending simulation early!")
@@ -342,34 +346,60 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
             pdb.set_trace()
 
 
-def clean_log_files(results_path, block_size=1000):
+def clean_log_files(results_path, sim_dir, block_size=1000):
+    base_name = os.path.split(results_path)[1]
+    timestamp = base_name.split("_key_")[0]
+    log_file = "{}/{}_CREATE_and_measure/{}_log.out".format(sim_dir, timestamp, base_name)
+
     offset = int(block_size / 2)
-    min_block = 0
-    end_block = 0
-    for entry in os.listdir(results_path):
-        if entry.startswith("20") and entry.endswith(".out"):
-            file_path = os.path.join(results_path, entry)
-            with open(file_path, 'r') as f:
-                lines = f.readlines()
 
-            new_lines = []
-            i = 0
-            while i < len(lines):
-                line = lines[i]
-                if ("WARNING" in line) or ("ERROR" in line):
-                    start_block = max(min_block, i - offset)
+    with open(log_file, 'r') as f:
+        lines = f.readlines()
 
-                    # Have we skipped something?
-                    if start_block > (end_block + 1):
-                        new_lines += ["...\n"]
+    # Find where to start
+    for i in range(len(lines)):
+        line = lines[i]
+        if line == "PLACEHOLDER\n":
+            i += 1
+            min_block = i
+            end_block = i
+            break
+    else:
+        i = 0
+        min_block = 0
+        end_block = 0
 
-                    end_block = min(len(lines), i + offset)
-                    new_lines += lines[start_block:end_block]
-                    i = end_block
-                    min_block = end_block
-                else:
-                    i += 1
+    new_lines = lines[:i]
 
-            with open(file_path, 'w') as f:
-                f.writelines(new_lines)
+    while i < len(lines):
+        line = lines[i]
+        if ("WARNING" in line) or ("ERROR" in line):
+            start_block = max(min_block, i - offset)
 
+            # Have we skipped something?
+            if start_block > end_block:
+                new_lines.append("... ({} lines skipped)\n".format(start_block - end_block))
+
+            end_block = min(len(lines), i + offset)
+            new_lines += lines[start_block:end_block]
+            i = end_block
+            min_block = end_block
+        elif "INFO" in line:
+
+            # Have we skipped something?
+            if i > end_block:
+                new_lines.append("... ({} lines skipped)\n".format(i - end_block))
+
+            new_lines.append(line)
+            end_block = i + 1
+            min_block = end_block
+            i += 1
+        else:
+            i += 1
+
+
+    # Add a place holder such that we know where to start next time
+    new_lines.append("PLACEHOLDER\n")
+
+    with open(log_file, 'w') as f:
+        f.writelines(new_lines)

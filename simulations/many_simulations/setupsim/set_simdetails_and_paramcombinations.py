@@ -24,11 +24,11 @@ path_to_SimulaQron = get_simulaqron_path.main()
 
 constant_params = {
     "max_sim_time": 0,
-    "max_wall_time": 5 * 24 * 60 * 60 - 2 * 60,
+    "max_wall_time": 60 * 60 - 2 * 60,
     "max_mhp_cycle": 0,
     "t0": 0,
     "enable_pdb": False,
-    "wall_time_per_timestep": 1 * 60,
+    "wall_time_per_timestep": 1 * 10,
     "save_additional_data": True,
     "collect_queue_data": True,
     "request_cycle": 0,
