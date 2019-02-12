@@ -341,26 +341,35 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
         if enable_pdb:
             pdb.set_trace()
 
-def clean_log_files(results_path, block_size):
+
+def clean_log_files(results_path, block_size=1000):
     offset = int(block_size / 2)
     min_block = 0
+    end_block = 0
     for entry in os.listdir(results_path):
-        if entry.endswith(".out"):
+        if entry.startswith("20") and entry.endswith(".out"):
             file_path = os.path.join(results_path, entry)
             with open(file_path, 'r') as f:
                 lines = f.readlines()
 
             new_lines = []
             i = 0
-            while True:
+            while i < len(lines):
                 line = lines[i]
                 if ("WARNING" in line) or ("ERROR" in line):
                     start_block = max(min_block, i - offset)
+
+                    # Have we skipped something?
+                    if start_block > (end_block + 1):
+                        new_lines += ["...\n"]
+
                     end_block = min(len(lines), i + offset)
-                    new_lines += ["...\n"] + lines[start_block:end_block] + ["...\n"]
+                    new_lines += lines[start_block:end_block]
                     i = end_block
                     min_block = end_block
                 else:
                     i += 1
 
+            with open(file_path, 'w') as f:
+                f.writelines(new_lines)
 
