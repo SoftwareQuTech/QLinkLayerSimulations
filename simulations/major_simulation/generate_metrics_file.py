@@ -62,9 +62,9 @@ def get_table_data_by_timestamp(filename, base_table_name):
 #
 #     return data_by_timestamp
 
-def get_creates_and_oks_by_create_id(filename, expired_create_ids):
-    creates_data = parse_table_data_from_sql(filename, "EGP_Creates")
-    oks_data = parse_table_data_from_sql(filename, "EGP_OKs")
+def get_creates_and_oks_by_create_id(filename, expired_create_ids, max_simulated_time=None):
+    creates_data = parse_table_data_from_sql(filename, "EGP_Creates", max_real_time=max_simulated_time)
+    oks_data = parse_table_data_from_sql(filename, "EGP_OKs", max_real_time=max_simulated_time)
 
     creates_and_oks_by_create_id = {}
     ok_keys_by_timestamp_and_node_id = {}
@@ -177,13 +177,13 @@ def add_quberr(quberr_data, creates_and_oks_by_create_id, ok_keys_by_timestamp):
                 creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq]["QBER"] = quberr_datapoint
 
 
-def sort_data_by_request(filename):
-    states_data = parse_table_data_from_sql(filename, "EGP_Qubit_States")
-    quberr_data = parse_table_data_from_sql(filename, "EGP_QubErr")
-    error_datapoints = list(map(lambda d: EGPErrorDataPoint(d), parse_table_data_from_sql(filename, "EGP_Errors")))
+def sort_data_by_request(filename, max_simulated_time=None):
+    states_data = parse_table_data_from_sql(filename, "EGP_Qubit_States", max_real_time=max_simulated_time)
+    quberr_data = parse_table_data_from_sql(filename, "EGP_QubErr", max_real_time=max_simulated_time)
+    error_datapoints = list(map(lambda d: EGPErrorDataPoint(d), parse_table_data_from_sql(filename, "EGP_Errors", max_real_time=max_simulated_time)))
     expired_create_ids = [dp.create_id for dp in error_datapoints if dp.error_code == NodeCentricEGP.ERR_EXPIRE]
 
-    creates_and_oks_by_create_id, ok_keys_by_timestamp = get_creates_and_oks_by_create_id(filename, expired_create_ids)
+    creates_and_oks_by_create_id, ok_keys_by_timestamp = get_creates_and_oks_by_create_id(filename, expired_create_ids, max_simulated_time=max_simulated_time)
 
     add_qubit_states(states_data, creates_and_oks_by_create_id, ok_keys_by_timestamp)
 
@@ -259,8 +259,8 @@ def add_metric_data(metrics, metric_name, avg_std_num):
         metrics[tp + metric_name] = avg_std_num[i]
 
 
-def get_raw_metric_data(filename):
-    creates_and_oks_by_create_id, ok_keys_by_timestamp = sort_data_by_request(filename)
+def get_raw_metric_data(filename, max_simulated_time=None):
+    creates_and_oks_by_create_id, ok_keys_by_timestamp = sort_data_by_request(filename, max_simulated_time=max_simulated_time)
 
     ##########################
     # Nr OKs and outstanding #
@@ -383,7 +383,10 @@ def get_raw_metric_data(filename):
     # Throughput #
     ##############
 
-    throughputs_per_prio = parse_thoughput(creates_and_oks_by_create_id, total_matrix_time)
+    if max_simulated_time is None:
+        throughputs_per_prio = parse_thoughput(creates_and_oks_by_create_id, max_time=total_matrix_time)
+    else:
+        throughputs_per_prio = parse_thoughput(creates_and_oks_by_create_id, max_time=max_simulated_time)
 
     all_raw_metric_data = {}
     all_raw_metric_data["nr_oks_per_prio"] = nr_oks_per_prio
@@ -402,8 +405,8 @@ def get_raw_metric_data(filename):
     return all_raw_metric_data
 
 
-def get_metrics_from_single_file(filename):
-    all_raw_metric_data = get_raw_metric_data(filename)
+def get_metrics_from_single_file(filename, max_simulated_time=None):
+    all_raw_metric_data = get_raw_metric_data(filename, max_simulated_time=max_simulated_time)
     nr_oks_per_prio = all_raw_metric_data["nr_oks_per_prio"]
     nr_reqs_per_prio = all_raw_metric_data["nr_reqs_per_prio"]
     nr_outstanding_req_per_prio = all_raw_metric_data["nr_outstanding_req_per_prio"]
@@ -429,7 +432,7 @@ def get_metrics_from_single_file(filename):
     # Errors #
     ##########
 
-    errors_data = parse_table_data_from_sql(filename, "EGP_Errors")
+    errors_data = parse_table_data_from_sql(filename, "EGP_Errors", max_real_time=max_simulated_time)
     num_errors = len(errors_data)
     num_errors_per_code = defaultdict(int)
     for e in errors_data:
@@ -484,7 +487,7 @@ def get_metrics_from_single_file(filename):
     #             queue_ids.append(queue_id)
     queue_ids = range(3)
 
-    raw_all_queue_data = {qid: parse_table_data_from_sql(filename, "EGP_Local_Queue_A_{}".format(qid)) for qid in queue_ids}
+    raw_all_queue_data = {qid: parse_table_data_from_sql(filename, "EGP_Local_Queue_A_{}".format(qid), max_real_time=max_simulated_time) for qid in queue_ids}
     all_queue_lengths = {}
     times_non_idle = {}
     for qid, raw_queue_data in raw_all_queue_data.items():
@@ -611,11 +614,11 @@ def main(results_folder):
     for entry in sorted(os.listdir(results_folder)):
         if entry.endswith(".db"):
             scenario_key = entry.split("_key_")[1].split("_run_")[0]
-            if scenario_key == "LAB_NC_NC_MD_max3_req_frac_high_origin_originA_weights_FIFO":
-                print(scenario_key)
-                metrics = get_metrics_from_single_file(os.path.join(results_folder, entry))
-                metrics["Name"] = scenario_key
-                all_metrics.append(metrics)
+            # if scenario_key == "LAB_NC_NC_MD_max3_req_frac_high_origin_originA_weights_FIFO":
+            print(scenario_key)
+            metrics = get_metrics_from_single_file(os.path.join(results_folder, entry))
+            metrics["Name"] = scenario_key
+            all_metrics.append(metrics)
 
     if len(all_metrics) > 0:
         csv_folder = os.path.join(results_folder, "metrics")

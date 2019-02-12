@@ -601,7 +601,11 @@ def main(results_folder):
     # counter = 0
     for entry in sorted(os.listdir(results_folder)):
         if entry.endswith(".db"):
-            scenario_key = entry.split("_key_")[1].split("_run_")[0]
+            try:
+                scenario_key = entry.split("_key_")[1].split("_run_")[0]
+            except IndexError:
+                import pdb
+                pdb.set_trace()
             # if scenario_key == "LAB_NC_NC_MD_max3_req_frac_high_origin_originA_weights_FIFO":
             if (("originAB" in scenario_key) or ("mix" in scenario_key)) and "max255" not in scenario_key:
                 # counter += 1
