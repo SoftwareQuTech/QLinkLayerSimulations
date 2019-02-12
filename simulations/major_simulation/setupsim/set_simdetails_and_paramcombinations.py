@@ -48,8 +48,6 @@ for filename in os.listdir(os.path.join(config_dir, "qlink")):
         p_loss = filename[-10:-5]
         configs["QLINK_WC_WC_HIGH_C_LOSS_{}".format(p_loss)] = "qlink/{}".format(filename)
 
-print(configs.keys())
-
 # config_to_p_succ = {
 #     "no_noise/no_losses.json": 0.18962460137276416,
 #     "no_noise/no_noise.json": 0.19,
@@ -166,25 +164,19 @@ def mixed_request_params(config_file_path, origin_probs, p_fractions, num_pairs)
 paramcombinations = {}
 
 # Single type requests
-for p_loss in ["0{}".format(n) for n in range(4,10)] + ["10"]:
-# for config_name in ["QLINK_WC_WC_HIGH_C_LOSS"]:
-    config_name = "QLINK_WC_WC_HIGH_C_LOSS_1e-{}".format(p_loss)
+for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
     config = configs[config_name]
     config_file_path = os.path.join(config_dir, config)
     # p_succ = estimate_success_probability(config_file_path)
     for type in ["NL", "CK", "MD"]:
-        # if type == "MD":
-        #     num_pairs_names = ["max1", "max3", "max255"]
-        # else:
-        #     num_pairs_names = ["max1", "max3"]
-        for num_pairs_name in ["max3"]:
+        if type == "MD":
+            num_pairs_names = ["max1", "max3", "max255"]
+        else:
+            num_pairs_names = ["max1", "max3"]
+        for num_pairs_name in num_pairs_names:
             num_pairs = num_pairs_dct[num_pairs_name]
-            for p_fraction_name in ["high"]:
-                p_fraction = p_req_fractions["high"]
-                for origin_prob_name in ["originAB"]:
-                    origin_prob = origin_probs[origin_prob_name]
-                    # p_requestA = p_fraction * origin_prob[0] * p_succ
-                    # p_requestB = p_fraction * origin_prob[1] * p_succ
+            for p_fraction_name, p_fraction in p_req_fractions.items():
+                for origin_prob_name, origin_prob in origin_probs.items():
                     request_paramsA = {type: single_type_request_params(type, config_file_path, origin_prob[0],
                                                                         p_fraction, num_pairs)}
                     request_paramsB = {type: single_type_request_params(type, config_file_path, origin_prob[1],
@@ -201,22 +193,16 @@ for p_loss in ["0{}".format(n) for n in range(4,10)] + ["10"]:
 
 # Mixed requests
 origin_prob = (1/2, 1/2)
-for p_loss in ["0{}".format(n) for n in range(4,10)] + ["10"]:
-# for config_name in ["QLINK_WC_WC_HIGH_C_LOSS"]:
-    config_name = "QLINK_WC_WC_HIGH_C_LOSS_1e-{}".format(p_loss)
+for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
     config = configs[config_name]
     config_file_path = os.path.join(config_dir, config)
-    # p_succ = config_to_p_succ[config]
-    for weights_name in ["FIFO", "higherWFQ"]:
-        sched_params = weights_dct[weights_name]
+    for weights_name, sched_params in weights_dct.items():
         weights = sched_params[0]
         num_priorities = sched_params[1]
-        for mix_name in ["uniform"]:
-            mix = mixes[mix_name]
+        for mix_name, mix in mixes.items():
             p_base_fraction = p_req_fractions["high"]
             p_fractions = {type: m * p_base_fraction for type, m in mix.items()}
             p_origins = {type: origin_prob[0] for type in p_fractions.keys()}
-            # probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
             if mix_name == "uniform":
                 num_pairs = {"NL": 1, "CK": 1, "MD": 1}
             else:
@@ -233,68 +219,37 @@ for p_loss in ["0{}".format(n) for n in range(4,10)] + ["10"]:
             paramcombinations[run_name] = simulation_run_params
 
 # Added exaggerated classical noise scenario
-# for config_name, config in configs.items():
-#     if "HIGH_C_LOSS" in config_name:
-#         # config_name = "QLINK_WC_WC_HIGH_C_LOSS"
-#         # config = configs[config_name]
-#         config_file_path = os.path.join(config_dir, config)
-#         # p_succ = config_to_p_succ[config]
-#         weights_name = "lowerWFQ"
-#         sched_params = weights_dct[weights_name]
-#         weights = sched_params[0]
-#         num_priorities = sched_params[1]
-#         # p_fraction = p_req_fractions["high"]
-#         mix_name = "uniform"
-#         mix = mixes[mix_name]
-#         origin_prob = (1/2, 1/2)
-#         p_base_fraction = p_req_fractions["high"]
-#         p_fractions = {type: m * p_base_fraction for type, m in mix.items()}
-#         p_origins = {type: origin_prob[0] for type in p_fractions.keys()}
-#         # probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
-#         num_pairs = {"NL": [1, 3], "CK": [1, 3], "MD": [1, 255]}
-#         request_paramsA = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
-#         request_paramsB = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
-#         simulation_run_params = {"config": config_file_path,
-#                                  "request_paramsA": request_paramsA,
-#                                  "request_paramsB": request_paramsB,
-#                                  "egp_queue_weights": weights,
-#                                  "num_priorities": num_priorities}
-#         simulation_run_params.update(constant_params)
-#         run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
-#         paramcombinations[run_name] = simulation_run_params
+for config_name, config in configs.items():
+    if "HIGH_C_LOSS" in config_name:
+        # config_name = "QLINK_WC_WC_HIGH_C_LOSS"
+        # config = configs[config_name]
+        config_file_path = os.path.join(config_dir, config)
+        # p_succ = config_to_p_succ[config]
+        weights_name = "lowerWFQ"
+        sched_params = weights_dct[weights_name]
+        weights = sched_params[0]
+        num_priorities = sched_params[1]
+        # p_fraction = p_req_fractions["high"]
+        mix_name = "uniform"
+        mix = mixes[mix_name]
+        origin_prob = (1/2, 1/2)
+        p_base_fraction = p_req_fractions["high"]
+        p_fractions = {type: m * p_base_fraction for type, m in mix.items()}
+        p_origins = {type: origin_prob[0] for type in p_fractions.keys()}
+        # probs = {type: origin_prob[0] * p_succ * m * p_fraction for type, m in mix.items()}
+        num_pairs = {"NL": [1, 3], "CK": [1, 3], "MD": [1, 255]}
+        request_paramsA = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
+        request_paramsB = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
+        simulation_run_params = {"config": config_file_path,
+                                 "request_paramsA": request_paramsA,
+                                 "request_paramsB": request_paramsB,
+                                 "egp_queue_weights": weights,
+                                 "num_priorities": num_priorities}
+        simulation_run_params.update(constant_params)
+        run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
+        paramcombinations[run_name] = simulation_run_params
 
 print(len(paramcombinations))
-
-# opt_params = {
-#     "create_probB": 0,
-#     "min_pairs": 1,
-#     "max_pairs": 1,
-#     "tmax_pair": 0,
-#     "request_cycle": 0,
-#     "num_requests": 0,
-#     "max_sim_time": 0,
-#     "max_wall_time": 4 * 24 * 3600,
-#     "max_mhp_cycle": 80,
-#     "enable_pdb": False,
-#     "alphaA": 0.1,
-#     "alphaB": 0.1,
-#     "measure_directly": True,
-#     "t0": 0,
-#     "wall_time_per_timestep": 1 * 1,
-#     "save_additional_data": True,
-#     "collect_queue_data": True}
-#
-# paramcombinations = {}
-# # create paramcombinations
-# for name, scenario in name_to_scenario.items():
-#     config_file = scenario[0]
-#     freq_req_factor = scenario[1]
-#     param_set = {}
-#     param_set.update(opt_params)
-#     param_set["config"] = config_dir + "/" + config_file
-#     p_succ = config_to_p_succ[config_file]
-#     param_set["create_probA"] = freq_req_factor * p_succ
-#     paramcombinations[name] = param_set
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #
