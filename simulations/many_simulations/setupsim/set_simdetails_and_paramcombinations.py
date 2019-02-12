@@ -36,7 +36,7 @@ constant_params = {
     "alphaB": [0.05, 0.1, 0.3]
 }
 
-config_dir = os.path.join(path_to_qlinklayer, "simulations/many_simulations/setupsim/config")
+config_dir = "setupsim/config"
 
 configs = {"LAB_NC_NC": "lab/networks_no_cavity_no_conversion.json",
            "QLINK_WC_WC": "qlink/networks_with_cavity_with_conversion.json",
