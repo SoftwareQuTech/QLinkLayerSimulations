@@ -57,7 +57,7 @@
           "carbon_gates": {
             "initialization_op": {
               "noise_model": {
-                "INITIALIZE_NM": {
+                "DEPOLARIZE_NM": {
                   "depolar_prob": 0.05
                 }
               },
@@ -65,8 +65,8 @@
             },
             "z_rot_gate": {
               "noise_model": {
-                "CARBON_SINGLE_QUBIT_NM": {
-                  "dephasing_prob": 0.001
+                "DEPOLARIZE_NM": {
+                  "depolar_prob": 0.001
                 }
               },
               "operation_time": 20000.0
@@ -75,7 +75,7 @@
           "electron_gates": {
             "initialization_op": {
               "noise_model": {
-                "INITIALIZE_NM": {
+                "DEPOLARIZE_NM": {
                   "depolar_prob": 0.05
                 }
               },
@@ -83,8 +83,8 @@
             },
             "single_qubit_gate": {
               "noise_model": {
-                "ELECTRON_SINGLE_QUBIT_NM": {
-                  "dephasing_prob": 0
+                "DEPOLARIZE_NM": {
+                  "depolar_prob": 0
                 }
               },
               "operation_time": 5
@@ -102,8 +102,8 @@
           "two_qubit_gates": {
             "cx_direction": {
               "noise_model": {
-                "EC_CXDIRECTION_NM": {
-                  "dephasing_prob": 0.008
+                "DEPOLARIZE_NM": {
+                  "depolar_prob": 0.008
                 }
               },
               "operation_time": 500000.0
