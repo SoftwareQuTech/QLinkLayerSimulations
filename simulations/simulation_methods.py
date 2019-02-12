@@ -5,6 +5,7 @@ import os
 from time import time
 import math
 import logging
+import os
 from os.path import exists
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
@@ -303,6 +304,8 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                 info_message += "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle)
                 logger.info(info_message)
 
+            clean_log_files(os.path.split(results_path)[0])
+
             # Save additional data relevant for the simulation
             if save_additional_data:
                 # Collect simulation times
@@ -337,3 +340,27 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
         # Debugging
         if enable_pdb:
             pdb.set_trace()
+
+def clean_log_files(results_path, block_size):
+    offset = int(block_size / 2)
+    min_block = 0
+    for entry in os.listdir(results_path):
+        if entry.endswith(".out"):
+            file_path = os.path.join(results_path, entry)
+            with open(file_path, 'r') as f:
+                lines = f.readlines()
+
+            new_lines = []
+            i = 0
+            while True:
+                line = lines[i]
+                if ("WARNING" in line) or ("ERROR" in line):
+                    start_block = max(min_block, i - offset)
+                    end_block = min(len(lines), i + offset)
+                    new_lines += ["...\n"] + lines[start_block:end_block] + ["...\n"]
+                    i = end_block
+                    min_block = end_block
+                else:
+                    i += 1
+
+
