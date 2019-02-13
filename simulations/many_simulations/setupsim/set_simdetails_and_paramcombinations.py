@@ -9,7 +9,7 @@ from qlinklayer.feu import estimate_success_probability, get_assigned_brigh_stat
 #######################
 
 description_string = "Simulation of EGP under CREATE+measure scenario"
-number_of_runs = 1
+number_of_runs = 10
 outputdirname = "CREATE_and_measure"
 
 # Get paths to QLinkLayer and SimulaQron folders
@@ -24,11 +24,11 @@ path_to_SimulaQron = get_simulaqron_path.main()
 
 constant_params = {
     "max_sim_time": 0,
-    "max_wall_time": 60 * 60 - 2 * 60,
+    "max_wall_time": 1 * 24 * 60 * 60 - 2 * 60,
     "max_mhp_cycle": 0,
     "t0": 0,
     "enable_pdb": False,
-    "wall_time_per_timestep": 1 * 10,
+    "wall_time_per_timestep": 1 * 30,
     "save_additional_data": True,
     "collect_queue_data": True,
     "request_cycle": 0,
@@ -189,7 +189,7 @@ for weights_name in ["FIFO", "higherWFQ"]:
         run_name = "{}_mix_{}_sched_{}".format(config_name, mix_name, weights_name)
         paramcombinations[run_name] = simulation_run_params
 
-print(len(paramcombinations))
+print(len(paramcombinations) * number_of_runs)
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #

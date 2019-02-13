@@ -1,15 +1,21 @@
 import netsquid as ns
 import pdb
 import json
+<<<<<<< HEAD
 import os
 from time import time
+=======
+from time import time, sleep
+>>>>>>> Fixed loggin to file and filtering
 import math
 import logging
 import os
+import pathlib
+import sys
 from os.path import exists
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
-from easysquid.toolbox import logger
+from easysquid.toolbox import logger, _ColourFileHandler, _ES_Formatter
 from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
     EGPQubErrSequence, EGPLocalQueueSequence, AttemptCollector, current_version
@@ -350,29 +356,32 @@ def clean_log_files(results_path, sim_dir, block_size=1000):
     base_name = os.path.split(results_path)[1]
     timestamp = base_name.split("_key_")[0]
     log_file = "{}/{}_CREATE_and_measure/{}_log.out".format(sim_dir, timestamp, base_name)
+    reduced_log_file = "{}_reduced.out".format(log_file[:-4])
 
-    offset = int(block_size / 2)
+    if not os.path.exists(log_file):
+        return
 
     with open(log_file, 'r') as f:
-        lines = f.readlines()
+        try:
+            lines = f.readlines()
+        except MemoryError as err:
+            file_size = os.path.getsize(log_file)
+            num_lines = os.system("wc -l {}".format(log_file))
+            print("Size of file {} is {}".format())
+            print("Num lines {}".format(num_lines))
 
-    # Find where to start
-    for i in range(len(lines)):
-        line = lines[i]
-        if line == "PLACEHOLDER\n":
-            i += 1
-            min_block = i
-            end_block = i
-            break
-    else:
-        i = 0
-        min_block = 0
-        end_block = 0
-
-    new_lines = lines[:i]
+    i=0
+    min_block = 0
+    end_block = 0
+    offset = int(block_size / 2)
+    new_lines = []
 
     while i < len(lines):
         line = lines[i]
+
+        # Remove characters which could occur when reading file which is written to?
+        line = line.replace('\x00', '')
+
         if ("WARNING" in line) or ("ERROR" in line):
             start_block = max(min_block, i - offset)
 
@@ -397,9 +406,8 @@ def clean_log_files(results_path, sim_dir, block_size=1000):
         else:
             i += 1
 
-
-    # Add a place holder such that we know where to start next time
-    new_lines.append("PLACEHOLDER\n")
+    with open(reduced_log_file, 'a') as f:
+        f.writelines(new_lines)
 
     with open(log_file, 'w') as f:
-        f.writelines(new_lines)
+        f.write("")
