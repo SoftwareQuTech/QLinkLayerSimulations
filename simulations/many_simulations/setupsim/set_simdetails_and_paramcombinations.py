@@ -9,7 +9,7 @@ from qlinklayer.feu import estimate_success_probability, get_assigned_brigh_stat
 #######################
 
 description_string = "Simulation of EGP under CREATE+measure scenario"
-number_of_runs = 10
+number_of_runs = 1
 outputdirname = "CREATE_and_measure"
 
 # Get paths to QLinkLayer and SimulaQron folders
@@ -33,7 +33,11 @@ constant_params = {
     "collect_queue_data": True,
     "request_cycle": 0,
     "alphaA": [0.05, 0.1, 0.3],
-    "alphaB": [0.05, 0.1, 0.3]
+    "alphaB": [0.05, 0.1, 0.3],
+    "log_to_file": True,
+    "log_level": 10,
+    "filter_debug_logging": True,
+    "log_to_console": False
 }
 
 config_dir = "setupsim/config"

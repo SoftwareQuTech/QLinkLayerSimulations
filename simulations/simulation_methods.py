@@ -2,20 +2,22 @@ import netsquid as ns
 import pdb
 import json
 <<<<<<< HEAD
+<<<<<<< HEAD
 import os
 from time import time
 =======
 from time import time, sleep
 >>>>>>> Fixed loggin to file and filtering
+=======
+from time import time
+>>>>>>> Fixed proper logging settings
 import math
 import logging
 import os
-import pathlib
-import sys
 from os.path import exists
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
-from easysquid.toolbox import logger, _ColourFileHandler, _ES_Formatter
+from easysquid.toolbox import logger, setup_logging
 from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
     EGPQubErrSequence, EGPLocalQueueSequence, AttemptCollector, current_version
@@ -23,8 +25,6 @@ from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.specific_scenarios import MixedScenario
 from simulations._get_configs_from_easysquid import NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
-
-logger.setLevel(logging.DEBUG)
 
 # Here we add an entry into the Connection structure in Easysquid Easynetwork to give us access to load up configs
 # for the simulation using connections defined here in the QLinkLayer
@@ -190,10 +190,26 @@ def set_datacollection_version(results_path):
 def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name=None, config=None, num_priorities=1,
                    egp_queue_weights=None, request_cycle=0, max_sim_time=float('inf'), max_wall_time=float('inf'),
                    max_mhp_cycle=float('inf'), enable_pdb=False, t0=0, t_cycle=0, alphaA=0.1, alphaB=0.1,
-                   wall_time_per_timestep=60, save_additional_data=True, collect_queue_data=False):
+                   wall_time_per_timestep=60, save_additional_data=True, collect_queue_data=False,
+                   log_to_file=True, log_level=None, filter_debug_logging=True, log_to_console=False):
 
     # Set the current datacollection version
     set_datacollection_version(results_path)
+
+    # Setup logging
+    if log_to_file:
+        base_name = os.path.split(results_path)[1]
+        timestamp = base_name.split("_key_")[0]
+        log_file = "{}/{}_CREATE_and_measure/{}_log.out".format(sim_dir, timestamp, base_name)
+        if log_level is not None:
+            setup_logging(log_to_file=log_file, file_log_level=log_level, log_to_console=log_to_console)
+        else:
+            setup_logging(log_to_file=log_file, log_to_console=log_to_console)
+    else:
+        if log_level is not None:
+            setup_logging(console_log_level=log_level, log_to_console=log_to_console)
+        else:
+            setup_logging(log_to_console=log_to_console)
 
     # Save additional data
     if save_additional_data:
@@ -334,13 +350,15 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                 logger.info("Max wall time reached, ending simulation.")
                 break
 
-            clean_log_files(results_path, sim_dir)
+            if filter_debug_logging:
+                clean_log_files(results_path, sim_dir)
 
         stop_time = time()
         logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time,
                                                                                              sim_time() / SECOND))
 
-        clean_log_files(results_path, sim_dir)
+        if filter_debug_logging:
+            clean_log_files(results_path, sim_dir)
 
     # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
     except Exception:
