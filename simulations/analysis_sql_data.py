@@ -4,7 +4,7 @@ from collections import defaultdict
 import numpy as np
 from easysquid.toolbox import logger
 from qlinklayer.datacollection import EGPCreateDataPoint, EGPOKDataPoint, EGPStateDataPoint, \
-    EGPQubErrDataPoint, EGPLocalQueueDataPoint, EGPErrorDataPoint
+    EGPQubErrDataPoint, EGPLocalQueueDataPoint, EGPErrorDataPoint, EGPData
 from netsquid.simutil import SECOND
 import json
 import math
@@ -900,8 +900,30 @@ def get_data(results_path, max_real_time=None):
         return data_dct
 
 
+def get_datacollection_version(results_path):
+    """
+    Gets the datacollection version and sets this to qlinklayer.EGPData.version
+    :param results_path:
+    :return:
+    """
+    data_folder_path = os.path.split(results_path)[0]
+    version_path = os.path.join(data_folder_path, "versions.json")
+    if os.path.exists(version_path):
+        with open(version_path, 'r') as f:
+            versions = json.load(f)
+        data_collection_version = versions["datacollection"]
+    else:
+        data_collection_version = 0
+
+    EGPData.version = data_collection_version
+
+
 def analyse_single_file(results_path, no_plot=False, max_real_time=None, save_figs=False, save_output=False,
                         analysis_folder=None):
+
+    # Get the correct datacollection version
+    get_datacollection_version(results_path)
+
     # Initialize the printer
     prnt = printer(results_path=results_path, save_output=save_output, analysis_folder=analysis_folder)
     prnt.print("results_path: {}".format(results_path))
