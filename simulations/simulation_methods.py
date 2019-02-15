@@ -1,18 +1,8 @@
 import netsquid as ns
 import pdb
 import json
-<<<<<<< HEAD
-<<<<<<< HEAD
-import os
 from time import time
-=======
-from time import time, sleep
->>>>>>> Fixed loggin to file and filtering
-=======
-from time import time
->>>>>>> Fixed proper logging settings
 import math
-import logging
 import os
 from os.path import exists
 from easysquid.easynetwork import Connections, setup_physical_network
