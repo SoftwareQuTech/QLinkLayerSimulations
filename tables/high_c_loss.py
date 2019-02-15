@@ -1,18 +1,20 @@
 import numpy as np
 import os
+from argparse import ArgumentParser
 
-from simulations.major_simulation.generate_metrics_file import get_raw_metric_data, get_metrics_from_single_file
+from simulations.major_simulation.generate_metrics_file import get_metrics_from_single_file
 from easysquid.toolbox import logger
 
-def main(c_loss_folder, other_basename):
+
+def main(high_loss_path, other_path, tex_path):
 
     prio_names = ["NL", "CK", "MD"]
 
     c_loss_metrics = {p_loss: {} for p_loss in range(4, 11)}
     diffs = {p_loss: {m: {} for m in ["F", "T", "L", "O"]} for p_loss in range(4, 11)}
 
-    counter = 0
-    for entry in sorted(os.listdir(c_loss_folder)):
+    # Get the metrics from the high loss simulation
+    for entry in sorted(os.listdir(high_loss_path)):
         if entry.endswith(".db"):
             scenario_key = entry.split("_key_")[1].split("_run_")[0]
             if "HIGH_C_LOSS" in scenario_key:
@@ -24,7 +26,6 @@ def main(c_loss_folder, other_basename):
                     prios_in_file = prio_names
                     metric_key = (phys_setup, mix, scheduler)
                 else:
-                    counter += 1
                     for p in prio_names:
                         if p in scenario_key:
                             prio = p
@@ -36,9 +37,8 @@ def main(c_loss_folder, other_basename):
                     prios_in_file = [prio]
                     metric_key = (phys_setup, prio, num_pairs, req_frac, origin, scheduler)
 
-
                 print("Getting loss metric form key {}".format(metric_key))
-                metrics = get_metrics_from_single_file(os.path.join(c_loss_folder, entry))
+                metrics = get_metrics_from_single_file(os.path.join(high_loss_path, entry))
                 total_matrix_time = metrics["TotalMatrixT (s)"] * 1e9
 
                 fidelity = {p: metrics["AvgFid_Prio{}".format(p)] for p in prios_in_file}
@@ -48,11 +48,8 @@ def main(c_loss_folder, other_basename):
 
                 c_loss_metrics[p_loss][metric_key] = {"F": fidelity, "T": throughput, "L": latency, "O": nr_oks, "maxtime": total_matrix_time}
 
-    # print(c_loss_metrics[4][('QLINK_WC_WC_HIGH_C_LOSS_1e-04', 'uniform', 'lowerWFQ')]['O'])
-    # print(c_loss_metrics[4][('QLINK_WC_WC_HIGH_C_LOSS_1e-04', 'uniform', 'lowerWFQ')]["maxtime"])
-    # print(c_loss_metrics)
-    print(counter)
-
+    other_timestamp = os.path.split(other_path)[1].split('_')[0]
+    other_basename = os.path.join(other_path, "{}_key_".format(other_timestamp))
     for p_loss, metric_per_p_loss in c_loss_metrics.items():
         for metric_key, metric_per_key in metric_per_p_loss.items():
             if len(metric_key) == 3:
@@ -68,22 +65,15 @@ def main(c_loss_folder, other_basename):
             print("Getting no loss metrics from file {}".format(no_loss_file))
 
             metrics = get_metrics_from_single_file(no_loss_file, max_simulated_time=metric_per_key["maxtime"])
-            # metrics = get_metrics_from_single_file(no_loss_file)
             total_matrix_time = metrics["TotalMatrixT (s)"] * 1e9
             if total_matrix_time < metric_per_key["maxtime"]:
                 logger.warning("no loss has shorter matrix time")
-
-            # fidelity = {p: metrics["AvgFid_Prio{}".format(p)] for p in prios_in_file}
-            # throughput = {p: metrics["AvgThroughp_Prio{} (1/s)".format(p)] for p in prios_in_file}
-            # latency = {p: metrics["AvgScaledReqLaten_Prio{}_NodeID0 (s)".format(p)] for p in prios_in_file}
-            # nr_oks = {p: metrics["NrOKs_Prio{}".format(p)] for p in prios_in_file}
 
             f_diffs_per_prio = {}
             t_diffs_per_prio = {}
             l_diffs_per_prio = {}
             o_diffs_per_prio = {}
             abs_func = np.abs
-            # abs_func = lambda x: x
             for p in prios_in_file:
                 f1 = metric_per_key["F"][p]
                 f2 = metrics["AvgFid_Prio{}".format(p)]
@@ -110,9 +100,6 @@ def main(c_loss_folder, other_basename):
             diffs[p_loss]["L"][metric_key[1:]] = l_diffs_per_prio
             diffs[p_loss]["O"][metric_key[1:]] = o_diffs_per_prio
 
-
-
-
     latex_begin = r"""
         \begin{tabular}{|l|cccc|}
             \hline
@@ -122,16 +109,7 @@ def main(c_loss_folder, other_basename):
        \end{tabular}"""
 
     latex_middle = ""
-    # for m_k_len, type in zip([2, 5], ["mix", "single"]):
     for m_k_len, type in zip([5], ["single"]):
-        # max_f_diff = -1
-        # max_t_diff = -1
-        # max_l_diff = -1
-        # max_o_diff = -1
-        # max_f_scenario = None
-        # max_t_scenario = None
-        # max_l_scenario = None
-        # max_o_scenario = None
         print("{}: ".format(type))
         for p_loss, diffs_per_p_loss in diffs.items():
             max_m_diffs = {m: -1 for m in ["F", "T", "L", "O"]}
@@ -149,33 +127,42 @@ def main(c_loss_folder, other_basename):
             diffs = [max_m_diffs[m] for m in ["F", "T", "L", "O"]]
             row_name = "\t" * 3 + r"$10^{-" + str(p_loss) + "}$"
             latex_middle += row_name + "".join([" & {0:.3f}".format(d) for d in diffs]) + r" \\ \hline" + "\n"
-            # print("     {}".format(max_m_scenarios))
             print("")
         print("")
 
     latex_code = latex_begin + latex_middle[:-1] + latex_end
     print(latex_code)
-    table_name = "high_c_loss"
-    with open("/Volumes/Untitled/Dropbox/my_linklayer/tables/{}.tex".format(table_name), 'w') as f:
-        f.write(latex_code)
+    if tex_path is not None:
+        table_name = "high_c_loss"
+        with open(os.path.join(tex_path, "{}.tex".format(table_name), 'w')) as f:
+            f.write(latex_code)
 
 
-        # print(diffs[4]["F"][('uniform', 'lowerWFQ')])
-        # print(diffs[4]["T"][('uniform', 'lowerWFQ')])
-        # print(diffs[4]["L"][('uniform', 'lowerWFQ')])
-        # print(diffs[4]["O"][('uniform', 'lowerWFQ')])
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('--high_loss_path', required=True, type=str,
+                        help="Path to the directory containing data for high c loss simulation."
+                             "(Should be */2019-01-28T16:49:28CET_CREATE_and_measure*)")
+    parser.add_argument('--other_path', required=True, type=str,
+                        help="Path to the directory containing data for the no/low loss simulation."
+                             "(Should be */2019-01-16T11:10:28CET_CREATE_and_measure"
+                             "or 2019-01-15T23:56:55CET_CREATE_and_measure)")
+    parser.add_argument('--tex_path', required=False, type=str, default=None,
+                        help="Path to folder where the .tex file containing the data should be saved."
+                             "If not used, the tables are simply printed and not saved.")
 
-
-
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
+    args = parse_args()
+    main(args.high_loss_path, args.other_path, args.tex_path)
     # c_loss_folder = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure"
     # other_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_"
 
-    c_loss_folder = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-28T16:49:28CET_CREATE_and_measure_tmp_at_2019-01-31T15:28:00CET"
-    #run 1
-    other_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_"
+    # c_loss_folder = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-28T16:49:28CET_CREATE_and_measure_tmp_at_2019-01-31T15:28:00CET"
+    # #run 1
+    # other_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_"
     #run 2
     # other_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-15T23:56:55CET_CREATE_and_measure/2019-01-15T23:56:55CET"
-    main(c_loss_folder, other_basename)
+    # main(c_loss_folder, other_basename)
