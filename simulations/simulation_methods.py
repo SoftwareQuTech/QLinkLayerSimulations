@@ -1,6 +1,7 @@
 import netsquid as ns
 import pdb
 import json
+import os
 from time import time
 import math
 import logging
@@ -10,7 +11,7 @@ from easysquid.puppetMaster import PM_Controller
 from easysquid.toolbox import logger
 from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
-    EGPQubErrSequence, EGPLocalQueueSequence, AttemptCollector
+    EGPQubErrSequence, EGPLocalQueueSequence, AttemptCollector, current_version
 from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.specific_scenarios import MixedScenario
@@ -160,11 +161,32 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, num_priorities=1, e
     return egpA, egpB
 
 
+def set_datacollection_version(results_path):
+    """
+    Writes the current datacollection version to a file.
+    :param results_path:
+    :return:
+    """
+    data_folder_path = os.path.split(results_path)[0]
+    version_path = os.path.join(data_folder_path, "versions.json")
+    if os.path.exists(version_path):
+        with open(version_path, 'r') as f:
+            versions = json.load(f)
+    else:
+        versions = {}
+    versions["datacollection"] = current_version
+    with open(version_path, 'w') as f:
+        json.dump(versions, f)
+
+
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
 def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name=None, config=None, num_priorities=1,
                    egp_queue_weights=None, request_cycle=0, max_sim_time=float('inf'), max_wall_time=float('inf'),
                    max_mhp_cycle=float('inf'), enable_pdb=False, t0=0, t_cycle=0, alphaA=0.1, alphaB=0.1,
                    wall_time_per_timestep=60, save_additional_data=True, collect_queue_data=False):
+
+    # Set the current datacollection version
+    set_datacollection_version(results_path)
 
     # Save additional data
     if save_additional_data:
