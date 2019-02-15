@@ -11,7 +11,7 @@ from xlsxwriter.workbook import Workbook
 from collections import defaultdict
 
 from easysquid.toolbox import logger
-from simulations.analysis_sql_data import parse_table_data_from_sql, calc_fidelity, parse_raw_queue_data
+from simulations.analysis_sql_data import parse_table_data_from_sql, calc_fidelity, parse_raw_queue_data, get_datacollection_version
 from qlinklayer.datacollection import EGPCreateDataPoint, EGPOKDataPoint, EGPStateDataPoint, EGPQubErrDataPoint, EGPErrorDataPoint
 from qlinklayer.egp import NodeCentricEGP
 
@@ -260,6 +260,10 @@ def add_metric_data(metrics, metric_name, avg_std_num):
 
 
 def get_raw_metric_data(filename, max_simulated_time=None):
+
+    # Get the correct datacollection version
+    get_datacollection_version(filename)
+
     creates_and_oks_by_create_id, ok_keys_by_timestamp = sort_data_by_request(filename, max_simulated_time=max_simulated_time)
 
     ##########################

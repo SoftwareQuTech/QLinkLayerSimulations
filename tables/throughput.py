@@ -1,5 +1,6 @@
 import os
 import csv
+from argparse import ArgumentParser
 
 
 phys_setup_2_latex = {
@@ -20,7 +21,8 @@ scheduler_2_latex = {
     "higherWFQ": r"\textproc{HigherWFQ}"
 }
 
-def main(results_folder):
+
+def main(results_folder, tex_path=None):
     latex_begin = r"""
         \begin{tabular}{|l|ccc|}
             \hline
@@ -43,7 +45,6 @@ def main(results_folder):
                     phys_setup, rest = scenario_name.split("_mix_")
                     mix, scheduler = rest.split("_weights_")
                     if scheduler != "lowerWFQ":
-                        # print("{}_{}_{} with {}".format(phys_setup, mix, scheduler, throughputs))
                         row_name = "\t" * 3 + r"{}\_{}\_{}".format(phys_setup_2_latex[phys_setup], mix_2_latex[mix], scheduler_2_latex[scheduler])
                         th_latex = []
                         for th in throughputs:
@@ -58,22 +59,27 @@ def main(results_folder):
                                     th_latex.append("{0:.3f}".format(th_float))
                         latex_middle += row_name + "".join([" & {}".format(th) for th in th_latex]) + r" \\ \hline" + "\n"
 
-
     latex_code = latex_begin + latex_middle[:-1] + latex_end
-    table_name = "throughput"
-    with open("/Volumes/Untitled/Dropbox/my_linklayer/tables/{}.tex".format(table_name), 'w') as f:
-        f.write(latex_code)
     print(latex_code)
+    if tex_path is not None:
+        table_name = "throughput"
+        with open(os.path.join(tex_path, "{}.tex".format(table_name)), 'w') as f:
+            f.write(latex_code)
+
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('--results_path', required=True, type=str,
+                        help="Path to directory containing data for simulation run 1."
+                             "(Should be */2019-01-16T11:10:28CET_CREATE_and_measure"
+                             "or 2019-01-15T23:56:55CET_CREATE_and_measure)")
+    parser.add_argument('--tex_path', required=False, type=str, default=None,
+                        help="Path to folder where the .tex file containing the data should be saved."
+                             "If not used, the tables are simply printed and not saved.")
+
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    run = 1
-
-    if run == 1:
-        results_folder = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure"
-    elif run == 2:
-        results_folder = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-15T23:56:55CET_CREATE_and_measure"
-    else:
-        ValueError("Unkown run = {}".format(run))
-
-    main(results_folder)
+    args = parse_args()
+    main(args.results_path, args.tex_path)

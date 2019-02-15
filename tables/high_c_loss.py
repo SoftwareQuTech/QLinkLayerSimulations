@@ -157,12 +157,3 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     main(args.high_loss_path, args.other_path, args.tex_path)
-    # c_loss_folder = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure"
-    # other_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_"
-
-    # c_loss_folder = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-28T16:49:28CET_CREATE_and_measure_tmp_at_2019-01-31T15:28:00CET"
-    # #run 1
-    # other_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_"
-    #run 2
-    # other_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-15T23:56:55CET_CREATE_and_measure/2019-01-15T23:56:55CET"
-    # main(c_loss_folder, other_basename)
