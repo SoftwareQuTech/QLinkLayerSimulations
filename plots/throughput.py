@@ -1,6 +1,7 @@
-import sys
+import os
 import json
 from matplotlib import pyplot as plt
+from argparse import ArgumentParser
 
 from simulations.major_simulation.generate_metrics_file import parse_thoughput, sort_data_by_request
 
@@ -13,6 +14,7 @@ def get_max_time(results_file):
     total_matrix_time = additional_data["total_real_time"]
 
     return total_matrix_time
+
 
 def sweeeping_average(datapoints, nr_points=1):
     averaged_datapoints = []
@@ -31,13 +33,9 @@ def plot_throughput(results_file, last_plot=False, max_x=10, max_y=1380):
 
     prio_names = {0: "NL", 1: "CK", 2: "MD"}
 
-    markers = ["<", ">", "*"]
     linestyles = ["-", "--", ":"]
     colors = ['C0', 'C1', 'C2']
 
-    # if max_x == 800:
-    #     import pdb
-    #     pdb.set_trace()
     for prio in range(2, -1, -1):
         throughputs = throughputs_per_prio[prio]
         times, tps = zip(*throughputs)
@@ -50,12 +48,10 @@ def plot_throughput(results_file, last_plot=False, max_x=10, max_y=1380):
             avg_tps = sweeeping_average(tps, nr_points=1)
             plt.plot(times, avg_tps, label=prio_names[prio], linestyle=linestyles[prio], color=colors[prio])
 
-    # plt.yscale('log')
     plt.xlim(0, max_x)
     plt.ylim(0, max_y)
     if last_plot:
         plt.xlabel("Simulated time (s)")
-    # plt.ylabel("Throughput (1/s)")
     if not last_plot:
         plt.legend(loc='upper left')
     scenario_key = results_file.split("_key_")[1].split("_run_")[0]
@@ -66,12 +62,10 @@ def plot_throughput(results_file, last_plot=False, max_x=10, max_y=1380):
     ax = plt.gca().axes
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
     plt.text(0.99, 0.95, scheduler, horizontalalignment='right', verticalalignment='top', transform=ax.transAxes, bbox=props)
-    # plt.title("Scheduler: {}".format(scheduler))
     scale_factor = max_x / max_y * 0.29
     ax.set_aspect(scale_factor)
     if not last_plot:
-        # plt.gca().axes.get_xaxis().set_visible(False)
-        plt.gca().axes.set_xticklabels([])
+        ax.set_xticklabels([])
         tick_pos = plt.yticks()[0]
         tick_names = [int(pos) for pos in tick_pos]
         plt.yticks(tick_pos, tick_names)
@@ -86,7 +80,7 @@ def plot_throughput(results_file, last_plot=False, max_x=10, max_y=1380):
                  transform=ax.transAxes)
 
 
-def main(results_files, max_x=1380, max_y=10, name=None, save_dir=None):
+def plot_throughput_compare_scheduling(results_files, max_x=1380, max_y=10, name=None, save_dir=None):
     num_files = len(results_files)
     plt.rcParams.update({'font.size': 12})
     for i, results_file in enumerate(results_files):
@@ -100,18 +94,7 @@ def main(results_files, max_x=1380, max_y=10, name=None, save_dir=None):
     # plt.show()
     plt.close()
 
-if __name__ == '__main__':
-    # results_files = sys.argv[1:]
-
-    # Main text
-    # results_files = [
-    #     "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_uniform_weights_FIFO_run_0.db",
-    #     "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET_key_QLINK_WC_WC_mix_uniform_weights_higherWFQ_run_0.db"
-    # ]
-    # name = "QL2020_Uniform"
-    # main(results_files, name=name)
-
-    # Appendix
+def main(runs, plot_dirs):
     mix_to_mix_in_data = {"Uniform": "uniform",
                           "MoreNL": "moreNL",
                           "MoreCK": "moreCK",
@@ -119,7 +102,7 @@ if __name__ == '__main__':
                           "NoNLMoreCK": "noNLmoreCK",
                           "NoNLMoreMD": "noNLmoreMD",
                           }
-    for run in [1, 2]:
+    for run_dir, save_dir in zip(runs, plot_dirs):
         for phys_setup in ["QL2020", "Lab"]:
             mixes = ["Uniform", "MoreNL", "MoreCK", "MoreMD", "NoNLMoreCK", "NoNLMoreMD"]
             if phys_setup == "QL2020":
@@ -135,21 +118,35 @@ if __name__ == '__main__':
                 name = "{}_{}".format(phys_setup, mix)
                 mix_in_data = mix_to_mix_in_data[mix]
 
-                if run == 1:
-                    ##########
-                    # Run 1
-                    ########
-                    results_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-16T11:10:28CET_CREATE_and_measure/2019-01-16T11:10:28CET"
-                    save_dir = "/Volumes/Untitled/Dropbox/my_linklayer/plots/run1/"
-                elif run == 2:
-                    ##########
-                    # Run 2
-                    ########
-                    results_basename = "/Users/adahlberg/Documents/QLinkLayer/simulations/major_simulation/2019-01-15T23:56:55CET_CREATE_and_measure/2019-01-15T23:56:55CET"
-                    save_dir = "/Volumes/Untitled/Dropbox/my_linklayer/plots/run2/"
-                else:
-                    raise ValueError("Unknown run = {}".format(run))
+                dir_name = os.path.split(run_dir)[1]
+                timestamp = dir_name.split('_')[0]
+                results_basename = os.path.join(run_dir, timestamp)
 
                 results_files = [results_basename + "_key_{}_mix_{}_weights_{}_run_0.db".format(phys_setup_in_data, mix_in_data, sched) for sched in ["FIFO", "higherWFQ"]]
+
                 print(name)
-                main(results_files, max_x=max_x, max_y=max_y, name=name, save_dir=save_dir)
+                plot_throughput_compare_scheduling(results_files, max_x=max_x, max_y=max_y, name=name, save_dir=save_dir)
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('--run1', required=True, type=str,
+                        help="Path to directory containing data for simulation run 1."
+                             "(Should be */2019-01-16T11:10:28CET_CREATE_and_measure)")
+    parser.add_argument('--run2', required=True, type=str,
+                        help="Path to directory containing data for simulation run 2."
+                             "(Should be */2019-01-15T23:56:55CET_CREATE_and_measure)")
+    parser.add_argument('--plots_run1', required=False, type=str, default=None,
+                        help="Path to directory where the plots for run 1 should be saved."
+                             "If not used the plots are simply shown and not saved.")
+    parser.add_argument('--plots_run2', required=False, type=str, default=None,
+                        help="Path to directory where the plots for run 2 should be saved."
+                             "If not used the plots are simply shown and not saved.")
+
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = parse_args()
+    runs = [args.run1, args.run2]
+    plot_dirs = [args.plots_run1, args.plots_run2]
+    main(runs, plot_dirs)
