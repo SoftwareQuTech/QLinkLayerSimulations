@@ -177,20 +177,19 @@ def set_datacollection_version(results_path):
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name=None, config=None, num_priorities=1,
-                   egp_queue_weights=None, request_cycle=0, max_sim_time=float('inf'), max_wall_time=float('inf'),
-                   max_mhp_cycle=float('inf'), enable_pdb=False, t0=0, t_cycle=0, alphaA=0.1, alphaB=0.1,
-                   wall_time_per_timestep=60, save_additional_data=True, collect_queue_data=False,
-                   log_to_file=True, log_level=None, filter_debug_logging=True, log_to_console=False):
+def run_simulation(tmp_filebasename, final_filebasename, sim_dir, request_paramsA, request_paramsB, name=None,
+                   config=None, num_priorities=1, egp_queue_weights=None, request_cycle=0, max_sim_time=float('inf'),
+                   max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, t0=0, t_cycle=0,
+                   alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True,
+                   collect_queue_data=False, log_to_file=True, log_level=None, filter_debug_logging=True,
+                   log_to_console=False):
 
     # Set the current datacollection version
-    set_datacollection_version(results_path)
+    set_datacollection_version(tmp_filebasename)
 
     # Setup logging
     if log_to_file:
-        base_name = os.path.split(results_path)[1]
-        timestamp = base_name.split("_key_")[0]
-        log_file = "{}/{}_CREATE_and_measure/{}_log.out".format(sim_dir, timestamp, base_name)
+        log_file = "{}_log.out".format(final_filebasename)
         if log_level is not None:
             setup_logging(log_to_file=log_file, file_log_level=log_level, log_to_console=log_to_console)
         else:
@@ -249,7 +248,7 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                                                     additional_data)
 
     # Hook up data collectors to the scenarios
-    collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, results_path,
+    collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, tmp_filebasename,
                                        collect_queue_data=collect_queue_data)
 
     # Start the simulation
@@ -329,7 +328,7 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                     additional_data["p_succ"] = midpoint._nr_of_succ / midpoint._nr_of_meas
                 else:
                     additional_data["p_succ"] = None
-                with open(results_path + "_additional_data.json", 'w') as json_file:
+                with open(tmp_filebasename + "_additional_data.json", 'w') as json_file:
                     json.dump(additional_data, json_file, indent=4)
 
             # Commit the data collected in the data-sequences
@@ -340,15 +339,15 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                 logger.info("Max wall time reached, ending simulation.")
                 break
 
-            if filter_debug_logging:
-                clean_log_files(results_path, sim_dir)
+            if log_to_file and filter_debug_logging:
+                clean_log_files(log_file)
 
         stop_time = time()
         logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time,
                                                                                              sim_time() / SECOND))
 
-        if filter_debug_logging:
-            clean_log_files(results_path, sim_dir)
+        if log_to_file and filter_debug_logging:
+            clean_log_files(log_file)
 
     # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
     except Exception:
@@ -360,10 +359,7 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
             pdb.set_trace()
 
 
-def clean_log_files(results_path, sim_dir, block_size=1000):
-    base_name = os.path.split(results_path)[1]
-    timestamp = base_name.split("_key_")[0]
-    log_file = "{}/{}_CREATE_and_measure/{}_log.out".format(sim_dir, timestamp, base_name)
+def clean_log_files(log_file, block_size=1000):
     reduced_log_file = "{}_reduced.out".format(log_file[:-4])
 
     if not os.path.exists(log_file):

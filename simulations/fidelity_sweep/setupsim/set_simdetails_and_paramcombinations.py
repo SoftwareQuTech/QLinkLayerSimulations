@@ -2,24 +2,35 @@ import os
 
 import numpy as np
 
-import qlinklayer
-import SimulaQron.cqc
 from qlinklayer.feu import estimate_success_probability, get_assigned_brigh_state_population
 
 #######################
 # Mandatory paramaters
 #######################
 
-description_string = "Simulation of EGP under varying request frequencies"
-number_of_runs = 30
-outputdirname = "req_freq_sweep"
+description = "Simulation of EGP under varying request frequencies"
+num_runs = 1
+sim_name = "fidelity_sweep"
 
-# Get paths to QLinkLayer and SimulaQron folders
-path_to_qlinklayer___init__ = os.path.abspath(qlinklayer.__file__)
-path_to_qlinklayer = "/".join(path_to_qlinklayer___init__.split("/")[:-2])
+constant_params = {
+    "max_sim_time": 0,
+    # "max_wall_time": 24 * 60 * 60 - 2 * 60,
+    "max_wall_time": 10 * 60,
+    "max_mhp_cycle": 1000,
+    "t0": 0,
+    "enable_pdb": False,
+    "wall_time_per_timestep": 1 * 60,
+    "save_additional_data": True,
+    "collect_queue_data": True,
+    "request_cycle": 0,
+    "alphaA": list(np.linspace(0, 0.5, 100)),
+    "alphaB": list(np.linspace(0, 0.5, 100)),
+    "log_to_file": True,
+    "log_level": 10,
+    "filter_debug_logging": True,
+    "log_to_console": False
+}
 
-path_to_cqc___init__ = os.path.abspath(SimulaQron.cqc.__file__)
-path_to_SimulaQron = "/".join(path_to_cqc___init__.split("/")[:-2])
 
 #########################
 # Optional parameters
@@ -78,20 +89,6 @@ def single_type_request_params(type, config_file, origin_prob, p_fraction, num_p
 
     return request_params
 
-constant_params = {
-    "max_sim_time": 0,
-    # "max_wall_time": 24 * 60 * 60 - 2 * 60,
-    "max_wall_time": 10 * 60,
-    "max_mhp_cycle": 0,
-    "t0": 0,
-    "enable_pdb": False,
-    "wall_time_per_timestep": 1 * 60,
-    "save_additional_data": True,
-    "collect_queue_data": True,
-    "request_cycle": 0,
-    "alphaA": list(np.linspace(0, 0.5, 100)),
-    "alphaB": list(np.linspace(0, 0.5, 100))
-}
 
 config_dir = "setupsim/config"
 
@@ -124,39 +121,42 @@ for type in ["MD", "NL"]:
         run_name = "QL2020_{}_req_frac_{}_min_fid_{}_FCFS".format(type, p_fraction_name, min_fid_name)
         paramcombinations[run_name] = simulation_run_params
 
-print(len(paramcombinations))
+print(len(paramcombinations) * num_runs)
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #
 ################################################################
 
 import os
-import importlib.util
+from easysquid.simulations import create_simdetails
+
+
+def _get_sim_dir():
+    path_to_here = os.path.dirname(os.path.abspath(__file__))
+    sim_dir = os.path.split(path_to_here)[0]
+    return sim_dir
 
 
 def main(ask_for_input=True):
-    abspath_to_this_file = os.path.abspath(__file__)
-    abspath_to_create_file = "/".join(
-        abspath_to_this_file.split("/")[:-2]) + "/readonly/create_simdetails_and_paramcombinations.py"
-
-    # Load the functions from the file ../readyonly/create_simdetails_and_paramcombinations.py
-    spec = importlib.util.spec_from_file_location("module.name", abspath_to_create_file)
-    create_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(create_module)
+    """
+    This function creates the collection of combinations of parameters that will
+    be inputted into the simulation (`opt_params`), if these have not been provided
+    already in the parameter `paramcombinations`. Subsequently produces several
+    files that together contain all details for the simulations to run (to be precise:
+    `simdetails.ini`, `paramcombinations.json` and `paramset.csv`).
+    """
+    sim_dir = _get_sim_dir()
     try:
         paramcombinations
     except NameError:
-        create_module.setup_sim_parameters(opt_params, description_string, number_of_runs, outputdirname,
-                                           make_paramcombinations=True, ask_for_input=ask_for_input,
-                                           QLINKLAYERDIR=path_to_qlinklayer,
-                                           SIMULAQRONDIR=path_to_SimulaQron)
+        create_simdetails.setup_sim_parameters(opt_params, sim_dir, description, num_runs, sim_name,
+                                               make_paramcombinations=True, ask_for_input=ask_for_input)
         return
 
-    create_module.setup_sim_parameters(paramcombinations, description_string, number_of_runs, outputdirname,
-                                       make_paramcombinations=False, ask_for_input=ask_for_input,
-                                       QLINKLAYERDIR=path_to_qlinklayer,
-                                       SIMULAQRONDIR=path_to_SimulaQron)
+    create_simdetails.setup_sim_parameters(paramcombinations, sim_dir, description, num_runs, sim_name,
+                                           make_paramcombinations=False, ask_for_input=ask_for_input)
 
 
 if __name__ == '__main__':
     main()
+

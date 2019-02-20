@@ -14,8 +14,9 @@ import easysquid
 
 path_to_this_file = os.path.realpath(__file__)
 path_to_this_folder = "/".join(path_to_this_file.split("/")[:-1])
-path_to_this_config_folder = os.path.join(path_to_this_folder, "create_measure_simulation/setupsim/config")
-other_folders = [os.path.join(path_to_this_folder, conf_folder) for conf_folder in ["major_simulation/setupsim/config"]]
+path_to_one_config_folder = os.path.join(path_to_this_folder, "create_measure_simulation/setupsim/config")
+other_folders = ["major_simulation", "many_simulations", "request_freq_sweep", "fidelity_sweep"]
+path_to_other_folders = [os.path.join(path_to_this_folder, folder, "setupsim", "config") for folder in other_folders]
 
 NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibre_connection"
 
@@ -28,7 +29,7 @@ def _remove_current_files(path):
 
 
 def copy_files_from_easysquid():
-    _remove_current_files(path_to_this_config_folder)
+    _remove_current_files(path_to_one_config_folder)
 
     path_to_easysquid___init__ = os.path.abspath(easysquid.__file__)
     path_to_easysquid = "/".join(path_to_easysquid___init__.split("/")[:-2])
@@ -36,7 +37,7 @@ def copy_files_from_easysquid():
     path_to_network_configs = os.path.join(path_to_easysquid, "config/networks/NV")
     for folder in os.listdir(path_to_network_configs):
         src = os.path.join(path_to_network_configs, folder)
-        dst = os.path.join(path_to_this_config_folder, folder)
+        dst = os.path.join(path_to_one_config_folder, folder)
         shutil.copytree(src, dst)
 
 
@@ -48,12 +49,12 @@ def copy_qlink_wc_wc_high_loss():
     qlink_path = "qlink/networks_with_cavity_with_conversion.json"
     qlink_high_c_loss_path = "qlink/networks_with_cavity_with_conversion_high_c_loss.json"
     easysquid_qlink_wc_wc_path = os.path.join(path_to_network_configs, qlink_path)
-    qlinklayer_qlink_wc_wc_path = os.path.join(path_to_this_config_folder, qlink_high_c_loss_path)
+    qlinklayer_qlink_wc_wc_path = os.path.join(path_to_one_config_folder, qlink_high_c_loss_path)
     shutil.copy(easysquid_qlink_wc_wc_path, qlinklayer_qlink_wc_wc_path)
 
 
 def change_connnection_type():
-    for dirpath, dirname, filenames in os.walk(path_to_this_config_folder):
+    for dirpath, dirname, filenames in os.walk(path_to_one_config_folder):
         for filename in filenames:
             file_path = os.path.join(dirpath, filename)
 
@@ -127,11 +128,11 @@ def _get_qpd_config_name_of_qpd(config_dct):
 
 def make_no_loss_and_no_noise_files():
     # Create folder
-    no_noise_folder = os.path.join(path_to_this_config_folder, "no_noise")
+    no_noise_folder = os.path.join(path_to_one_config_folder, "no_noise")
     os.mkdir(no_noise_folder)
 
     # Create no losses file
-    src = os.path.join(path_to_this_config_folder, "lab", "networks_no_cavity_no_conversion.json")
+    src = os.path.join(path_to_one_config_folder, "lab", "networks_no_cavity_no_conversion.json")
     dst = os.path.join(no_noise_folder, "no_losses.json")
     shutil.copyfile(src, dst)
     _update_no_losses_file(dst)
@@ -215,8 +216,8 @@ def add_loss_qlink_wc_wc(p_c_loss):
     elif isinstance(p_c_loss, float):
         qlink_wc_wc_path = "qlink/networks_with_cavity_with_conversion.json"
         qlink_high_c_loss_path = "qlink/networks_with_cavity_with_conversion_high_c_loss_{:.0e}.json".format(p_c_loss)
-        qlinklayer_qlink_wc_wc_path = os.path.join(path_to_this_config_folder, qlink_wc_wc_path)
-        qlinklayer_qlink_wc_wc_high_c_loss_path = os.path.join(path_to_this_config_folder, qlink_high_c_loss_path)
+        qlinklayer_qlink_wc_wc_path = os.path.join(path_to_one_config_folder, qlink_wc_wc_path)
+        qlinklayer_qlink_wc_wc_high_c_loss_path = os.path.join(path_to_one_config_folder, qlink_high_c_loss_path)
 
         # Read config file
         with open(qlinklayer_qlink_wc_wc_path, 'r') as f:
@@ -241,10 +242,10 @@ def add_loss_qlink_wc_wc(p_c_loss):
 
 
 def copy_files_to_other_folders():
-    for other_folder in other_folders:
+    for other_folder in path_to_other_folders:
         _remove_current_files(other_folder)
-        for folder in os.listdir(path_to_this_config_folder):
-            src = os.path.join(path_to_this_config_folder, folder)
+        for folder in os.listdir(path_to_one_config_folder):
+            src = os.path.join(path_to_one_config_folder, folder)
             dst = os.path.join(other_folder, folder)
             shutil.copytree(src, dst)
 

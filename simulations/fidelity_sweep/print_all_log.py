@@ -1,6 +1,6 @@
-import json
 import sys
 import os
+
 
 def main(results_folder):
     to_avoid = ["INFO", "FutureWarning", "from ._conv import register_converters"]

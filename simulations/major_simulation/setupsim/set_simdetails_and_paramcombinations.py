@@ -1,22 +1,14 @@
 import os
 
-import qlinklayer
-from simulaqron.toolbox import get_simulaqron_path
 from qlinklayer.feu import estimate_success_probability, get_assigned_brigh_state_population
 
 #######################
 # Mandatory paramaters
 #######################
 
-description_string = "Simulation of EGP under CREATE+measure scenario"
-number_of_runs = 1
-outputdirname = "CREATE_and_measure"
-
-# Get paths to QLinkLayer and SimulaQron folders
-path_to_qlinklayer___init__ = os.path.abspath(qlinklayer.__file__)
-path_to_qlinklayer = "/".join(path_to_qlinklayer___init__.split("/")[:-2])
-
-path_to_SimulaQron = get_simulaqron_path.main()
+description = "Simulation of EGP"
+num_runs = 1
+sim_name = "major_simulation"
 
 #########################
 # Optional parameters
@@ -33,7 +25,11 @@ constant_params = {
     "collect_queue_data": True,
     "request_cycle": 0,
     "alphaA": [0.05, 0.1, 0.3],
-    "alphaB": [0.05, 0.1, 0.3]
+    "alphaB": [0.05, 0.1, 0.3],
+    "log_to_file": True,
+    "log_level": 10,
+    "filter_debug_logging": True,
+    "log_to_console": False
 }
 
 config_dir = "setupsim/config"
@@ -249,39 +245,42 @@ for config_name, config in configs.items():
         run_name = "{}_mix_{}_weights_{}".format(config_name, mix_name, weights_name)
         paramcombinations[run_name] = simulation_run_params
 
-print(len(paramcombinations))
+print(len(paramcombinations) * num_runs)
 
 ################################################################
 #           BELOW HERE SHOULD NOT BE CHANGED                   #
 ################################################################
 
 import os
-import importlib.util
+from easysquid.simulations import create_simdetails
+
+
+def _get_sim_dir():
+    path_to_here = os.path.dirname(os.path.abspath(__file__))
+    sim_dir = os.path.split(path_to_here)[0]
+    return sim_dir
 
 
 def main(ask_for_input=True):
-    abspath_to_this_file = os.path.abspath(__file__)
-    abspath_to_create_file = "/".join(
-        abspath_to_this_file.split("/")[:-2]) + "/readonly/create_simdetails_and_paramcombinations.py"
-
-    # Load the functions from the file ../readyonly/create_simdetails_and_paramcombinations.py
-    spec = importlib.util.spec_from_file_location("module.name", abspath_to_create_file)
-    create_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(create_module)
+    """
+    This function creates the collection of combinations of parameters that will
+    be inputted into the simulation (`opt_params`), if these have not been provided
+    already in the parameter `paramcombinations`. Subsequently produces several
+    files that together contain all details for the simulations to run (to be precise:
+    `simdetails.ini`, `paramcombinations.json` and `paramset.csv`).
+    """
+    sim_dir = _get_sim_dir()
     try:
         paramcombinations
     except NameError:
-        create_module.setup_sim_parameters(opt_params, description_string, number_of_runs, outputdirname,
-                                           make_paramcombinations=True, ask_for_input=ask_for_input,
-                                           QLINKLAYERDIR=path_to_qlinklayer,
-                                           SIMULAQRONDIR=path_to_SimulaQron)
+        create_simdetails.setup_sim_parameters(opt_params, sim_dir, description, num_runs, sim_name,
+                                               make_paramcombinations=True, ask_for_input=ask_for_input)
         return
 
-    create_module.setup_sim_parameters(paramcombinations, description_string, number_of_runs, outputdirname,
-                                       make_paramcombinations=False, ask_for_input=ask_for_input,
-                                       QLINKLAYERDIR=path_to_qlinklayer,
-                                       SIMULAQRONDIR=path_to_SimulaQron)
+    create_simdetails.setup_sim_parameters(paramcombinations, sim_dir, description, num_runs, sim_name,
+                                           make_paramcombinations=False, ask_for_input=ask_for_input)
 
 
 if __name__ == '__main__':
     main()
+
