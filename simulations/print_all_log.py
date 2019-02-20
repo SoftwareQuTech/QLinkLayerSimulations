@@ -1,8 +1,15 @@
-import json
-import sys
 import os
+from argparse import ArgumentParser
+
 
 def main(results_folder):
+    """
+    This a very simple script to print warning and error messages from the log files of a simulation.
+    Adjust the 'to_avoid' and 'to_include' variables to change which lines to include.
+    :param results_folder: str
+        The path to the results folder containing the log files (ending with log.reduced.out).
+    :return: None
+    """
     to_avoid = ["INFO", "FutureWarning", "from ._conv import register_converters"]
     to_include = ["WARNING", "ERROR"]
     for filename in os.listdir(results_folder):
@@ -30,6 +37,15 @@ def main(results_folder):
                 print("")
                 print("")
 
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('--results_folder', required=True, type=str,
+                        help="The path to the results folder to consider.")
+
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
-    results_folder = sys.argv[1]
-    main(results_folder)
+    args = parse_args()
+    main(**vars(args))

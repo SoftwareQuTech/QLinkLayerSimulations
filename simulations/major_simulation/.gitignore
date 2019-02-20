@@ -15,4 +15,4 @@ slurm*.out
 setupsim/simdetails.ini
 setupsim/paramcombinations.json
 setupsim/paramset.csv
-config/*
+setupsim/config/*

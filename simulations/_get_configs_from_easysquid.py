@@ -24,8 +24,9 @@ NODE_CENTRIC_HERALDED_FIBRE_CONNECTION = "node_centric_heralded_fibre_connection
 def _remove_current_files(path):
     for folder in os.listdir(path):
         dst = os.path.join(path, folder)
-        if os.path.exists(dst):
-            shutil.rmtree(dst)
+        if os.path.isdir(dst):
+            if os.path.exists(dst):
+                shutil.rmtree(dst)
 
 
 def copy_files_from_easysquid():
@@ -56,53 +57,54 @@ def copy_qlink_wc_wc_high_loss():
 def change_connnection_type():
     for dirpath, dirname, filenames in os.walk(path_to_one_config_folder):
         for filename in filenames:
-            file_path = os.path.join(dirpath, filename)
+            if filename.endswith(".json"):
+                file_path = os.path.join(dirpath, filename)
 
-            # Read config file
-            with open(file_path, 'r') as f:
-                config_dct = json.load(f)
+                # Read config file
+                with open(file_path, 'r') as f:
+                    config_dct = json.load(f)
 
-            # Set electron T2 to zero
-            for q in config_dct["qpd_config"]["default"]["parameters"]["qubits"]:
-                if q["qubit_type"] == "electron":
-                    q["noise_model"]["T1T2"]["T2"] = 1000000.0
+                # Set electron T2 to zero
+                for q in config_dct["qpd_config"]["default"]["parameters"]["qubits"]:
+                    if q["qubit_type"] == "electron":
+                        q["noise_model"]["T1T2"]["T2"] = 1000000.0
 
-            # Get the connection config name of the mhp connection
-            conn_config_name = _get_conn_config_name_of_mhp_conn(config_dct)
+                # Get the connection config name of the mhp connection
+                conn_config_name = _get_conn_config_name_of_mhp_conn(config_dct)
 
-            # Update the type to use node centric heralded fibre connection
-            config_dct["conn_configs"][conn_config_name]["type"] = NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
+                # Update the type to use node centric heralded fibre connection
+                config_dct["conn_configs"][conn_config_name]["type"] = NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
 
-            # Add virtual delay to shorter length fibre to  make sure messages delivered in same mhp cycle
-            cycle_period = config_dct["conn_configs"][conn_config_name]["parameters"].get("t_cycle", None)
-            if cycle_period is None:
-                device_config = config_dct["qpd_config"]["default"]
-                photon_time = device_config["parameters"]["photon_emission"]["photon_emission_delay"]
-                meas_time = device_config["parameters"]["gates"]["electron_gates"]["measurement_op"]["operation_time"]
-                time_window = config_dct["conn_configs"][conn_config_name]["parameters"]["time_window"]
-                cycle_period = max(photon_time + meas_time, time_window)
-                cycle_period += cycle_period / 10
+                # Add virtual delay to shorter length fibre to  make sure messages delivered in same mhp cycle
+                cycle_period = config_dct["conn_configs"][conn_config_name]["parameters"].get("t_cycle", None)
+                if cycle_period is None:
+                    device_config = config_dct["qpd_config"]["default"]
+                    photon_time = device_config["parameters"]["photon_emission"]["photon_emission_delay"]
+                    meas_time = device_config["parameters"]["gates"]["electron_gates"]["measurement_op"]["operation_time"]
+                    time_window = config_dct["conn_configs"][conn_config_name]["parameters"]["time_window"]
+                    cycle_period = max(photon_time + meas_time, time_window)
+                    cycle_period += cycle_period / 10
 
-            lengthA = config_dct["conn_configs"][conn_config_name]["parameters"]["lengthA"]
-            lengthB = config_dct["conn_configs"][conn_config_name]["parameters"]["lengthB"]
-            c = config_dct["conn_configs"][conn_config_name]["parameters"]["c"]
-            delayA = 1e9 * lengthA / c
-            delayB = 1e9 * lengthB / c
-            delay_max, delay_min = max(delayA, delayB), min(delayA, delayB)
-            virtual_delay = (2 * delay_max - delay_min)
-            delay_spec = [delay_min, virtual_delay]
-            if lengthA < lengthB:
-                config_dct["conn_configs"][conn_config_name]["parameters"]["delay_A"] = delay_spec
-            elif lengthB < lengthA:
-                config_dct["conn_configs"][conn_config_name]["parameters"]["delay_B"] = delay_spec
+                lengthA = config_dct["conn_configs"][conn_config_name]["parameters"]["lengthA"]
+                lengthB = config_dct["conn_configs"][conn_config_name]["parameters"]["lengthB"]
+                c = config_dct["conn_configs"][conn_config_name]["parameters"]["c"]
+                delayA = 1e9 * lengthA / c
+                delayB = 1e9 * lengthB / c
+                delay_max, delay_min = max(delayA, delayB), min(delayA, delayB)
+                virtual_delay = (2 * delay_max - delay_min)
+                delay_spec = [delay_min, virtual_delay]
+                if lengthA < lengthB:
+                    config_dct["conn_configs"][conn_config_name]["parameters"]["delay_A"] = delay_spec
+                elif lengthB < lengthA:
+                    config_dct["conn_configs"][conn_config_name]["parameters"]["delay_B"] = delay_spec
 
-            # Update the comment in the file
-            config_dct["AutoGenerate"].append("This file was then later modified by /path/to/QLinkLayer/simulations/"
-                                              "_get_configs_from_easysquid.py")
+                # Update the comment in the file
+                config_dct["AutoGenerate"].append("This file was then later modified by /path/to/QLinkLayer/simulations/"
+                                                  "_get_configs_from_easysquid.py")
 
-            # Write to file again
-            with open(file_path, 'w') as f:
-                json.dump(config_dct, f, indent=2)
+                # Write to file again
+                with open(file_path, 'w') as f:
+                    json.dump(config_dct, f, indent=2)
 
 
 def _get_conn_config_name_of_mhp_conn(config_dct):
@@ -246,8 +248,9 @@ def copy_files_to_other_folders():
         _remove_current_files(other_folder)
         for folder in os.listdir(path_to_one_config_folder):
             src = os.path.join(path_to_one_config_folder, folder)
-            dst = os.path.join(other_folder, folder)
-            shutil.copytree(src, dst)
+            if os.path.isdir(src):
+                dst = os.path.join(other_folder, folder)
+                shutil.copytree(src, dst)
 
 
 def main():
