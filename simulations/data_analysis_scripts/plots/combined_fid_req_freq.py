@@ -2,7 +2,7 @@ import os
 import numpy as np
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
-from simulations.request_freq_sweep.generate_metrics_file import get_metrics_from_single_file
+from simulations.generate_metrics_file import get_metrics_from_single_file
 
 
 def collect_req_freq_data(results_folders):

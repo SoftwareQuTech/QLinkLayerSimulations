@@ -3,7 +3,7 @@ import json
 from matplotlib import pyplot as plt
 from argparse import ArgumentParser
 
-from simulations.major_simulation.generate_metrics_file import parse_thoughput, sort_data_by_request
+from simulations.generate_metrics_file import parse_thoughput, sort_data_by_request
 
 
 def get_max_time(results_file):

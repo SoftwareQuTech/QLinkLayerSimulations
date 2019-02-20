@@ -2,7 +2,7 @@ import numpy as np
 import os
 from argparse import ArgumentParser
 
-from simulations.major_simulation.generate_metrics_file import get_metrics_from_single_file
+from simulations.generate_metrics_file import get_metrics_from_single_file
 from easysquid.toolbox import logger
 
 

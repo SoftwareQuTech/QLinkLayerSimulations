@@ -1,66 +1,20 @@
-import sys
 import os
 import json
-import sqlite3
 import csv
-from math import ceil
 from collections import namedtuple
+from argparse import ArgumentParser
 import glob
 import numpy as np
 from xlsxwriter.workbook import Workbook
 from collections import defaultdict
 
 from easysquid.toolbox import logger
-from simulations.analysis_sql_data import parse_table_data_from_sql, calc_fidelity, parse_raw_queue_data
-from qlinklayer.datacollection import EGPCreateDataPoint, EGPOKDataPoint, EGPStateDataPoint, EGPQubErrDataPoint, EGPErrorDataPoint
+from simulations.analysis_sql_data import parse_table_data_from_sql, calc_fidelity, parse_raw_queue_data,\
+    get_datacollection_version
+from qlinklayer.datacollection import EGPCreateDataPoint, EGPOKDataPoint, EGPStateDataPoint, EGPQubErrDataPoint,\
+    EGPErrorDataPoint
 from qlinklayer.egp import NodeCentricEGP
 
-MetricsTuple = namedtuple("Metrics", ["fidelity", "QBER", "latency_per_pair", "throughput", "success_fraction", "avg_queue_length"])
-MetricsTuple.__new__.__defaults__ = (None,) * len(MetricsTuple._fields)
-
-
-def get_table_data_by_timestamp(filename, base_table_name):
-    data = parse_table_data_from_sql(filename, base_table_name)
-
-    data_by_timestamp = {}
-    for raw_datapoint in data:
-        if base_table_name == "EGP_Creates":
-            datapoint = EGPCreateDataPoint(raw_datapoint)
-        elif base_table_name == "EGP_OKs":
-            datapoint = EGPOKDataPoint(raw_datapoint)
-        elif base_table_name == "EGP_Qubit_States":
-            datapoint = EGPStateDataPoint(raw_datapoint)
-        else:
-            raise ValueError("Unknown base_table_name = {}".format(base_table_name))
-        timestamp = datapoint.timestamp
-        if timestamp in data_by_timestamp:
-            data_by_timestamp[timestamp].append(datapoint)
-        else:
-            data_by_timestamp[timestamp] = [datapoint]
-
-    return data_by_timestamp
-
-# def get_table_data_by_origin_and_create_id(filename, base_table_name):
-#     data = parse_table_data_from_sql(filename, base_table_name)
-#
-#     data_by_node_and_create_id = {}
-#     for raw_datapoint in data:
-#         if base_table_name == "EGP_Creates":
-#             datapoint = EGPCreateDataPoint(raw_datapoint)
-#             origin_id = datapoint.node_id
-#         elif base_table_name == "EGP_OKs":
-#             datapoint = EGPOKDataPoint(raw_datapoint)
-#             origin_id =
-#         else:
-#             raise ValueError("Unknown base_table_name = {}".format(base_table_name))
-#         create_id = datapoint.create_id
-#         node_id = datapoint.
-#         if create_id in data_by_node_and_create_id:
-#             raise RuntimeError("Duplicate Create ID = {}".format(create_id))
-#         else:
-#             data_by_timestamp[create_id] = datapoint
-#
-#     return data_by_timestamp
 
 def get_creates_and_oks_by_create_id(filename, expired_create_ids):
     creates_data = parse_table_data_from_sql(filename, "EGP_Creates")
@@ -100,7 +54,10 @@ def get_creates_and_oks_by_create_id(filename, expired_create_ids):
                 # We will later add state and quberr so make this a dict
                 oks_dct[node_id] = {mhp_seq: {"ok": datapoint}}
             elif mhp_seq in oks_dct[node_id]:
-                raise RuntimeError("Duplicate entry for Absolute Create ID = {}, Node ID = {} and MHP Seq = {}".format(absolute_create_id, node_id, mhp_seq))
+                raise RuntimeError("Duplicate entry for"
+                                   "Absolute Create ID = {}, Node ID = {} and MHP Seq = {}".format(absolute_create_id,
+                                                                                                   node_id,
+                                                                                                   mhp_seq))
             else:
                 # We will later add state and quberr so make this a dict
                 oks_dct[node_id][mhp_seq] = {"ok": datapoint}
@@ -112,19 +69,6 @@ def get_creates_and_oks_by_create_id(filename, expired_create_ids):
 
     return creates_and_oks_by_create_id, ok_keys_by_timestamp_and_node_id
 
-# def get_table_data_by_timestamp(filename, base_table_name):
-#     data = parse_table_data_from_sql(filename, base_table_name)
-#
-#     data_by_timestamp = {}
-#     for datapoint in data:
-#         timestamp = datapoint[0]
-#         if timestamp in data_by_timestamp:
-#             data_by_timestamp[timestamp].append(datapoint)
-#         else:
-#             data_by_timestamp[timestamp] = [datapoint]
-#
-#     return data_by_timestamp
-
 
 def add_qubit_states(states_data, creates_and_oks_by_create_id, ok_keys_by_timestamp):
     for raw_datapoint in states_data:
@@ -135,14 +79,18 @@ def add_qubit_states(states_data, creates_and_oks_by_create_id, ok_keys_by_times
             # Check if both nodes received OK for same create ID at the same time
             if len(ok_keys) == 2:
                 if ok_keys[0][0] != ok_keys[1][0]:
-                    raise RuntimeError("The timestamp {} of this qubit state does not have a unique corresponding ok datapoint".format(timestamp))
+                    raise RuntimeError("The timestamp {} of this qubit state does not"
+                                       "have a unique corresponding ok datapoint".format(timestamp))
             else:
-                raise RuntimeError("The timestamp {} of this qubit state does not have a unique corresponding ok datapoint".format(timestamp))
+                raise RuntimeError("The timestamp {} of this qubit state does not"
+                                   "have a unique corresponding ok datapoint".format(timestamp))
         absolute_create_id, node_id, mhp_seq = ok_keys[0]
 
         # Add this qubit state datapoint to the data structure
         if "state" in creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq]:
-            raise RuntimeError("OK for Absolute Create ID {}, Node ID {} and MHP Seq {} already has a state".format(absolute_create_id, node_id, mhp_seq))
+            raise RuntimeError("OK for Absolute Create ID {},"
+                               "Node ID {} and MHP Seq {} already has a state".format(absolute_create_id, node_id,
+                                                                                      mhp_seq))
         creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq]["state"] = state_datapoint
 
 
@@ -166,14 +114,19 @@ def add_quberr(quberr_data, creates_and_oks_by_create_id, ok_keys_by_timestamp):
                     # Check if both nodes received OK for same create ID at the same time
                     if len(ok_keys) == 2:
                         if ok_keys[0][0] != ok_keys[1][0]:
-                            raise RuntimeError("The timestamp {} of this QBER datapoint does not have a unique corresponding ok datapoint".format(timestamp))
+                            raise RuntimeError("The timestamp {} of this QBER datapoint"
+                                               "does not have a unique corresponding ok datapoint".format(timestamp))
                     else:
-                        raise RuntimeError("The timestamp {} of this QBER datapoint does not have a unique corresponding ok datapoint".format(timestamp))
+                        raise RuntimeError("The timestamp {} of this QBER datapoint"
+                                           "does not have a unique corresponding ok datapoint".format(timestamp))
                 absolute_create_id, node_id, mhp_seq = ok_keys[0]
 
                 # Add this QBER datapoint to the data structure
                 if "QBER" in creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq]:
-                    raise RuntimeError("OK for Absolute Create ID {}, Node ID {} and MHP Seq {} already has a QBER".format(absolute_create_id, node_id, mhp_seq))
+                    raise RuntimeError("OK for Absolute Create ID {},"
+                                       "Node ID {} and MHP Seq {} already has a QBER".format(absolute_create_id,
+                                                                                             node_id,
+                                                                                             mhp_seq))
                 creates_and_oks_by_create_id[absolute_create_id]["oks"][node_id][mhp_seq]["QBER"] = quberr_datapoint
 
 
@@ -192,12 +145,13 @@ def sort_data_by_request(filename):
     return creates_and_oks_by_create_id, ok_keys_by_timestamp
 
 
-def parse_thoughput(creates_and_oks_by_create_id, max_time, num_points=10000, time_window=1e9, min_time=0, in_seconds=False):
+def parse_thoughput(creates_and_oks_by_create_id, max_time, num_points=10000, time_window=1e9, min_time=0,
+                    in_seconds=False):
 
     priorities = list(range(3))
 
     if max_time == 0:
-        return {p:[(0, -1)] * num_points for p in priorities}
+        return {p: [(0, -1)] * num_points for p in priorities}
 
     timestamps_per_prio = {p: [] for p in priorities}
     for create_id, create_data in creates_and_oks_by_create_id.items():
@@ -213,20 +167,11 @@ def parse_thoughput(creates_and_oks_by_create_id, max_time, num_points=10000, ti
     throughputs_per_prio = {}
     for priority, timestamps in timestamps_per_prio.items():
         timestamps = sorted(timestamps)
-        # if len(timestamps) == 0:
-        #     throughputs = [(None, 0)] * num_points
-        # elif len(timestamps) == 1:
-        #     raise RuntimeError()
-        # else:
-        # min_time = timestamps[0]
-        # max_time = timestamps[-1]
         time_diff = max_time - min_time
         shift = (time_diff - time_window) / (num_points - 1)
         if shift > time_window:
             logger.warning("Got to short time-window {} (s), making it {} (s)".format(time_window * 1e-9, shift * 1e-9))
-            # shift = time_window
             time_window = shift
-        # time_window = time_diff / num_points
 
         left_side = min_time
         position = 0
@@ -265,6 +210,9 @@ def add_metric_data(metrics, metric_name, avg_std_num):
 
 
 def get_raw_metric_data(filename):
+    # Get the correct datacollection version
+    get_datacollection_version(filename)
+
     creates_and_oks_by_create_id, ok_keys_by_timestamp = sort_data_by_request(filename)
 
     ##########################
@@ -363,7 +311,6 @@ def get_raw_metric_data(filename):
                     ok_datapoint = ok_data["ok"]
                     cycles_per_attempt_per_prio[priority].append(ok_datapoint.used_cycles / ok_datapoint.attempts)
 
-
                 num_pairs = create_datapoint.num_pairs
                 if len(node_oks) == num_pairs:
                     if priority not in req_latencies_per_prio_per_node:
@@ -373,7 +320,8 @@ def get_raw_metric_data(filename):
                         req_latencies_per_prio_per_node[priority][node_id] = []
                         scaled_req_latencies_per_prio_per_node[priority][node_id] = []
                     req_latencies_per_prio_per_node[priority][node_id].append((max_latency_time, max_latency))
-                    scaled_req_latencies_per_prio_per_node[priority][node_id].append((max_latency_time, max_latency / num_pairs))
+                    scaled_req_latencies_per_prio_per_node[priority][node_id].append((max_latency_time,
+                                                                                      max_latency / num_pairs))
     ###############
     # Matrix time #
     ###############
@@ -417,7 +365,7 @@ def get_metrics_from_single_file(filename):
     nr_reqs_per_prio = all_raw_metric_data["nr_reqs_per_prio"]
     nr_outstanding_req_per_prio = all_raw_metric_data["nr_outstanding_req_per_prio"]
     nr_outstanding_pairs_per_prio = all_raw_metric_data["nr_outstanding_pairs_per_prio"]
-    nr_expired_req_per_prio = all_raw_metric_data["nr_expired_req_per_prio"]
+    # nr_expired_req_per_prio = all_raw_metric_data["nr_expired_req_per_prio"]
     cycles_per_attempt_per_prio = all_raw_metric_data["cycles_per_attempt_per_prio"]
     fids_per_prio = all_raw_metric_data["fids_per_prio"]
     qber_per_prio = all_raw_metric_data["qber_per_prio"]
@@ -444,7 +392,6 @@ def get_metrics_from_single_file(filename):
     for e in errors_data:
         error_datapoint = EGPErrorDataPoint(e)
         num_errors_per_code[error_datapoint.error_code] += 1
-
 
     metric_fid_per_prio = {priority: get_avg_std_num(fids) for priority, fids in fids_per_prio.items()}
 
@@ -475,33 +422,26 @@ def get_metrics_from_single_file(filename):
             latencies = [l[1] * 1e-9 for l in latencies]
             metric_scaled_req_latencies_per_prio_per_node[priority][node_id] = get_avg_std_num(latencies)
 
-    avg_cycles_per_attempt_per_prio = {priority: sum(c_p_a) / len(c_p_a) if len(c_p_a) > 0 else None for priority, c_p_a in cycles_per_attempt_per_prio.items()}
+    avg_cycles_per_attempt_per_prio = {priority: sum(c_p_a) / len(c_p_a) if len(c_p_a) > 0 else None
+                                       for priority, c_p_a in cycles_per_attempt_per_prio.items()}
 
     #################
     # Queue Lengths #
     #################
-    # conn = sqlite3.connect(filename)
-    # c = conn.cursor()
-    # c.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    # all_table_names = c.fetchall()
-    # queue_ids = []
-    # for table_name in all_table_names:
-    #     table_name = table_name[0]
-    #     if table_name.startswith("EGP_Local_Queue_A"):
-    #         queue_id = int(table_name.split('_')[-2])
-    #         if queue_id not in queue_ids:
-    #             queue_ids.append(queue_id)
     queue_ids = range(3)
 
-    raw_all_queue_data = {qid: parse_table_data_from_sql(filename, "EGP_Local_Queue_A_{}".format(qid)) for qid in queue_ids}
+    raw_all_queue_data = {qid: parse_table_data_from_sql(filename,
+                                                         "EGP_Local_Queue_A_{}".format(qid)) for qid in queue_ids}
     all_queue_lengths = {}
     times_non_idle = {}
     for qid, raw_queue_data in raw_all_queue_data.items():
         queue_data = parse_raw_queue_data(raw_queue_data)
         all_queue_lengths[qid] = queue_data[0]
         times_non_idle[qid] = queue_data[-1]
-    all_queue_lengths = {qid: parse_raw_queue_data(raw_queue_data)[0] for qid, raw_queue_data in raw_all_queue_data.items()}
-    all_avg_queue_lengths = {qid: sum(queue_lengths)/len(queue_lengths) for qid, queue_lengths in all_queue_lengths.items()}
+    all_queue_lengths = {qid: parse_raw_queue_data(raw_queue_data)[0]
+                         for qid, raw_queue_data in raw_all_queue_data.items()}
+    all_avg_queue_lengths = {qid: sum(queue_lengths)/len(queue_lengths)
+                             for qid, queue_lengths in all_queue_lengths.items()}
 
     ###############
     # Matrix time #
@@ -516,27 +456,6 @@ def get_metrics_from_single_file(filename):
             total_matrix_time = 0
         else:
             total_matrix_time = additional_data["total_real_time"]
-
-
-    # mhp_cycle = additional_data["mhp_t_cycle"]
-    # total_mhp_cycles = ceil(total_matrix_time / mhp_cycle)
-    # cycles_non_idle = times_non_idle[0] / mhp_cycle
-    # print("Nr MHP cycles non idle {}".format(cycles_non_idle))
-    # print("Nr MHP cycles {}".format(total_mhp_cycles))
-    # print("P Succ per attempt = {}".format(additional_data["p_succ"]))
-    # print("Attempts: " + "".join(["{} = {}, ".format(prio, attempts) for prio, attempts in attempts_per_prio.items()]))
-    # print("Cycles per attempts: " + "".join(["{} = {}, ".format(prio, cycles_non_idle / attempts) for prio, attempts in attempts_per_prio.items() if attempts > 0]))
-    # print("Cycles per attempts (real): " + "".join(["{} = {}, ".format(prio, c_p_a) for prio, c_p_a in avg_cycles_per_attempt_per_prio.items()]))
-
-    # if "FIFO" in filename:
-    #     avg_throughput_per_prio = {priority: nr_oks / (times_non_idle[0] * 1e-9) for priority, nr_oks in nr_oks_per_prio.items()}
-    # else:
-    #     avg_throughput_per_prio = {}
-    #     for priority, nr_oks in nr_oks_per_prio.items():
-    #         if times_non_idle[priority] == 0:
-    #             avg_throughput_per_prio[priority] = 0
-    #         else:
-    #             avg_throughput_per_prio[priority] = nr_oks / (times_non_idle[priority] * 1e-9)
 
     #############################
     # Construct dict of metrics #
@@ -558,49 +477,46 @@ def get_metrics_from_single_file(filename):
         metrics["NrRemReq_Prio{}".format(prio_name)] = nr_outstanding_req_per_prio[priority]
         metrics["NrRemPairs_Prio{}".format(prio_name)] = nr_outstanding_pairs_per_prio[priority]
         add_metric_data(metrics, "Throughp_Prio{} (1/s)".format(prio_name), metric_throughput_per_prio[priority])
-        # metrics["AvgThroughp_Prio{} (1/s)".format(prio_name)] = avg_throughput_per_prio[priority]
         metrics["AvgCyc_per_Att_Prio{}".format(prio_name)] = avg_cycles_per_attempt_per_prio[priority]
 
-        for lat_name, lat_data in zip(["Pair", "Req", "ScaledReq"], [metric_pair_latencies_per_prio_per_node, metric_req_latencies_per_prio_per_node, metric_scaled_req_latencies_per_prio_per_node]):
+        for lat_name, lat_data in zip(["Pair", "Req", "ScaledReq"], [metric_pair_latencies_per_prio_per_node,
+                                                                     metric_req_latencies_per_prio_per_node,
+                                                                     metric_scaled_req_latencies_per_prio_per_node]):
             try:
                 metric_latencies_per_node = lat_data[priority]
             except KeyError:
                 metric_latencies_per_node = {}
             for node_id in range(2):
                 try:
-                    add_metric_data(metrics, "{}Laten_Prio{}_NodeID{} (s)".format(lat_name, prio_name, node_id), metric_latencies_per_node[node_id])
-                    # metrics["AvgLaten_Prio{}_NodeID{} (s)".format(prio_name, node_id)] = metric_latencies_per_node[node_id] * 1e-9
+                    add_metric_data(metrics, "{}Laten_Prio{}_NodeID{} (s)".format(lat_name, prio_name, node_id),
+                                    metric_latencies_per_node[node_id])
                 except KeyError:
-                    add_metric_data(metrics, "{}Laten_Prio{}_NodeID{} (s)".format(lat_name, prio_name, node_id), [None] * 3)
-                    # metrics["AvgLaten_Prio{}_NodeID{} (s)".format(prio_name, node_id)] = None
+                    add_metric_data(metrics, "{}Laten_Prio{}_NodeID{} (s)".format(lat_name, prio_name, node_id),
+                                    [None] * 3)
 
         if priority < 2:
             try:
                 add_metric_data(metrics, "Fid_Prio{}".format(prio_name), metric_fid_per_prio[priority])
-                # metrics["AvgFid_Prio{}".format(prio_name)] = metric_fid_per_prio[priority]
             except KeyError:
                 add_metric_data(metrics, "Fid_Prio{}".format(prio_name), [None] * 3)
-                # metrics["AvgFid_Prio{}".format(prio_name)] = None
         else:
             try:
                 metrics["AvgFid_Prio{}".format(prio_name)] = metric_qber_per_prio[priority]["fid"]
                 metrics["StdFid_Prio{}".format(prio_name)] = None
                 metrics["NumFid_Prio{}".format(prio_name)] = None
-                # add_metric_data(metrics, "Fid_Prio{}".format(prio_name), metric_qber_per_prio[priority]["fid"])
-                # metrics["AvgFid_Prio{}".format(prio_name)] = metric_qber_per_prio[priority]["fid"]
             except KeyError:
                 add_metric_data(metrics, "Fid_Prio{}".format(prio_name), [None] * 3)
             for basis in ["X", "Y", "Z"]:
                 try:
-                    add_metric_data(metrics, "QBER{}_Prio{}".format(basis, prio_name), metric_qber_per_prio[priority]["{}".format(basis)])
-                    # metrics["AvgQBER{}_Prio{}".format(basis, prio_name)] = metric_qber_per_prio[priority]["{}".format(basis)]
+                    add_metric_data(metrics, "QBER{}_Prio{}".format(basis, prio_name),
+                                    metric_qber_per_prio[priority]["{}".format(basis)])
                 except KeyError:
                     add_metric_data(metrics, "QBER{}_Prio{}".format(basis, prio_name), [None] * 3)
-                    # metrics["AvgQBER{}_Prio{}".format(basis, prio_name)] = None
 
     metrics["NumErrors"] = num_errors
 
-    metrics["ErrorCodes"] = "".join(["{}({}), ".format(error_code, number) for error_code, number in num_errors_per_code.items()])[:-2]
+    metrics["ErrorCodes"] = "".join(["{}({}), ".format(error_code, number)
+                                     for error_code, number in num_errors_per_code.items()])[:-2]
 
     metrics["TotalMatrixT (s)"] = total_matrix_time * 1e-9
 
@@ -626,7 +542,6 @@ def main(results_folder):
             scenario_key = entry.split("_key_")[1].split("_run_")[0]
             run_index = entry.split("_run_")[1].split(".")[0]
             run_ID = scenario_key + run_index
-            # if scenario_key == "LAB_NC_NC_MD_max3_req_frac_high_origin_originA_weights_FIFO":
             print(run_ID)
             metrics = get_metrics_from_single_file(os.path.join(results_folder, entry))
             metrics["Name"] = run_ID
@@ -643,17 +558,26 @@ def main(results_folder):
         else:
             os.mkdir(csv_folder)
 
-        # csv_filename = os.path.join(results_folder, "metrics.csv")
         prio_names = ["NL", "CK", "MD"]
         tps = ["Avg", "Std", "Num"]
         fieldnames_per_file = {
-            "Times": ["Name", "TotalMatrixT (s)"] + ["QueueIdle_QID{}".format(qid) for qid in range(3)] + ["AvgCyc_per_Att_Prio{}".format(p) for p in prio_names],
-            "Number": ["Name", "NumErrors", "ErrorCodes"] + sum([["Nr{}_Prio{}".format(what_nr, p) for p in prio_names] for what_nr in ["Reqs", "OKs", "RemReq", "RemPairs"]], []),
-            "Throughput": ["Name"] + sum([["{}Throughp_Prio{} (1/s)".format(tp, p) for p in prio_names] for tp in tps], []),
-            "PairLatency": ["Name"] + sum([sum([["{}PairLaten_Prio{}_NodeID{} (s)".format(tp, p, node) for p in prio_names] for node in range(2)], []) for tp in tps], []),
-            "ReqLatency": ["Name"] + sum([sum([["{}ReqLaten_Prio{}_NodeID{} (s)".format(tp, p, node) for p in prio_names] for node in range(2)], []) for tp in tps], []),
-            "ScaledReqLatency": ["Name"] + sum([sum([["{}ScaledReqLaten_Prio{}_NodeID{} (s)".format(tp, p, node) for p in prio_names] for node in range(2)], []) for tp in tps], []),
-            "Fidelity": ["Name"] + sum([["{}Fid_Prio{}".format(tp, p) for p in prio_names] + ["{}QBER{}_PrioMD".format(tp, basis) for basis in ["X", "Y", "Z"]] for tp in tps], []),
+            "Times": (["Name", "TotalMatrixT (s)"] + ["QueueIdle_QID{}".format(qid) for qid in range(3)] +
+                      ["AvgCyc_per_Att_Prio{}".format(p) for p in prio_names]),
+            "Number": (["Name", "NumErrors", "ErrorCodes"] +
+                       sum([["Nr{}_Prio{}".format(what_nr, p) for p in prio_names]
+                            for what_nr in ["Reqs", "OKs", "RemReq", "RemPairs"]], [])),
+            "Throughput": (["Name"] + sum([["{}Throughp_Prio{} (1/s)".format(tp, p)
+                                            for p in prio_names] for tp in tps], [])),
+            "PairLatency": (["Name"] + sum([sum([["{}PairLaten_Prio{}_NodeID{} (s)".format(tp, p, node)
+                                                  for p in prio_names] for node in range(2)], []) for tp in tps], [])),
+            "ReqLatency": (["Name"] + sum([sum([["{}ReqLaten_Prio{}_NodeID{} (s)".format(tp, p, node)
+                                                 for p in prio_names] for node in range(2)], []) for tp in tps], [])),
+            "ScaledReqLatency": (["Name"] + sum([sum([["{}ScaledReqLaten_Prio{}_NodeID{} (s)".format(tp, p, node)
+                                                       for p in prio_names]
+                                                      for node in range(2)], []) for tp in tps], [])),
+            "Fidelity": (["Name"] + sum([["{}Fid_Prio{}".format(tp, p)
+                                          for p in prio_names] + ["{}QBER{}_PrioMD".format(tp, basis)
+                                                                  for basis in ["X", "Y", "Z"]] for tp in tps], [])),
             "QueueLens": ["Name"] + ["AvgQueueLen_QID{}".format(qid) for qid in range(3)]
         }
 
@@ -666,9 +590,6 @@ def main(results_folder):
         for sheet, fieldnames in fieldnames_per_file.items():
             csv_filename = os.path.join(csv_folder, sheet) + ".csv"
             with open(csv_filename, 'w', newline='') as f:
-                # fieldnames = ["Name", "NumErrors", "TotalMatrixT (s)"] + ["QueueIdle_QID{}".format(qid) for qid in range(3)]
-                # fieldnames += ["AvgCyc_per_Att_Prio{}".format(p) for p in ["NL", "CK", "MD"]]
-                # fieldnames += sum([["Nr{}_Prio{}".format(what_nr, p) for p in ["NL", "CK", "MD"]] for what_nr in ["Reqs", "OKs", "RemReq", "RemPairs"]], [])
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
 
                 writer.writeheader()
@@ -702,7 +623,14 @@ def create_excel_file(csv_folder):
     workbook.close()
 
 
-if __name__ == '__main__':
-    results_folder = sys.argv[1]
-    main(results_folder)
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('--results_folder', required=True, type=str,
+                        help="The path to the results folder to consider.")
 
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = parse_args()
+    main(**vars(args))

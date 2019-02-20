@@ -16,7 +16,7 @@ constant_params = {
     "max_sim_time": 0,
     # "max_wall_time": 24 * 60 * 60 - 2 * 60,
     "max_wall_time": 10 * 60,
-    "max_mhp_cycle": 10,
+    "max_mhp_cycle": 1000,
     "t0": 0,
     "enable_pdb": False,
     "wall_time_per_timestep": 1 * 60,

@@ -3,7 +3,7 @@ import json
 from argparse import ArgumentParser
 from matplotlib import pyplot as plt
 
-from simulations.major_simulation.generate_metrics_file import get_raw_metric_data
+from simulations.generate_metrics_file import get_raw_metric_data
 from simulations.analysis_sql_data import parse_table_data_from_sql
 from qlinklayer.datacollection import EGPCreateDataPoint
 
