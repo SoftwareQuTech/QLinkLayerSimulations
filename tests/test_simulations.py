@@ -106,8 +106,9 @@ class TestSimulations(unittest.TestCase):
         runindex = 0
         paramfile = os.path.join(self.sim_dir, "setupsim/paramcombinations.json")
         actualkey = self.sim_name
-        params_for_simulation = [timestamp, self.results_folder, runindex, paramfile, actualkey]
-        perform_single_simulation_run.main(params_for_simulation)
+        perform_single_simulation_run.main(final_results_dir=self.results_folder, tmp_results_dir=self.results_folder,
+                                           timestamp=timestamp, run_key=actualkey, run_index=runindex,
+                                           paramcombinations_file=paramfile)
 
     def test4_analyse_single_case(self):
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
@@ -147,8 +148,9 @@ class TestSimulations(unittest.TestCase):
         timestamp = "TEST_SIMULATION"
         runindex = 0
         for actualkey in paramcombinations.keys():
-            params_for_simulation = [timestamp, self.results_folder, runindex, paramfile, actualkey]
-            perform_single_simulation_run.main(params_for_simulation)
+            perform_single_simulation_run.main(final_results_dir=self.results_folder,
+                                               tmp_results_dir=self.results_folder, timestamp=timestamp,
+                                               run_key=actualkey, run_index=runindex, paramcombinations_file=paramfile)
 
     def test6_analyse_multi_case(self):
         nr_of_add_data_files = len(
@@ -188,7 +190,7 @@ class TestSimulations(unittest.TestCase):
             paramsdict = sim_param.paramsdict
 
             # Get absolute path to config
-            abs_config_path = self.sim_dir + paramsdict["config"]
+            abs_config_path = os.path.join(self.sim_dir, paramsdict["config"])
 
             # Create the network
             network = setup_physical_network(abs_config_path)

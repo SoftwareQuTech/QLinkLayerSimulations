@@ -1,7 +1,6 @@
 import os
 import json
 import csv
-from collections import namedtuple
 from argparse import ArgumentParser
 import glob
 import numpy as np
@@ -397,8 +396,10 @@ def get_metrics_from_single_file(filename):
 
     metric_qber_per_prio = {}
     for priority, qbersxyz in qber_per_prio.items():
-        metric_qber_per_prio[priority] = {basis: get_avg_std_num(qbers) if len(qbers) > 0 else (0, 0, 0) for basis, qbers in qbersxyz.items()}
-        metric_qber_per_prio[priority]["fid"] = 1 - sum([qber[0] for qber in metric_qber_per_prio[priority].values()]) / 2
+        metric_qber_per_prio[priority] = {basis: get_avg_std_num(qbers) if len(qbers) > 0 else (0, 0, 0)
+                                          for basis, qbers in qbersxyz.items()}
+        metric_qber_per_prio[priority]["fid"] = 1 - sum([qber[0]
+                                                         for qber in metric_qber_per_prio[priority].values()]) / 2
 
     # Pair latency
     metric_pair_latencies_per_prio_per_node = {}
@@ -440,7 +441,7 @@ def get_metrics_from_single_file(filename):
         times_non_idle[qid] = queue_data[-1]
     all_queue_lengths = {qid: parse_raw_queue_data(raw_queue_data)[0]
                          for qid, raw_queue_data in raw_all_queue_data.items()}
-    all_avg_queue_lengths = {qid: sum(queue_lengths)/len(queue_lengths)
+    all_avg_queue_lengths = {qid: sum(queue_lengths) / len(queue_lengths)
                              for qid, queue_lengths in all_queue_lengths.items()}
 
     ###############
@@ -593,7 +594,8 @@ def main(results_folder):
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
 
                 writer.writeheader()
-                sheet_metrics = [{key: value for key, value in metr.items() if key in fieldnames} for metr in all_metrics]
+                sheet_metrics = [{key: value for key, value in metr.items() if key in fieldnames}
+                                 for metr in all_metrics]
                 writer.writerows(sheet_metrics)
 
         # Make excel file

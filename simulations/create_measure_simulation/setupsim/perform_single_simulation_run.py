@@ -35,4 +35,3 @@ def main(final_results_dir, tmp_results_dir, timestamp, run_key, run_index, para
 if __name__ == '__main__':
     args = single_simulation_run_methods.parse_args()
     main(**vars(args))
-

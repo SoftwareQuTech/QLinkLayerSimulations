@@ -74,7 +74,8 @@ class EGPErrorSequence(EGPDataSequence):
     """
 
     def get_column_names(self):
-        return ["Timestamp", "Node ID", "Error Code", "Create ID", "Origin ID", "Old Exp MHP Seq", "New Exp MHP Seq", "Success"]
+        return ["Timestamp", "Node ID", "Error Code", "Create ID", "Origin ID", "Old Exp MHP Seq", "New Exp MHP Seq",
+                "Success"]
 
     def getData(self, time, source=None):
         error_source = source[0]
@@ -394,7 +395,8 @@ class EGPStateSequence(EGPDataSequence):
         if self.version <= 0:
             return ["Timestamp", "Outcome 1", "Outcome 2"] + matrix_columns + ["Success"]
         else:
-            return ["Timestamp", "originID", "peerID", "MHP Seq", "Outcome 1", "Outcome 2"] + matrix_columns + ["Success"]
+            return (["Timestamp", "originID", "peerID", "MHP Seq", "Outcome 1", "Outcome 2"] +
+                    matrix_columns + ["Success"])
 
     def getData(self, time, source=None):
         scenario = source[0]

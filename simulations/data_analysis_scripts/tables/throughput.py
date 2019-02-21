@@ -2,7 +2,6 @@ import os
 import csv
 from argparse import ArgumentParser
 
-
 phys_setup_2_latex = {
     "LAB_NC_NC": r"\Lab",
     "QLINK_WC_WC": r"\Qlink"
@@ -45,7 +44,8 @@ def main(results_folder, tex_path=None):
                     phys_setup, rest = scenario_name.split("_mix_")
                     mix, scheduler = rest.split("_weights_")
                     if scheduler != "lowerWFQ":
-                        row_name = "\t" * 3 + r"{}\_{}\_{}".format(phys_setup_2_latex[phys_setup], mix_2_latex[mix], scheduler_2_latex[scheduler])
+                        row_name = "\t" * 3 + r"{}\_{}\_{}".format(phys_setup_2_latex[phys_setup], mix_2_latex[mix],
+                                                                   scheduler_2_latex[scheduler])
                         th_latex = []
                         for th in throughputs:
                             try:
@@ -57,7 +57,8 @@ def main(results_folder, tex_path=None):
                                     th_latex.append("-")
                                 else:
                                     th_latex.append("{0:.3f}".format(th_float))
-                        latex_middle += row_name + "".join([" & {}".format(th) for th in th_latex]) + r" \\ \hline" + "\n"
+                        latex_middle += row_name + "".join(
+                            [" & {}".format(th) for th in th_latex]) + r" \\ \hline" + "\n"
 
     latex_code = latex_begin + latex_middle[:-1] + latex_end
     print(latex_code)

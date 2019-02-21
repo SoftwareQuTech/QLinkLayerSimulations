@@ -8,7 +8,8 @@ from simulations.generate_metrics_file import get_metrics_from_single_file
 def collect_req_freq_data(results_folders):
     req_freqs = [0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
     req_types = ["MD", "NL"]
-    data = {req_type: {req_freq: {"throughputs": [], "latencies": []} for req_freq in req_freqs} for req_type in req_types}
+    data = {req_type: {req_freq: {"throughputs": [], "latencies": []} for req_freq in req_freqs} for req_type in
+            req_types}
 
     for results_folder in results_folders:
         for entry in os.listdir(results_folder):
@@ -33,7 +34,8 @@ def collect_req_freq_data(results_folders):
         for req_freq in req_freqs:
             avg_th = np.mean(data[req_type][req_freq]["throughputs"])
             avg_l = np.mean(data[req_type][req_freq]["latencies"])
-            std_th = np.std(data[req_type][req_freq]["throughputs"]) / np.sqrt(len(data[req_type][req_freq]["throughputs"]))
+            std_th = np.std(data[req_type][req_freq]["throughputs"]) / np.sqrt(
+                len(data[req_type][req_freq]["throughputs"]))
             std_l = np.std(data[req_type][req_freq]["latencies"]) / np.sqrt(len(data[req_type][req_freq]["latencies"]))
             avgs[req_type][req_freq] = (avg_th, avg_l)
             stds[req_type][req_freq] = (std_th, std_l)
@@ -44,7 +46,8 @@ def collect_req_freq_data(results_folders):
 def collect_fidelity_sweep_data(results_folders):
     min_fids = [0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
     req_types = ["MD", "NL"]
-    data = {req_type: {min_fid: {"throughputs": [], "latencies": [], "fidelities": []} for min_fid in min_fids} for req_type in req_types}
+    data = {req_type: {min_fid: {"throughputs": [], "latencies": [], "fidelities": []} for min_fid in min_fids} for
+            req_type in req_types}
 
     for results_folder in results_folders:
         for entry in os.listdir(results_folder):
@@ -72,7 +75,8 @@ def collect_fidelity_sweep_data(results_folders):
             avg_th = np.mean(data[req_type][min_fid]["throughputs"])
             avg_l = np.mean(data[req_type][min_fid]["latencies"])
             avg_f = np.mean(data[req_type][min_fid]["fidelities"])
-            std_th = np.std(data[req_type][min_fid]["throughputs"]) / np.sqrt(len(data[req_type][min_fid]["throughputs"]))
+            std_th = np.std(data[req_type][min_fid]["throughputs"]) / np.sqrt(
+                len(data[req_type][min_fid]["throughputs"]))
             std_l = np.std(data[req_type][min_fid]["latencies"]) / np.sqrt(len(data[req_type][min_fid]["latencies"]))
             std_f = np.std(data[req_type][min_fid]["fidelities"]) / np.sqrt(len(data[req_type][min_fid]["fidelities"]))
             avgs[req_type][min_fid] = (avg_th, avg_l, avg_f)
@@ -99,7 +103,7 @@ def plot_l_vs_r(avgs, stds):
     plt.xlim(0.5, 1)
     plt.ylim(0, 50)
     plt.xticks([0.5, 0.7, 0.9])
-    plt.gca().axes.set_aspect(1/50)
+    plt.gca().axes.set_aspect(1 / 50)
     handles, labels = ax.get_legend_handles_labels()
     handles = [h[0] for h in handles]
     ax.legend(handles, labels, loc='upper left', numpoints=1)
@@ -123,7 +127,7 @@ def plot_l_vs_f(avgs, stds):
     plt.ylim(0, 50)
     plt.xticks([0.5, 0.6, 0.7])
     plt.gca().axes.set_yticklabels([])
-    plt.gca().axes.set_aspect(1/100)
+    plt.gca().axes.set_aspect(1 / 100)
 
 
 def plot_th_vs_f(avgs, stds):
@@ -144,7 +148,7 @@ def plot_th_vs_f(avgs, stds):
     plt.xlim(0.5, 0.75)
     plt.ylim(0, 30)
     plt.xticks([0.5, 0.6, 0.7])
-    plt.gca().axes.set_aspect(1/100 * (50/30))
+    plt.gca().axes.set_aspect(1 / 100 * (50 / 30))
     plt.gca().axes.yaxis.set_label_position('right')
     plt.gca().axes.yaxis.tick_right()
 

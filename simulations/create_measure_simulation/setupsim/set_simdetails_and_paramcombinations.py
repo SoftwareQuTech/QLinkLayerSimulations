@@ -1,4 +1,3 @@
-
 #######################
 # Mandatory paramaters
 #######################
@@ -94,13 +93,13 @@ for name, scenario in name_to_scenario.items():
     param_set["config"] = config_dir + "/" + config_file
     p_succ = config_to_p_succ[config_file]
     params = {"num_pairs": [min_pairs, max_pairs],
-               "tmax_pair": tmax_pair,
-               "min_fidelity": 0.8,
-               "purpose_id": 0,
-               "priority": 0,
-               "store": True,
-               "atomic": False,
-               "measure_directly": measure_directly}
+              "tmax_pair": tmax_pair,
+              "min_fidelity": 0.8,
+              "purpose_id": 0,
+              "priority": 0,
+              "store": True,
+              "atomic": False,
+              "measure_directly": measure_directly}
     request_paramsA = {"reqs": {"prob": freq_req_factor * p_succ,
                                 "number_request": num_requests,
                                 "params": params}}
@@ -149,4 +148,3 @@ def main(ask_for_input=True):
 
 if __name__ == '__main__':
     main()
-

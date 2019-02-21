@@ -346,7 +346,8 @@ def parse_errors_from_sql(results_path, max_real_time=None):
     return error_by_code, nr_errors
 
 
-def plot_error_data(error_by_code, results_path, no_plot=False, save_figs=False, analysis_folder=None, clear_figure=True):
+def plot_error_data(error_by_code, results_path, no_plot=False, save_figs=False, analysis_folder=None,
+                    clear_figure=True):
     """
     Plots the cumulative errors by error code as a function of matrix time.
     :param error_by_code: dict

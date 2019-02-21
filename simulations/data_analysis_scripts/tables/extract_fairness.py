@@ -11,13 +11,14 @@ from argparse import ArgumentParser
 from collections import defaultdict
 
 from easysquid.toolbox import logger
-from simulations.analysis_sql_data import parse_table_data_from_sql, calc_fidelity, parse_raw_queue_data,\
+from simulations.analysis_sql_data import parse_table_data_from_sql, calc_fidelity, parse_raw_queue_data, \
     get_datacollection_version
 from qlinklayer.datacollection import EGPErrorDataPoint
 from simulations.generate_metrics_file import sort_data_by_request, get_avg_std_num, add_metric_data
 
 
-def parse_thoughput(creates_and_oks_by_create_id, max_time, num_points=10000, time_window=1e9, min_time=0, in_seconds=False):
+def parse_thoughput(creates_and_oks_by_create_id, max_time, num_points=10000, time_window=1e9, min_time=0,
+                    in_seconds=False):
     priorities = list(range(3))
     nodes = ["A", "B"]
     timestamps_per_prio = {node: {p: [] for p in priorities} for node in nodes}
@@ -48,7 +49,8 @@ def parse_thoughput(creates_and_oks_by_create_id, max_time, num_points=10000, ti
                 time_diff = max_time - min_time
                 shift = (time_diff - time_window) / (num_points - 1)
                 if shift > time_window:
-                    logger.warning("Got to short time-window {} (s), making it {} (s)".format(time_window * 1e-9, shift * 1e-9))
+                    logger.warning(
+                        "Got to short time-window {} (s), making it {} (s)".format(time_window * 1e-9, shift * 1e-9))
                     time_window = shift
 
                 left_side = min_time
@@ -196,7 +198,6 @@ def get_metrics_from_single_file(filename):
                     ok_datapoint = ok_data["ok"]
                     cycles_per_attempt_per_prio[priority].append(ok_datapoint.used_cycles / ok_datapoint.attempts)
 
-
                 num_pairs = create_datapoint.num_pairs
                 if len(node_oks) == num_pairs:
                     if priority not in req_latencies_per_prio_per_node:
@@ -210,14 +211,17 @@ def get_metrics_from_single_file(filename):
                     req_latencies_per_prio_per_node[priority][node_id].append(max_latency)
                     scaled_req_latencies_per_prio_per_node[origin][priority][node_id].append(max_latency / num_pairs)
 
-    metric_fid_per_prio = {node: {priority: get_avg_std_num(fids) for priority, fids in fids_per_prio[node].items()} for node in nodes}
+    metric_fid_per_prio = {node: {priority: get_avg_std_num(fids) for priority, fids in fids_per_prio[node].items()} for
+                           node in nodes}
 
     metric_qber_per_prio = {}
     for node, qber_per_prio_only in qber_per_prio.items():
         metric_qber_per_prio[node] = {}
         for priority, qbersxyz in qber_per_prio_only.items():
-            metric_qber_per_prio[node][priority] = {basis: get_avg_std_num(qbers) if len(qbers) > 0 else 0 for basis, qbers in qbersxyz.items()}
-            metric_qber_per_prio[node][priority]["fid"] = 1 - sum([qber[0] for qber in metric_qber_per_prio[node][priority].values()]) / 2
+            metric_qber_per_prio[node][priority] = {basis: get_avg_std_num(qbers) if len(qbers) > 0 else 0 for
+                                                    basis, qbers in qbersxyz.items()}
+            metric_qber_per_prio[node][priority]["fid"] = 1 - sum(
+                [qber[0] for qber in metric_qber_per_prio[node][priority].values()]) / 2
 
     # Pair latency
     metric_pair_latencies_per_prio_per_node = {}
@@ -242,22 +246,26 @@ def get_metrics_from_single_file(filename):
                 latencies = [l * 1e-9 for l in latencies]
                 metric_scaled_req_latencies_per_prio_per_node[origin][priority][node_id] = get_avg_std_num(latencies)
 
-    avg_cycles_per_attempt_per_prio = {priority: sum(c_p_a) / len(c_p_a) if len(c_p_a) > 0 else None for priority, c_p_a in cycles_per_attempt_per_prio.items()}
+    avg_cycles_per_attempt_per_prio = {priority: sum(c_p_a) / len(c_p_a) if len(c_p_a) > 0 else None for priority, c_p_a
+                                       in cycles_per_attempt_per_prio.items()}
 
     #################
     # Queue Lengths #
     #################
     queue_ids = range(3)
 
-    raw_all_queue_data = {qid: parse_table_data_from_sql(filename, "EGP_Local_Queue_A_{}".format(qid)) for qid in queue_ids}
+    raw_all_queue_data = {qid: parse_table_data_from_sql(filename, "EGP_Local_Queue_A_{}".format(qid)) for qid in
+                          queue_ids}
     all_queue_lengths = {}
     times_non_idle = {}
     for qid, raw_queue_data in raw_all_queue_data.items():
         queue_data = parse_raw_queue_data(raw_queue_data)
         all_queue_lengths[qid] = queue_data[0]
         times_non_idle[qid] = queue_data[-1]
-    all_queue_lengths = {qid: parse_raw_queue_data(raw_queue_data)[0] for qid, raw_queue_data in raw_all_queue_data.items()}
-    all_avg_queue_lengths = {qid: sum(queue_lengths)/len(queue_lengths) for qid, queue_lengths in all_queue_lengths.items()}
+    all_queue_lengths = {qid: parse_raw_queue_data(raw_queue_data)[0] for qid, raw_queue_data in
+                         raw_all_queue_data.items()}
+    all_avg_queue_lengths = {qid: sum(queue_lengths) / len(queue_lengths) for qid, queue_lengths in
+                             all_queue_lengths.items()}
 
     ###############
     # Matrix time #
@@ -303,49 +311,63 @@ def get_metrics_from_single_file(filename):
 
             metrics["NrReqs_Prio{}_Origin{}".format(prio_name, origin)] = nr_reqs_per_prio[origin][priority]
             metrics["NrOKs_Prio{}_Origin{}".format(prio_name, origin)] = nr_oks_per_prio[origin][priority]
-            metrics["NrRemReq_Prio{}_Origin{}".format(prio_name, origin)] = nr_outstanding_req_per_prio[origin][priority]
-            metrics["NrRemPairs_Prio{}_Origin{}".format(prio_name, origin)] = nr_outstanding_pairs_per_prio[origin][priority]
-            add_metric_data(metrics, "Throughp_Prio{}_Origin{} (1/s)".format(prio_name, origin), metric_throughput_per_prio[origin][priority])
+            metrics["NrRemReq_Prio{}_Origin{}".format(prio_name, origin)] = nr_outstanding_req_per_prio[origin][
+                priority]
+            metrics["NrRemPairs_Prio{}_Origin{}".format(prio_name, origin)] = nr_outstanding_pairs_per_prio[origin][
+                priority]
+            add_metric_data(metrics, "Throughp_Prio{}_Origin{} (1/s)".format(prio_name, origin),
+                            metric_throughput_per_prio[origin][priority])
             metrics["AvgCyc_per_Att_Prio{}".format(prio_name)] = avg_cycles_per_attempt_per_prio[priority]
 
-            for lat_name, lat_data in zip(["Pair", "Req"], [metric_pair_latencies_per_prio_per_node, metric_req_latencies_per_prio_per_node]):
+            for lat_name, lat_data in zip(["Pair", "Req"], [metric_pair_latencies_per_prio_per_node,
+                                                            metric_req_latencies_per_prio_per_node]):
                 try:
                     metric_latencies_per_node = lat_data[priority]
                 except KeyError:
                     metric_latencies_per_node = {}
                 for node_id in range(2):
                     try:
-                        add_metric_data(metrics, "{}Laten_Prio{}_NodeID{} (s)".format(lat_name, prio_name, node_id), metric_latencies_per_node[node_id])
+                        add_metric_data(metrics, "{}Laten_Prio{}_NodeID{} (s)".format(lat_name, prio_name, node_id),
+                                        metric_latencies_per_node[node_id])
                     except KeyError:
-                        add_metric_data(metrics, "{}Laten_Prio{}_NodeID{} (s)".format(lat_name, prio_name, node_id), [None] * 3)
+                        add_metric_data(metrics, "{}Laten_Prio{}_NodeID{} (s)".format(lat_name, prio_name, node_id),
+                                        [None] * 3)
 
             for node_id in range(2):
                 try:
-                    add_metric_data(metrics, "ScaledReqLaten_Prio{}_NodeID{}_Origin{} (s)".format(prio_name, node_id, origin), metric_scaled_req_latencies_per_prio_per_node[origin][priority][node_id])
+                    add_metric_data(metrics,
+                                    "ScaledReqLaten_Prio{}_NodeID{}_Origin{} (s)".format(prio_name, node_id, origin),
+                                    metric_scaled_req_latencies_per_prio_per_node[origin][priority][node_id])
                 except KeyError:
-                    add_metric_data(metrics, "ScaledReqLaten_Prio{}_NodeID{}_Origin{} (s)".format(prio_name, node_id, origin), [None] * 3)
+                    add_metric_data(metrics,
+                                    "ScaledReqLaten_Prio{}_NodeID{}_Origin{} (s)".format(prio_name, node_id, origin),
+                                    [None] * 3)
 
             if priority < 2:
                 try:
-                    add_metric_data(metrics, "Fid_Prio{}_Origin{}".format(prio_name, origin), metric_fid_per_prio[origin][priority])
+                    add_metric_data(metrics, "Fid_Prio{}_Origin{}".format(prio_name, origin),
+                                    metric_fid_per_prio[origin][priority])
                 except KeyError:
                     add_metric_data(metrics, "Fid_Prio{}_Origin{}".format(prio_name, origin), [None] * 3)
             else:
+                try:
+                    avg_fid_prio_tmp = metric_qber_per_prio[origin][priority]["fid"]
+                    metrics["AvgFid_Prio{}_Origin{}".format(prio_name, origin)] = avg_fid_prio_tmp
+                    metrics["StdFid_Prio{}_Origin{}".format(prio_name, origin)] = None
+                    metrics["NumFid_Prio{}_Origin{}".format(prio_name, origin)] = None
+                except KeyError:
+                    add_metric_data(metrics, "Fid_Prio{}_Origin{}".format(prio_name, origin), [None] * 3)
+                for basis in ["X", "Y", "Z"]:
                     try:
-                        metrics["AvgFid_Prio{}_Origin{}".format(prio_name, origin)] = metric_qber_per_prio[origin][priority]["fid"]
-                        metrics["StdFid_Prio{}_Origin{}".format(prio_name, origin)] = None
-                        metrics["NumFid_Prio{}_Origin{}".format(prio_name, origin)] = None
+                        add_metric_data(metrics, "QBER{}_Prio{}_Origin{}".format(basis, prio_name, origin),
+                                        metric_qber_per_prio[origin][priority]["{}".format(basis)])
                     except KeyError:
-                        add_metric_data(metrics, "Fid_Prio{}_Origin{}".format(prio_name, origin), [None] * 3)
-                    for basis in ["X", "Y", "Z"]:
-                        try:
-                            add_metric_data(metrics, "QBER{}_Prio{}_Origin{}".format(basis, prio_name, origin), metric_qber_per_prio[origin][priority]["{}".format(basis)])
-                        except KeyError:
-                            add_metric_data(metrics, "QBER{}_Prio{}_Origin{}".format(basis, prio_name, origin), [None] * 3)
+                        add_metric_data(metrics, "QBER{}_Prio{}_Origin{}".format(basis, prio_name, origin), [None] * 3)
 
     metrics["NumErrors"] = num_errors
 
-    metrics["ErrorCodes"] = "".join(["{}({}), ".format(error_code, number) for error_code, number in num_errors_per_code.items()])[:-2]
+    metrics["ErrorCodes"] = "".join(
+        ["{}({}), ".format(error_code, number) for error_code, number in num_errors_per_code.items()])[:-2]
 
     metrics["TotalMatrixT (s)"] = total_matrix_time * 1e-9
 
@@ -449,7 +471,7 @@ def main(results_folder):
                 for k in num_OKs_keys:
                     try:
                         oks_A = metrics[k + "A"]
-                    except:
+                    except KeyError:
                         oks_A = None
                     try:
                         oks_B = metrics[k + "B"]
@@ -467,7 +489,8 @@ def main(results_folder):
                     else:
                         raise RuntimeError("one oks is None")
 
-                num_lat_keys = ["AvgScaledReqLaten_Prio{}_NodeID{}_Origin".format(p, node_id) for p in prio_names for node_id in range(2)]
+                num_lat_keys = ["AvgScaledReqLaten_Prio{}_NodeID{}_Origin".format(p, node_id) for p in prio_names for
+                                node_id in range(2)]
                 for k in num_lat_keys:
                     try:
                         lat_A = metrics[k + "A (s)"]
@@ -513,4 +536,3 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     main(**vars(args))
-

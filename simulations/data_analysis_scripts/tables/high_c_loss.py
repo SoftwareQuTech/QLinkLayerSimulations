@@ -7,7 +7,6 @@ from easysquid.toolbox import logger
 
 
 def main(high_loss_path, other_path, tex_path):
-
     prio_names = ["NL", "CK", "MD"]
 
     c_loss_metrics = {p_loss: {} for p_loss in range(4, 11)}
@@ -46,7 +45,8 @@ def main(high_loss_path, other_path, tex_path):
                 latency = {p: metrics["AvgReqLaten_Prio{}_NodeID0 (s)".format(p)] for p in prios_in_file}
                 nr_oks = {p: metrics["NrOKs_Prio{}".format(p)] for p in prios_in_file}
 
-                c_loss_metrics[p_loss][metric_key] = {"F": fidelity, "T": throughput, "L": latency, "O": nr_oks, "maxtime": total_matrix_time}
+                c_loss_metrics[p_loss][metric_key] = {"F": fidelity, "T": throughput, "L": latency, "O": nr_oks,
+                                                      "maxtime": total_matrix_time}
 
     other_timestamp = os.path.split(other_path)[1].split('_')[0]
     other_basename = os.path.join(other_path, "{}_key_".format(other_timestamp))
@@ -60,7 +60,8 @@ def main(high_loss_path, other_path, tex_path):
             else:
                 phys_setup, prio, num_pairs, req_frac, origin, scheduler = metric_key
                 no_loss_setup = phys_setup.split("_HIGH_C_LOSS")[0]
-                no_loss_file = other_basename + "{}_{}_{}_req_frac_{}_origin_{}_weights_{}_run_0.db".format(no_loss_setup, prio, num_pairs, req_frac, origin, scheduler)
+                no_loss_file = other_basename + "{}_{}_{}_req_frac_{}_origin_{}_weights_{}_run_0.db".format(
+                    no_loss_setup, prio, num_pairs, req_frac, origin, scheduler)
                 prios_in_file = [prio]
             print("Getting no loss metrics from file {}".format(no_loss_file))
 

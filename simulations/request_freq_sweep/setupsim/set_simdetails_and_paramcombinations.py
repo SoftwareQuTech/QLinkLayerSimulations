@@ -155,4 +155,3 @@ def main(ask_for_input=True):
 
 if __name__ == '__main__':
     main()
-

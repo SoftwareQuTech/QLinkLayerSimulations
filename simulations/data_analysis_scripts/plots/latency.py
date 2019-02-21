@@ -113,7 +113,8 @@ def plot_latency(results_file, last_plot=False, max_x=1400, max_y=100, lat_type=
         scheduler = "HigherWFQ"
     ax = plt.gca().axes
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    plt.text(0.99, 0.95, scheduler, horizontalalignment='right', verticalalignment='top', transform=ax.transAxes, bbox=props)
+    plt.text(0.99, 0.95, scheduler, horizontalalignment='right', verticalalignment='top', transform=ax.transAxes,
+             bbox=props)
     scale_factor = max_x / max_y * 0.29
     ax.set_aspect(scale_factor)
     if not last_plot:
@@ -174,7 +175,10 @@ def main(runs, plot_dirs):
                 timestamp = dir_name.split('_')[0]
                 results_basename = os.path.join(run_dir, timestamp)
 
-                results_files = [results_basename + "_key_{}_mix_{}_weights_{}_run_0.db".format(phys_setup_in_data, mix_in_data, sched) for sched in ["FIFO", "higherWFQ"]]
+                results_files = [
+                    results_basename + "_key_{}_mix_{}_weights_{}_run_0.db".format(phys_setup_in_data, mix_in_data,
+                                                                                   sched) for sched in
+                    ["FIFO", "higherWFQ"]]
 
                 print(name)
                 plot_latency_compare_scheduling(results_files, max_x=max_x, max_y=max_y, name=name, save_dir=save_dir)

@@ -569,8 +569,8 @@ class TestDistributedQueue(unittest.TestCase):
         maxSeq = 6
         dq = WFQDistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True, accept_all=True, myWsize=wSize,
                                  otherWsize=wSize, maxSeq=maxSeq)
-        dq2 = WFQDistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True, accept_all=True, myWsize=wSize,
-                                 otherWsize=wSize, maxSeq=maxSeq)
+        dq2 = WFQDistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True, accept_all=True,
+                                  myWsize=wSize, otherWsize=wSize, maxSeq=maxSeq)
         dq.connect_to_peer_protocol(dq2, conn)
 
         from easysquid.puppetMaster import PM_Controller
@@ -601,18 +601,18 @@ class TestDistributedQueue(unittest.TestCase):
 
         dq.callback = callback
         dq2.callback = callback
-        for i in range(1, 3*dq2.maxSeq):
-            for j in range(3*dq2.maxSeq):
+        for i in range(1, 3 * dq2.maxSeq):
+            for j in range(3 * dq2.maxSeq):
                 try:
-                    r = WFQSchedulerRequest(0, 0, 0, 0, j+1, 0, 0, 0, True, False, False, True)
+                    r = WFQSchedulerRequest(0, 0, 0, 0, j + 1, 0, 0, 0, True, False, False, True)
                     if j % i:
                         dq.add(request=r, qid=0)
                     else:
                         dq2.add(request=r, qid=0)
-                except Exception as e:
+                except Exception:
                     pass
 
-            sim_run(i*1000000)
+            sim_run(i * 1000000)
 
             for seq in range(dq.maxSeq):
                 qitem = dq.queueList[0].sequence_to_item.get(seq)
@@ -635,9 +635,9 @@ class TestDistributedQueue(unittest.TestCase):
         wSize = 2
         maxSeq = 6
         dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True, myWsize=wSize,
-                                 otherWsize=wSize, maxSeq=maxSeq)
+                              otherWsize=wSize, maxSeq=maxSeq)
         dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True, myWsize=wSize,
-                                  otherWsize=wSize, maxSeq=maxSeq)
+                               otherWsize=wSize, maxSeq=maxSeq)
         dq.connect_to_peer_protocol(dq2, conn)
 
         storage = []
@@ -656,7 +656,7 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        for timestep in range(1, maxSeq+1):
+        for timestep in range(1, maxSeq + 1):
             dq.add(timestep, 0)
             sim_run(timestep * 1000000)
             dq.queueList[0].queue[timestep - 1].ready = True

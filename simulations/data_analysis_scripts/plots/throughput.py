@@ -29,7 +29,8 @@ def sweeeping_average(datapoints, nr_points=1):
 def plot_throughput(results_file, last_plot=False, max_x=10, max_y=1380):
     creates_and_oks_by_create_id, _ = sort_data_by_request(results_file)
     total_matrix_time = get_max_time(results_file)
-    throughputs_per_prio = parse_thoughput(creates_and_oks_by_create_id, max_time=total_matrix_time, num_points=10000, time_window=10e9, in_seconds=True)
+    throughputs_per_prio = parse_thoughput(creates_and_oks_by_create_id, max_time=total_matrix_time, num_points=10000,
+                                           time_window=10e9, in_seconds=True)
 
     prio_names = {0: "NL", 1: "CK", 2: "MD"}
 
@@ -41,7 +42,6 @@ def plot_throughput(results_file, last_plot=False, max_x=10, max_y=1380):
         times, tps = zip(*throughputs)
 
         if times[0] is not None:
-
             # Sort the entries by times
             times, tps = zip(*sorted(zip(times, tps), key=lambda x: x[0]))
 
@@ -61,7 +61,8 @@ def plot_throughput(results_file, last_plot=False, max_x=10, max_y=1380):
         scheduler = "HigherWFQ"
     ax = plt.gca().axes
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    plt.text(0.99, 0.95, scheduler, horizontalalignment='right', verticalalignment='top', transform=ax.transAxes, bbox=props)
+    plt.text(0.99, 0.95, scheduler, horizontalalignment='right', verticalalignment='top', transform=ax.transAxes,
+             bbox=props)
     scale_factor = max_x / max_y * 0.29
     ax.set_aspect(scale_factor)
     if not last_plot:
@@ -94,6 +95,7 @@ def plot_throughput_compare_scheduling(results_files, max_x=1380, max_y=10, name
     # plt.show()
     plt.close()
 
+
 def main(runs, plot_dirs):
     mix_to_mix_in_data = {"Uniform": "uniform",
                           "MoreNL": "moreNL",
@@ -122,10 +124,15 @@ def main(runs, plot_dirs):
                 timestamp = dir_name.split('_')[0]
                 results_basename = os.path.join(run_dir, timestamp)
 
-                results_files = [results_basename + "_key_{}_mix_{}_weights_{}_run_0.db".format(phys_setup_in_data, mix_in_data, sched) for sched in ["FIFO", "higherWFQ"]]
+                results_files = [
+                    results_basename + "_key_{}_mix_{}_weights_{}_run_0.db".format(phys_setup_in_data, mix_in_data,
+                                                                                   sched) for sched in
+                    ["FIFO", "higherWFQ"]]
 
                 print(name)
-                plot_throughput_compare_scheduling(results_files, max_x=max_x, max_y=max_y, name=name, save_dir=save_dir)
+                plot_throughput_compare_scheduling(results_files, max_x=max_x, max_y=max_y, name=name,
+                                                   save_dir=save_dir)
+
 
 def parse_args():
     parser = ArgumentParser()

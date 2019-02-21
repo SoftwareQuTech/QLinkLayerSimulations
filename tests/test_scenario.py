@@ -90,9 +90,9 @@ class TestScenario(unittest.TestCase):
         sim_run(num_cycles)
 
         prioritites = [req.priority for req in requests]
-        fractions = [prioritites.count(i)/num_cycles for i in range(3)]
+        fractions = [prioritites.count(i) / num_cycles for i in range(3)]
         avg_num_pairs = {"A": 1, "B": 2, "C": 3.5}
-        ideal_fractions = [request_params[name]["prob"]/avg_num_pairs[name] for name in ["A", "B", "C"]]
+        ideal_fractions = [request_params[name]["prob"] / avg_num_pairs[name] for name in ["A", "B", "C"]]
         for f, id_f in zip(fractions, ideal_fractions):
             self.assertAlmostEqual(f, id_f, places=1)
 
@@ -114,7 +114,8 @@ class TestScenario(unittest.TestCase):
             self.assertEqual(req.atomic, params["atomic"])
             self.assertEqual(req.measure_directly, params["measure_directly"])
 
-        frac_num_pairs = [[req.num_pairs for req in Crequests].count(n_p)/len(Crequests) for n_p in paramsC["num_pairs"]]
+        frac_num_pairs = [[req.num_pairs for req in Crequests].count(n_p) / len(Crequests)
+                          for n_p in paramsC["num_pairs"]]
         one_over_num_pairs = [1 / num_p for num_p in paramsC["num_pairs"]]
         ideal_frac_num_pairs = [p / sum(one_over_num_pairs) for p in one_over_num_pairs]
         for f_n_p, i_f_n_p in zip(frac_num_pairs, ideal_frac_num_pairs):

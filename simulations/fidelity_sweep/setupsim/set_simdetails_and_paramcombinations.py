@@ -107,8 +107,10 @@ p_fraction = 0.99
 p_fraction_name = "high"
 for type in ["MD", "NL"]:
     for min_fid, min_fid_name in zip([0.6, 0.65, 0.7, 0.75, 0.8, 0.85], ["060", "065", "070", "075", "080", "085"]):
-        request_paramsA = {type: single_type_request_params(type, config_file_path, origin_prob, p_fraction, num_pairs, fidelity=min_fid)}
-        request_paramsB = {type: single_type_request_params(type, config_file_path, origin_prob, p_fraction, num_pairs, fidelity=min_fid)}
+        request_paramsA = {type: single_type_request_params(type, config_file_path, origin_prob, p_fraction, num_pairs,
+                                                            fidelity=min_fid)}
+        request_paramsB = {type: single_type_request_params(type, config_file_path, origin_prob, p_fraction, num_pairs,
+                                                            fidelity=min_fid)}
 
         simulation_run_params = {"config": config_file_path,
                                  "request_paramsA": request_paramsA,
@@ -158,4 +160,3 @@ def main(ask_for_input=True):
 
 if __name__ == '__main__':
     main()
-

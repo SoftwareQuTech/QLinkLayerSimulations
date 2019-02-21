@@ -80,7 +80,8 @@ def change_connnection_type():
                 if cycle_period is None:
                     device_config = config_dct["qpd_config"]["default"]
                     photon_time = device_config["parameters"]["photon_emission"]["photon_emission_delay"]
-                    meas_time = device_config["parameters"]["gates"]["electron_gates"]["measurement_op"]["operation_time"]
+                    electron_gates = device_config["parameters"]["gates"]["electron_gates"]
+                    meas_time = electron_gates["measurement_op"]["operation_time"]
                     time_window = config_dct["conn_configs"][conn_config_name]["parameters"]["time_window"]
                     cycle_period = max(photon_time + meas_time, time_window)
                     cycle_period += cycle_period / 10
@@ -99,8 +100,8 @@ def change_connnection_type():
                     config_dct["conn_configs"][conn_config_name]["parameters"]["delay_B"] = delay_spec
 
                 # Update the comment in the file
-                config_dct["AutoGenerate"].append("This file was then later modified by /path/to/QLinkLayer/simulations/"
-                                                  "_get_configs_from_easysquid.py")
+                config_dct["AutoGenerate"].append("This file was then later modified by /path/to/QLinkLayer/"
+                                                  "simulations/_get_configs_from_easysquid.py")
 
                 # Write to file again
                 with open(file_path, 'w') as f:

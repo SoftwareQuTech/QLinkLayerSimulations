@@ -69,17 +69,17 @@ p_req_fractions = {"ultra": 1.5,
 
 origin_probs = {"originA": (1, 0),
                 "originB": (0, 1),
-                "originAB": (1/2, 1/2)}
+                "originAB": (1 / 2, 1 / 2)}
 
 weights_fractions = {"high": 10,
                      "low": 2}
 
-mixes = {"uniform": {"NL": 1/3, "CK": 1/3, "MD": 1/3},
-         "moreNL": {"NL": 4/6, "CK": 1/6, "MD": 1/6},
-         "moreCK": {"NL": 1/6, "CK": 4/6, "MD": 1/6},
-         "moreMD": {"NL": 1/6, "CK": 1/6, "MD": 4/6},
-         "noNLmoreCK": {"NL": 0, "CK": 4/5, "MD": 1/5},
-         "noNLmoreMD": {"NL": 0, "CK": 1/5, "MD": 4/5}
+mixes = {"uniform": {"NL": 1 / 3, "CK": 1 / 3, "MD": 1 / 3},
+         "moreNL": {"NL": 4 / 6, "CK": 1 / 6, "MD": 1 / 6},
+         "moreCK": {"NL": 1 / 6, "CK": 4 / 6, "MD": 1 / 6},
+         "moreMD": {"NL": 1 / 6, "CK": 1 / 6, "MD": 4 / 6},
+         "noNLmoreCK": {"NL": 0, "CK": 4 / 5, "MD": 1 / 5},
+         "noNLmoreMD": {"NL": 0, "CK": 1 / 5, "MD": 4 / 5}
          }
 
 # Weights and num queues
@@ -173,7 +173,7 @@ for weights_name in ["FIFO", "higherWFQ"]:
         mix = mixes[mix_name]
         num_pairs = {"NL": 2, "CK": 2, "MD": 10}
         p_fractions = {type: m * p_base_fraction for type, m in mix.items()}
-        p_origins = {type: 1/2 for type in mix.keys()}
+        p_origins = {type: 1 / 2 for type in mix.keys()}
         request_paramsA = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
         request_paramsB = mixed_request_params(config_file_path, p_origins, p_fractions, num_pairs)
         simulation_run_params = {"config": config_file_path,
@@ -223,4 +223,3 @@ def main(ask_for_input=True):
 
 if __name__ == '__main__':
     main()
-

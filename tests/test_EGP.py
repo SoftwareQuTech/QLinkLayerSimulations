@@ -1107,7 +1107,6 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertGreaterEqual(len(self.alice_results), 3)
         self.assertEqual(len(self.alice_results), len(self.bob_results))
 
-
         # Check that the timeout message is in the results
         self.assertIn((egpA.ERR_TIMEOUT, [alice_create_id, -1, -1, -1]), self.alice_results)
 
@@ -1303,8 +1302,10 @@ class TestNodeCentricEGP(unittest.TestCase):
         self.assertEqual(self.alice_results[3], (egpA.mhp.conn.ERR_NO_CLASSICAL_OTHER, [-1] * 4))
 
         # Verify that expire message propagated to both nodes
-        self.assertEqual(self.alice_results[4], (egpA.ERR_EXPIRE, [create_idB2, bob.nodeID] + [egpA.expected_seq - 1] * 2))
-        self.assertEqual(self.bob_results[5], (egpB.ERR_EXPIRE, [create_idB2, bob.nodeID] + [egpB.expected_seq - 1] * 2))
+        self.assertEqual(self.alice_results[4],
+                         (egpA.ERR_EXPIRE, [create_idB2, bob.nodeID] + [egpA.expected_seq - 1] * 2))
+        self.assertEqual(self.bob_results[5],
+                         (egpB.ERR_EXPIRE, [create_idB2, bob.nodeID] + [egpB.expected_seq - 1] * 2))
 
         # Verify that egp states synchronized
         self.assertEqual(egpA.mhp.conn.mhp_seq, egpA.expected_seq)
@@ -1334,7 +1335,7 @@ class TestNodeCentricEGP(unittest.TestCase):
                                                                         min_fidelity=0.5, max_time=0,
                                                                         purpose_id=1, priority=10)
 
-        create_id = egpA.create(cqc_request_raw=alice_request)
+        egpA.create(cqc_request_raw=alice_request)
 
         # Construct a network for the simulation
         network = self.create_network(egpA, egpB)

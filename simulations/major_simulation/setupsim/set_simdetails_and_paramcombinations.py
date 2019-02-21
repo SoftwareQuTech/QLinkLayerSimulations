@@ -69,17 +69,17 @@ p_req_fractions = {"ultra": 1.5,
 
 origin_probs = {"originA": (1, 0),
                 "originB": (0, 1),
-                "originAB": (1/2, 1/2)}
+                "originAB": (1 / 2, 1 / 2)}
 
 weights_fractions = {"high": 10,
                      "low": 2}
 
-mixes = {"uniform": {"NL": 1/3, "CK": 1/3, "MD": 1/3},
-         "moreNL": {"NL": 4/6, "CK": 1/6, "MD": 1/6},
-         "moreCK": {"NL": 1/6, "CK": 4/6, "MD": 1/6},
-         "moreMD": {"NL": 1/6, "CK": 1/6, "MD": 4/6},
-         "noNLmoreCK": {"NL": 0, "CK": 4/5, "MD": 1/5},
-         "noNLmoreMD": {"NL": 0, "CK": 1/5, "MD": 4/5}
+mixes = {"uniform": {"NL": 1 / 3, "CK": 1 / 3, "MD": 1 / 3},
+         "moreNL": {"NL": 4 / 6, "CK": 1 / 6, "MD": 1 / 6},
+         "moreCK": {"NL": 1 / 6, "CK": 4 / 6, "MD": 1 / 6},
+         "moreMD": {"NL": 1 / 6, "CK": 1 / 6, "MD": 4 / 6},
+         "noNLmoreCK": {"NL": 0, "CK": 4 / 5, "MD": 1 / 5},
+         "noNLmoreMD": {"NL": 0, "CK": 1 / 5, "MD": 4 / 5}
          }
 
 # Weights and num queues
@@ -184,11 +184,12 @@ for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
                                              "num_priorities": 1
                                              }
                     simulation_run_params.update(constant_params)
-                    run_name = "{}_{}_{}_req_frac_{}_origin_{}_weights_FIFO".format(config_name, type, num_pairs_name, p_fraction_name, origin_prob_name)
+                    run_name = "{}_{}_{}_req_frac_{}_origin_{}_weights_FIFO".format(config_name, type, num_pairs_name,
+                                                                                    p_fraction_name, origin_prob_name)
                     paramcombinations[run_name] = simulation_run_params
 
 # Mixed requests
-origin_prob = (1/2, 1/2)
+origin_prob = (1 / 2, 1 / 2)
 for config_name in ["LAB_NC_NC", "QLINK_WC_WC"]:
     config = configs[config_name]
     config_file_path = os.path.join(config_dir, config)
@@ -228,7 +229,7 @@ for config_name, config in configs.items():
         # p_fraction = p_req_fractions["high"]
         mix_name = "uniform"
         mix = mixes[mix_name]
-        origin_prob = (1/2, 1/2)
+        origin_prob = (1 / 2, 1 / 2)
         p_base_fraction = p_req_fractions["high"]
         p_fractions = {type: m * p_base_fraction for type, m in mix.items()}
         p_origins = {type: origin_prob[0] for type in p_fractions.keys()}
@@ -283,4 +284,3 @@ def main(ask_for_input=True):
 
 if __name__ == '__main__':
     main()
-

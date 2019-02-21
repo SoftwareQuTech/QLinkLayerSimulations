@@ -30,14 +30,14 @@ def calc_fidelity(d_matrix):
 def main(plot_dir):
     set_qstate_formalism(DM_FORMALISM)
 
-    #electron_native_T1 = 3.9e6
-    #electron_native_T2 = 3.3e3
+    # electron_native_T1 = 3.9e6
+    # electron_native_T2 = 3.3e3
     # electron_dd_T1 = 0
     # electron_dd_T2 = 1.46e9
     electron_dd_T1 = 2.86e6
     electron_dd_T2 = 1.00e6
-    #carbon_T1 = 0
-    #carbon_T2 = 10e9
+    # carbon_T1 = 0
+    # carbon_T2 = 10e9
 
     dec_times = {
         # "Electron (natural)": (electron_native_T1, electron_native_T2),
@@ -54,7 +54,7 @@ def main(plot_dir):
     # t_points = [comm_delay * nr for nr in range(10)]
     # L_points = [4000 * nr for nr in range(11)]
     # L_points = np.linspace(0, 40000, 100)
-    L_points = np.linspace(0, 30/7, 100)
+    L_points = np.linspace(0, 30 / 7, 100)
     plt.rcParams.update({'font.size': 12})
     # markers = {"Electron": '>', "Carbon": '<'}
     # t_points = np.linspace(0, max_time, num_points)
@@ -69,7 +69,7 @@ def main(plot_dir):
             qapi.operate([q1, q2], ops.CNOT)
             qapi.operate([q1], ops.X)
 
-            t = (L/c) * 1e9
+            t = (L / c) * 1e9
 
             noise.apply_noise(q1, t)
             noise.apply_noise(q2, t)
@@ -105,4 +105,3 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     main(args.plot_dir)
-

@@ -3,7 +3,6 @@ import csv
 import numpy as np
 from argparse import ArgumentParser
 
-
 phys_setup_2_latex = {
     "LAB_NC_NC": r"\Lab",
     "QLINK_WC_WC": r"\Qlink"
@@ -37,7 +36,8 @@ def main(results_folder, tex_path=None):
 
     # throughput_file = os.path.join(results_folder, "metrics/Throughput.csv")
     latencies_per_row = {}
-    for lat_file in [os.path.join(results_folder, "metrics/{}.csv".format(laten_type)) for laten_type in ["ScaledReqLatency", "ReqLatency"]]:
+    for lat_file in [os.path.join(results_folder, "metrics/{}.csv".format(laten_type)) for laten_type in
+                     ["ScaledReqLatency", "ReqLatency"]]:
         with open(lat_file, 'rt', encoding='utf8') as f:
             reader = csv.reader(f)
             for r, row in enumerate(reader):
@@ -47,11 +47,13 @@ def main(results_folder, tex_path=None):
                         latencies = row[1:4]
                         lat_stds = row[7:10]
                         lat_num = row[13:16]
-                        std_error = [" ({0:.2f})".format(float(s) / np.sqrt(float(n))) if s != '' else '' for s, n in zip(lat_stds, lat_num)]
+                        std_error = [" ({0:.2f})".format(float(s) / np.sqrt(float(n))) if s != '' else '' for s, n in
+                                     zip(lat_stds, lat_num)]
 
-                        lat_and_std = ["{0:.2f}{1}".format(float(l), s) if l != '' else '-' for l, s in zip(latencies, std_error)]
+                        lat_and_std = ["{0:.2f}{1}".format(float(lat), std) if lat != '' else '-' for lat, std in
+                                       zip(latencies, std_error)]
 
-                        if not "lowerWFQ" in scenario_name:
+                        if "lowerWFQ" not in scenario_name:
                             # print("{}_{}_{} with {}".format(phys_setup, mix, scheduler, throughputs))
                             if scenario_name not in latencies_per_row:
                                 latencies_per_row[scenario_name] = []
@@ -60,7 +62,8 @@ def main(results_folder, tex_path=None):
     for scenario_name, lat_and_std in latencies_per_row.items():
         phys_setup, rest = scenario_name.split("_mix_")
         mix, scheduler = rest.split("_weights_")
-        row_name = "\t" * 3 + r"{}\_{}\_{}".format(phys_setup_2_latex[phys_setup], mix_2_latex[mix], scheduler_2_latex[scheduler])
+        row_name = "\t" * 3 + r"{}\_{}\_{}".format(phys_setup_2_latex[phys_setup], mix_2_latex[mix],
+                                                   scheduler_2_latex[scheduler])
 
         latex_middle += row_name + "".join([" & {}".format(l) for l in lat_and_std]) + r" \\ \hline" + "\n"
 

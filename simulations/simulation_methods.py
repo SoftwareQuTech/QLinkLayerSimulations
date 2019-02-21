@@ -330,7 +330,6 @@ def run_simulation(tmp_filebasename, final_filebasename, sim_dir, request_params
                 info_message += "{}/{} MHP cycles".format(mhp_cycles, max_mhp_cycle)
                 logger.info(info_message)
 
-
             # Save additional data relevant for the simulation
             if save_additional_data:
                 # Collect simulation times
@@ -381,15 +380,9 @@ def clean_log_files(log_file, block_size=1000):
         return
 
     with open(log_file, 'r') as f:
-        try:
-            lines = f.readlines()
-        except MemoryError as err:
-            file_size = os.path.getsize(log_file)
-            num_lines = os.system("wc -l {}".format(log_file))
-            print("Size of file {} is {}".format())
-            print("Num lines {}".format(num_lines))
+        lines = f.readlines()
 
-    i=0
+    i = 0
     min_block = 0
     end_block = 0
     offset = int(block_size / 2)

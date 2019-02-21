@@ -5,9 +5,8 @@ from collections import namedtuple, defaultdict
 from functools import partial
 from netsquid.pydynaa import EventType, EventHandler
 from netsquid.simutil import sim_time
-from netsquid.components.instructions import INSTR_Z, INSTR_INIT, INSTR_H, INSTR_ROT_X, INSTR_MEASURE, INSTR_SWAP
+from netsquid.components.instructions import INSTR_INIT, INSTR_H, INSTR_ROT_X, INSTR_MEASURE
 from netsquid.components.qprogram import QuantumProgram
-from netsquid.qubits import qubitapi as qapi
 from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol
 from easysquid import qProgramLibrary as qprgms
@@ -572,7 +571,8 @@ class NodeCentricEGP(EGP):
         aid, createID, originID, old_seq, new_seq = data
 
         # Alert higher layer protocols
-        self.issue_err(err=self.ERR_EXPIRE, create_id=createID, origin_id=originID, old_exp_mhp_seq=old_seq, new_exp_mhp_seq=new_seq - 1)
+        self.issue_err(err=self.ERR_EXPIRE, create_id=createID, origin_id=originID, old_exp_mhp_seq=old_seq,
+                       new_exp_mhp_seq=new_seq - 1)
 
         # If our peer is ahead of us we should update
         if new_seq > self.expected_seq:
@@ -844,12 +844,14 @@ class NodeCentricEGP(EGP):
             logger.debug("Node {} : Qubit ID {} is reserved".format(self.node.name, qubit_id))
             return
         else:
-            logger.debug("Node {} : Initializing qubit {} in cycle {}".format(self.node.name, qubit_id, self.scheduler.mhp_cycle_number))
+            logger.debug("Node {} : Initializing qubit {} in cycle {}".format(self.node.name, qubit_id,
+                                                                              self.scheduler.mhp_cycle_number))
             if self._cycles_per_initialization[qubit_id] is not None:
                 this_cycle = self.scheduler.mhp_cycle_number
                 init_delay_cycles = ceil(self.max_memory_init_delay / self.scheduler.mhp_cycle_period)
                 dec_cycles = self._cycles_per_initialization[qubit_id]
-                self._next_init_cycle[qubit_id] = (this_cycle + init_delay_cycles + dec_cycles) % self.scheduler.max_mhp_cycle_number
+                self._next_init_cycle[qubit_id] = ((this_cycle + init_delay_cycles + dec_cycles)
+                                                   % self.scheduler.max_mhp_cycle_number)
             else:
                 self._next_init_cycle[qubit_id] = None
             # self.init_info = qubit_id
@@ -869,7 +871,8 @@ class NodeCentricEGP(EGP):
         Just prints the error of a program failed
         :return:
         """
-        logger.error("Node {} : QuantumProgram failed because {}".format(self.node.name, self.node.qmem.failure_exception))
+        logger.error("Node {} : QuantumProgram failed because {}".format(self.node.name,
+                                                                         self.node.qmem.failure_exception))
 
     def _handle_program_done(self):
         """
@@ -925,7 +928,8 @@ class NodeCentricEGP(EGP):
             Contains the processing result information from attempting entanglement generation
         """
         try:
-            logger.debug("Node {} : Handling MHP Reply: {} in cycle {}".format(self.node.name, result, self.scheduler.mhp_cycle_number))
+            logger.debug("Node {} : Handling MHP Reply: {} in cycle {}".format(self.node.name, result,
+                                                                               self.scheduler.mhp_cycle_number))
 
             # Otherwise we are ready to process the reply now
             midpoint_outcome, mhp_seq, aid, proto_err = self._extract_mhp_reply(result=result)
@@ -1054,10 +1058,13 @@ class NodeCentricEGP(EGP):
                                 originID = self.get_otherID()
                             else:
                                 originID = self.node.nodeID
-                            self.send_expire_notification(aid=a, createID=req.create_id, originID=originID, old_seq=self.expected_seq, new_seq=self.expected_seq)
-                            self.issue_err(err=self.ERR_EXPIRE, create_id=req.create_id, origin_id=originID, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=self.expected_seq - 1)
+                            self.send_expire_notification(aid=a, createID=req.create_id, originID=originID,
+                                                          old_seq=self.expected_seq, new_seq=self.expected_seq)
+                            self.issue_err(err=self.ERR_EXPIRE, create_id=req.create_id, origin_id=originID,
+                                           old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=self.expected_seq - 1)
                         else:
-                            self.send_expire_notification(aid=a, createID=None, originID=None, old_seq=self.expected_seq, new_seq=self.expected_seq)
+                            self.send_expire_notification(aid=a, createID=None, originID=None,
+                                                          old_seq=self.expected_seq, new_seq=self.expected_seq)
             else:
                 local_aid = aid
 
@@ -1091,7 +1098,8 @@ class NodeCentricEGP(EGP):
                         # self._remove_measurement_data(aid)
 
                     # Alert higher layer protocols
-                    self.issue_err(err=self.ERR_EXPIRE, create_id=createID, origin_id=originID, old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=mhp_seq)
+                    self.issue_err(err=self.ERR_EXPIRE, create_id=createID, origin_id=originID,
+                                   old_exp_mhp_seq=self.expected_seq, new_exp_mhp_seq=mhp_seq)
 
                 # Update our expected seq, because error came back we should expect the subsequent seq
                 self.expected_seq = new_mhp_seq
@@ -1165,7 +1173,6 @@ class NodeCentricEGP(EGP):
         """
         # Get request resources
         comm_q = self.scheduler.curr_gen.comm_q
-        storage_q = self.scheduler.curr_gen.storage_q
 
         logger.debug("Handling photon emission")
 
