@@ -158,7 +158,7 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, num_priorities=1, e
     return egpA, egpB
 
 
-def set_datacollection_version(results_path):
+def set_datacollection_version(results_path, max_tries=1000):
     """
     Writes the current datacollection version to a file.
     :param results_path:
@@ -168,12 +168,25 @@ def set_datacollection_version(results_path):
     version_path = os.path.join(data_folder_path, "versions.json")
     if os.path.exists(version_path):
         with open(version_path, 'r') as f:
-            versions = json.load(f)
+            tries = 0
+            while tries < max_tries:
+                tries += 1
+                try:
+                    versions = json.load(f)
+                except json.decoder.JSONDecodeError:
+                    # File is probably open elsewhere, try again
+                    f.seek(0)
+                else:
+                    break
+            else:
+                logger.warning("Did not manage to open versions file, will not write to it")
+                versions = None
     else:
         versions = {}
-    versions["datacollection"] = current_version
-    with open(version_path, 'w') as f:
-        json.dump(versions, f)
+    if versions is not None:
+        versions["datacollection"] = current_version
+        with open(version_path, 'w') as f:
+            json.dump(versions, f)
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
@@ -183,9 +196,6 @@ def run_simulation(tmp_filebasename, final_filebasename, sim_dir, request_params
                    alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True,
                    collect_queue_data=False, log_to_file=True, log_level=None, filter_debug_logging=True,
                    log_to_console=False):
-
-    # Set the current datacollection version
-    set_datacollection_version(tmp_filebasename)
 
     # Setup logging
     if log_to_file:
@@ -199,6 +209,11 @@ def run_simulation(tmp_filebasename, final_filebasename, sim_dir, request_params
             setup_logging(console_log_level=log_level, log_to_console=log_to_console)
         else:
             setup_logging(log_to_console=log_to_console)
+
+    logger.info("Starting simulation using a temporary data storage at {}".format(tmp_filebasename))
+
+    # Set the current datacollection version
+    set_datacollection_version(tmp_filebasename)
 
     # Save additional data
     if save_additional_data:
