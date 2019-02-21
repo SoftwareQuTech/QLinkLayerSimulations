@@ -103,7 +103,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Current sequence number for making add requests (distinct from queue items)
         self.comms_seq = 0
         self.comm_delay = 0
-        self.timeout_factor = 2
+        self.timeout_factor = 3
         self.max_add_attempts = 3
 
         # Track the absolute queue ID we transmitted for the corresponding comms_seq
@@ -197,8 +197,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if not self.comm_delay:
             self.comm_delay = self.conn.channel_from_A.compute_delay() + self.conn.channel_from_B.compute_delay()
 
-        logger.debug("Scheduling communication timeout event after {}.".format(self.timeout_factor * self.comm_delay))
-        evt = self._schedule_after(self.timeout_factor * self.comm_delay, self._EVT_COMM_TIMEOUT)
+        timeout = self.timeout_factor * self.comm_delay
+        logger.debug("Node {}: Scheduling communication timeout event after {}.".format(self.node.name, timeout))
+        evt = self._schedule_after(timeout, self._EVT_COMM_TIMEOUT)
         self._wait_once(self.comm_timeout_handler, event=evt)
 
     def _comm_timeout_handler(self, evt, ack_id):
@@ -210,12 +211,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             The comms_seq number corresponding to the communication that timed out
         """
         if ack_id in self.waitAddAcks:
-            logger.warning("Timed out waiting for communication response for comms_seq {}!".format(ack_id))
+            logger.warning("Node {}: Timed out waiting for communication"
+                           "response for comms_seq {}!".format(self.node.name, ack_id))
             qid, queue_seq, request, num_attempts = self.waitAddAcks.get(ack_id)
 
             # Check if we exceeded number of allowable attempts
             if num_attempts >= self.max_add_attempts:
-                logger.warning("Exceeded maximum number of add attempts, removing item")
+                logger.warning("Node {}: Exceeded maximum number of add attempts, removing item".format(self.node.name))
 
                 # Remove the item from the local queue
                 self.waitAddAcks.pop(ack_id)
@@ -233,7 +235,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             else:
                 # Otherwise retransmit the add message
-                logger.debug("Retransmitting ADD for comms seq {} qid {} qseq {}".format(ack_id, qid, queue_seq))
+                logger.debug("Node {}:Retransmitting ADD for comms seq {} qid {} qseq {}".format(self.node.name,
+                                                                                                 ack_id, qid,
+                                                                                                 queue_seq))
 
                 # Update the number of attempts
                 self.waitAddAcks[ack_id] = [qid, queue_seq, request, num_attempts + 1]
@@ -260,7 +264,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             try:
                 self._process_cmd(cmd, data)
             except Exception as err:
-                logger.exception("{}: Error {} occurred processing cmd {} with data {}".format(self.node.nodeID, err,
+                logger.exception("{}: Error {} occurred processing cmd {} with data {}".format(self.node.name, err,
                                                                                                cmd, data))
 
     def _process_cmd(self, cmd, data):
@@ -369,7 +373,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         Handle incoming error messages.
         """
-        logger.error("Error Received, Data: {}".format(data))
+        logger.error("Node {}: Error Received, Data: {}".format(self.node.name, data))
         self.status = self.STAT_IDLE
 
     def cmd_ERR_REJ(self, data):
@@ -379,8 +383,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             The data that was rejected by the other node
         """
         [ack_id, qid, qseq, request] = data
-        logger.warning("ADD ERROR REJECT from {} comms seq {} queue ID {} queue seq {}"
-                       .format(self.otherID, ack_id, qid, qseq))
+        logger.warning("Node {}: ADD ERROR REJECT from {} comms seq {} queue ID {} queue seq {}"
+                       .format(self.node.name, self.otherID, ack_id, qid, qseq))
 
         if self.queueList[qid].contains(qseq) and self.master:
             self.remove_item(qid, qseq)
@@ -417,7 +421,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         [nodeID, cseq, qid, qseq, request] = data
         if nodeID != self.otherID:
-            logger.warning("ADD ERROR Got ADD request from node that isn't our peer!")
+            logger.warning("Node {}: ADD ERROR Got ADD request from node that isn't our peer!".format(self.node.name))
             self.send_error(self.CMD_ERR_UNKNOWN_ID)
             return False
         return True
@@ -434,34 +438,35 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # We got what we expected or a message may have been lost
         if cseq >= self.expectedSeq:
             if cseq > self.expectedSeq:
-                logger.warning("Got comms seq {} ahead of expected seq, updating".format(cseq))
+                logger.warning("Node {}: Got comms seq {} ahead of expected seq, updating".format(self.node.name, cseq))
             # Update our expectedSeq as necessary
             self.expectedSeq = (cseq + 1) % self.maxSeq
             return True
 
         # A message was delayed or retransmitted upon loss
         elif cseq < self.expectedSeq:
-            logger.warning("Got comms seq {} behind our expected seq".format(cseq))
+            logger.warning("Node {}: Got comms seq {} behind our expected seq".format(self.node.name, cseq))
 
             # If we have not seen this before we should add the item to the queue normally
             if (not self.contains_item(qid, qseq) and not self.master) or \
                     (self.master and cseq not in self.transmitted_aid):
-                logger.warning("Adding request")
+                logger.warning("Node {}: Adding request".format(self.node.name))
                 return True
 
             # If we have seen this comms_seq before retransmit the absolute queue id
             elif cseq in self.transmitted_aid:
                 tqseq, tqid = self.transmitted_aid[cseq]
-                logger.warning("Retransmitting ADD ACK for comms seq {} queue ID {} queue seq {}"
-                               .format(cseq, tqid, tqseq))
+                logger.warning("Node {}: Retransmitting ADD ACK for comms seq {} queue ID {} queue seq {}"
+                               .format(self.node.name, cseq, tqid, tqseq))
                 self.send_ADD_ACK(cseq, tqseq, tqid)
                 return False
 
             else:
                 # We have already seen this number
                 # TODO is this what we want?
-                logger.error("ADD ERROR Duplicate sequence number from {} comms seq {} queue ID {} queue seq {}"
-                             .format(nodeID, cseq, qid, qseq))
+                logger.error("Node {}: ADD ERROR Duplicate sequence number from"
+                             "{} comms seq {} queue ID {} queue seq {}"
+                             .format(self.node.name, nodeID, cseq, qid, qseq))
                 self.send_error(self.CMD_ERR_DUPLICATE_SEQ)
                 return False
 
@@ -476,13 +481,14 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         [nodeID, cseq, qid, qseq, request] = data
         if not (self._valid_qid(qid)):
-            logger.error("ADD ERROR No such queue from {} comms seq {} queue ID {} queue seq {}"
-                         .format(nodeID, cseq, qid, qseq))
+            logger.error("Node {}: ADD ERROR No such queue from {} comms seq {} queue ID {} queue seq {}"
+                         .format(self.node.name, nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_NOSUCH_Q)
             return False
 
         elif self.is_full(qid):
-            logger.error("ADD ERROR from {} comms seq {} queue ID {} is full!".format(nodeID, cseq, qid))
+            logger.error("Node {}: ADD ERROR from {} comms seq {} queue ID {} is full!"
+                         .format(self.node.name, nodeID, cseq, qid))
             self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
             return False
 
@@ -502,8 +508,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             if self.contains_item(qid, qseq):
                 # Because the master is adding an item to this slot it means that the item contained locally does not
                 # exist in the master.  To synchronize the queues we replace the item.
-                logger.error("ADD ERROR duplicate sequence number from master {} comms seq {} queue ID {} queue seq {},"
-                             " replacing queue item".format(nodeID, cseq, qid, qseq))
+                logger.error("Node {}: ADD ERROR duplicate sequence number from master"
+                             "{} comms seq {} queue ID {} queue seq {},"
+                             " replacing queue item".format(self.node.name, nodeID, cseq, qid, qseq))
                 self.remove_item(qid, qseq)
 
         return True
@@ -519,8 +526,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if request is None:
             # Request details missing
             # TODO is this what we want?
-            logger.error("ADD ERROR missing request from {} comms seq {} queue ID {} queue seq {}"
-                         .format(nodeID, cseq, qid, qseq))
+            logger.error("Node {}: ADD ERROR missing request from {} comms seq {} queue ID {} queue seq {}"
+                         .format(self.node.name, nodeID, cseq, qid, qseq))
             self.send_error(self.CMD_ERR_NOREQ)
             return False
         return True
@@ -548,7 +555,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             self.send_ADD_ACK(cseq, qseq, qid)
 
         # Received valid ADD: Process add request
-        logger.debug("ADD from {} comms seq {} queue ID {} queue seq {}".format(nodeID, cseq, qid, qseq))
+        logger.debug("Node {}: ADD from {} comms seq {} queue ID {} queue seq {}"
+                     .format(self.node.name, nodeID, cseq, qid, qseq))
 
         # Store the absolute queue ID under the comms seq in case the message is lost
         self.store_transmitted_info(cseq, qid, qseq)
@@ -589,7 +597,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Remove if still available locally
         if cseq in self.transmitted_aid:
             aid = self.transmitted_aid.pop(cseq)
-            logger.debug("Clearing transmitted queue id {} for comms seq {}".format(aid, cseq))
+            logger.debug("Node {}: Clearing transmitted queue id {} for comms seq {}".format(self.node.name, aid, cseq))
 
     def _post_process_cmd_ADD(self, qid, qseq):
         """
@@ -612,14 +620,14 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Check whether this ack came from a partner node
         if nodeID != self.otherID:
-            logger.debug("ADD ACK ERROR Unknown node {}".format(nodeID))
+            logger.debug("Node {}: ADD ACK ERROR Unknown node {}".format(self.node.name, nodeID))
             self.send_error(self.CMD_ERR_UNKNOWN_ID)
 
         # Check we are indeed waiting for this ack
         # TODO refine error
         if ackd_id not in self.waitAddAcks:
-            logger.debug("ADD ACK ERROR No such id from {} acking comms seq {} claiming queue seq {}"
-                         .format(nodeID, ackd_id, qseq))
+            logger.debug("Node {}: ADD ACK ERROR No such id from {} acking comms seq {} claiming queue seq {}"
+                         .format(self.node.name, nodeID, ackd_id, qseq))
             self.send_error(self.CMD_ERR_UNKNOWN_ID)
             return
 
@@ -632,7 +640,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Check whether we are in control of the queue
         if self.master:
             # We are in control
-            logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, rec_qseq))
+            logger.debug("Node {}: ADD ACK from {} acking comms seq {} claiming queue seq {}"
+                         .format(self.node.name, nodeID, ackd_id, rec_qseq))
             agreed_qseq = rec_qseq
 
             # If this is the last queue item before our backlog of the slave's request then ready/schedule and send an
@@ -641,7 +650,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
                 self.release_acks(qid)
 
         else:
-            logger.debug("ADD ACK from {} acking comms seq {} claiming queue seq {}".format(nodeID, ackd_id, qseq))
+            logger.debug("Node {}: ADD ACK from {} acking comms seq {} claiming queue seq {}"
+                         .format(self.node.name, nodeID, ackd_id, qseq))
 
             # We are not in control but merely hold a copy of the queue
             # We can now add
@@ -696,7 +706,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         Deletes an ACK we should provide and any subsequent ACKs
         """
-        logger.warning("Rejecting outstanding acks")
+        logger.warning("Node {}: Rejecting outstanding acks".format(self.node.name))
         # Grab item info, ack, and schedule
         cseq, qid, qseq, request = self.addAckBacklog[qid].popleft()
         self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
@@ -752,12 +762,13 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         if not self.has_queue_id(qid):
             if self.add_callback:
-                logger.warning("Tried to add to non-existing queue ID")
+                logger.warning("Node {}: Tried to add to non-existing queue ID".format(self.node.name))
                 self.add_callback(result=(self.DQ_REJECT, qid, None, request))
                 return
 
         if self.has_max_adds(qid):
-            logger.error("Specified local queue has maximum adds in flight, cannot add request")
+            logger.error("Node {}: Specified local queue has maximum adds in flight, cannot add request"
+                         .format(self.node.name))
             if self.add_callback:
                 self.add_callback(result=(self.DQ_ERR, qid, None, request))
             raise LinkLayerException()
@@ -768,7 +779,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         else:
             # Add to backlog for later processing
-            logger.debug("ADD to backlog")
+            logger.debug("Node {}: ADD to backlog".format(self.node.name))
             self.backlogAdd.append((request, qid))
 
     def contains_item(self, qid, qseq):
@@ -802,9 +813,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         num_acks_waiting = sum(1 for item in self.waitAddAcks.values() if item[0] == qid)
         max_items = self.queueList[qid].maxSeq
         logger.debug("{}: Checking full queue {}: Has {} items with {} items in backlog and {} outstanding add acks"
-                     .format(self.node.nodeID, qid, num_queue_items, num_backlog_items, num_acks_waiting))
+                     .format(self.node.name, qid, num_queue_items, num_backlog_items, num_acks_waiting))
         if num_queue_items > max_items:
-            logger.error("Local queue {} overfull")
+            logger.error("Node {}: Local queue {} overfull".format(self.node.name))
 
         total_known_items = num_backlog_items + num_queue_items
 
@@ -826,17 +837,19 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         # Check if the QID specified is valid
         if qid < 0 or qid >= self.numLocalQueues:
-            logger.error("Invalid QID {} selected when specifying item removal".format(qid))
+            logger.error("Node {}: Invalid QID {} selected when specifying item removal".format(self.node.name, qid))
 
         # Attempt to remove the item from the specified local queue
         removed_item = self.queueList[qid].remove_item(qseq)
 
         # Check if we actually removed anything
         if removed_item is not None:
-            logger.debug("Successfully removed queue item ({}, {}) from distributed queue".format(qid, qseq))
+            logger.debug("Node {}: Successfully removed queue item ({}, {}) from distributed queue"
+                         .format(self.node.name, qid, qseq))
 
         else:
-            logger.debug("Failed to remove queue item ({}, {}) from distributed queue".format(qid, qseq))
+            logger.debug("Node {}: Failed to remove queue item ({}, {}) from distributed queue"
+                         .format(self.node.name, qid, qseq))
 
         return removed_item
 
@@ -889,7 +902,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             canAdd = min(diff, len(self.backlogAdd))
 
             for j in range(canAdd):
-                logger.debug("Processing backlog")
+                logger.debug("Node {}: Processing backlog".format(self.node.name))
                 oldRequest, qid = self.backlogAdd.popleft()
                 self._general_do_add(oldRequest, qid)
 
@@ -946,12 +959,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # and perform the appropriate actions to add the item
         # Check if the queue is full
         if self.is_full(qid):
-            logger.error("Specified local queue is full, cannot add request")
+            logger.error("Node {}: Specified local queue is full, cannot add request".format(self.node.name))
             if self.add_callback:
                 self.add_callback(result=(self.DQ_ERR, qid, None, request))
             return
 
-        logger.debug("{} Adding new item to queue".format(self.node.nodeID))
+        logger.debug("Node {}: Adding new item to queue".format(self.node.name))
         if self.master:
             self._master_do_add(request, qid)
 
@@ -983,12 +996,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Send an add message to the other side
         add_msg = self._construct_add_msg(qid, queue_seq, copy(request))
         self.send_msg(self.CMD_ADD, add_msg)
-        logger.debug("{} Communicated absolute queue id ({}, {}) to slave".format(self.node.nodeID, qid, queue_seq))
+        logger.debug("Node {}: Communicated absolute queue id ({}, {}) to slave".format(self.node.name, qid, queue_seq))
 
         # Mark that we are waiting for an ack for this, store attempt 1 for initial transmission
         self.waitAddAcks[self.comms_seq] = [qid, queue_seq, request, 1]
         self.schedule_comm_timeout(ack_id=self.comms_seq)
-        logger.debug("{} Added waiting item in ADD ACKS list: {}".format(self.node.nodeID, [qid, queue_seq, request]))
+        logger.debug("Node {}: Added waiting item in ADD ACKS list: {}".format(self.node.name, [qid, queue_seq, request]))
 
         # Record waiting ack
         self.acksWaiting = self.acksWaiting + 1
@@ -1006,12 +1019,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Send an add message to the other side
         add_msg = self._construct_add_msg(qid, 0, copy(request))
         self.send_msg(self.CMD_ADD, add_msg)
-        logger.debug("{} Sent ADD request to master".format(self.node.nodeID))
+        logger.debug("Node {}: Sent ADD request to master".format(self.node.name))
 
         # Mark that we are waiting for an ack for this, store attempt 1 for initial transmission
         self.waitAddAcks[self.comms_seq] = [qid, 0, request, 1]
         self.schedule_comm_timeout(ack_id=self.comms_seq)
-        logger.debug("{} Added waiting item in ADD ACKS list: {}".format(self.node.nodeID, [qid, 0, request]))
+        logger.debug("Node {}: Added waiting item in ADD ACKS list: {}".format(self.node.name, [qid, 0, request]))
 
         # Increment acks we are waiting for
         self.acksWaiting = self.acksWaiting + 1
@@ -1086,7 +1099,8 @@ class FilteredDistributedQueue(DistributedQueue):
         try:
             self.accept_rules[nodeID].remove(purpose_id)
         except KeyError:
-            logger.error("Attempted to remove nonexistent rule for node {} purpose id {}".format(nodeID, purpose_id))
+            logger.error("Node {}: Attempted to remove nonexistent rule for node {} purpose id {}"
+                         .format(self.node.name, nodeID, purpose_id))
 
     def load_accept_rules(self, accept_rules):
         """
@@ -1106,8 +1120,8 @@ class FilteredDistributedQueue(DistributedQueue):
         [nodeID, cseq, qid, qseq, request] = data
         # Are we accepting request adds from this peer?
         if not self.accept_all and request.purpose_id not in self.accept_rules[nodeID]:
-            logger.error("ADD ERROR not accepting requests with purpose id {} from node {}".format(request.purpose_id,
-                                                                                                   nodeID))
+            logger.error("Node {}: ADD ERROR not accepting requests with purpose id {} from node {}"
+                         .format(self.node.name, request.purpose_id, nodeID))
             self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
             return False
 
@@ -1180,7 +1194,7 @@ class EGPDistributedQueue(FilteredDistributedQueue):
         Goes over the elements in all the queue and checks if they are ready to be scheduled or have timed out.
         :return: None
         """
-        logger.debug("Updating to MHP cycle {}".format(current_cycle))
+        logger.debug("Node {}: Updating to MHP cycle {}".format(self.node.name, current_cycle))
         for queue in self.queueList:
             queue.update_mhp_cycle_number(current_cycle, max_cycle)
 
