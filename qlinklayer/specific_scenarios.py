@@ -1,7 +1,6 @@
 import random
 
 from netsquid.pydynaa import EventType
-from netsquid.simutil import sim_time
 from easysquid.toolbox import logger
 from qlinklayer.scenario import EGPSimulationScenario
 from cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader

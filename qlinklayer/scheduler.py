@@ -2,13 +2,13 @@
 # Scheduler
 #
 import abc
-from math import ceil, floor
+from math import ceil
 from collections import namedtuple
 from netsquid.simutil import sim_time
 from netsquid.pydynaa import Entity
 from easysquid.toolbox import logger
 from qlinklayer.distQueue import EGPDistributedQueue
-from qlinklayer.toolbox import LinkLayerException, check_schedule_cycle_bounds
+from qlinklayer.toolbox import LinkLayerException
 
 SchedulerRequest = namedtuple("Scheduler_request",
                               ["sched_cycle", "timeout_cycle", "min_fidelity", "purpose_id", "create_id", "num_pairs",
@@ -189,7 +189,9 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         # Decrement any suspended cycles
         if self.num_suspended_cycles > 0:
-            logger.debug("Node {} : suspended cycles decreased from {} to {}".format(self.distQueue.node.name, self.num_suspended_cycles, self.num_suspended_cycles - 1))
+            logger.debug("Node {} : suspended cycles decreased from {} to {}".format(self.distQueue.node.name,
+                                                                                     self.num_suspended_cycles,
+                                                                                     self.num_suspended_cycles - 1))
             self.num_suspended_cycles -= 1
 
     # def has_CK_requests(self):
@@ -279,7 +281,8 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         if timeout_cycle is not None:
             if self._compare_mhp_cycle(timeout_cycle, schedule_cycle) < 1:
-                logger.warning("Request had to short max time to be satisfied, sched_cycle = {} and timeout_cycle = {}".format(schedule_cycle, timeout_cycle))
+                logger.warning("Request had to short max time to be satisfied"
+                               ", sched_cycle = {} and timeout_cycle = {}".format(schedule_cycle, timeout_cycle))
                 return False
 
         scheduler_request = self._get_scheduler_request(egp_request, create_id, schedule_cycle, timeout_cycle,
@@ -363,7 +366,8 @@ class StrictPriorityRequestScheduler(Scheduler):
 
         # Update the number of suspended cycles if it exceeds the amount we are currently suspended for
         if num_suspended_cycles > self.num_suspended_cycles:
-            logger.debug("Node {} : Suspending generation for {} cycles".format(self.distQueue.node.name, num_suspended_cycles))
+            logger.debug("Node {} : Suspending generation for {} cycles".format(self.distQueue.node.name,
+                                                                                num_suspended_cycles))
             self.num_suspended_cycles = num_suspended_cycles
 
     def resume_generation(self):
@@ -816,8 +820,9 @@ class StrictPriorityRequestScheduler(Scheduler):
             True/False whether item is near timeout
         """
         min_cycles = ceil(self.mhp_full_cycle / self.mhp_cycle_period)
-        if queue_item.timeout_cycle is not None and self._compare_mhp_cycle(queue_item.timeout_cycle, self.mhp_cycle_number + min_cycles) < 0:
-            return True
+        if queue_item.timeout_cycle is not None:
+            if self._compare_mhp_cycle(queue_item.timeout_cycle, self.mhp_cycle_number + min_cycles) < 0:
+                return True
 
         return False
 
@@ -885,7 +890,6 @@ class WFQRequestScheduler(StrictPriorityRequestScheduler):
         self.relative_weights = self._get_relative_weights(weights)
 
         self.last_virt_finish = [-1] * len(self.relative_weights)
-
 
     def _get_largest_mhp_cycle(self):
         """

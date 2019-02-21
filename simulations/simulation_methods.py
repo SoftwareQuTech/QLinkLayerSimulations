@@ -1,14 +1,13 @@
 import netsquid as ns
 import pdb
 import json
-import os
 from time import time
 import math
-import logging
+import os
 from os.path import exists
 from easysquid.easynetwork import Connections, setup_physical_network
 from easysquid.puppetMaster import PM_Controller
-from easysquid.toolbox import logger
+from easysquid.toolbox import logger, setup_logging
 from netsquid.simutil import SECOND, sim_reset, sim_run, sim_time
 from qlinklayer.datacollection import EGPErrorSequence, EGPOKSequence, EGPCreateSequence, EGPStateSequence, \
     EGPQubErrSequence, EGPLocalQueueSequence, AttemptCollector, current_version
@@ -16,8 +15,6 @@ from qlinklayer.egp import NodeCentricEGP
 from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.specific_scenarios import MixedScenario
 from simulations._get_configs_from_easysquid import NODE_CENTRIC_HERALDED_FIBRE_CONNECTION
-
-logger.setLevel(logging.INFO)
 
 # Here we add an entry into the Connection structure in Easysquid Easynetwork to give us access to load up configs
 # for the simulation using connections defined here in the QLinkLayer
@@ -161,7 +158,7 @@ def setup_network_protocols(network, alphaA=0.1, alphaB=0.1, num_priorities=1, e
     return egpA, egpB
 
 
-def set_datacollection_version(results_path):
+def set_datacollection_version(results_path, max_tries=1000):
     """
     Writes the current datacollection version to a file.
     :param results_path:
@@ -171,22 +168,52 @@ def set_datacollection_version(results_path):
     version_path = os.path.join(data_folder_path, "versions.json")
     if os.path.exists(version_path):
         with open(version_path, 'r') as f:
-            versions = json.load(f)
+            tries = 0
+            while tries < max_tries:
+                tries += 1
+                try:
+                    versions = json.load(f)
+                except json.decoder.JSONDecodeError:
+                    # File is probably open elsewhere, try again
+                    f.seek(0)
+                else:
+                    break
+            else:
+                logger.warning("Did not manage to open versions file, will not write to it")
+                versions = None
     else:
         versions = {}
-    versions["datacollection"] = current_version
-    with open(version_path, 'w') as f:
-        json.dump(versions, f)
+    if versions is not None:
+        versions["datacollection"] = current_version
+        with open(version_path, 'w') as f:
+            json.dump(versions, f)
 
 
 # This simulation should be run from the root QLinkLayer directory so that we can load the config
-def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name=None, config=None, num_priorities=1,
-                   egp_queue_weights=None, request_cycle=0, max_sim_time=float('inf'), max_wall_time=float('inf'),
-                   max_mhp_cycle=float('inf'), enable_pdb=False, t0=0, t_cycle=0, alphaA=0.1, alphaB=0.1,
-                   wall_time_per_timestep=60, save_additional_data=True, collect_queue_data=False):
+def run_simulation(tmp_filebasename, final_filebasename, sim_dir, request_paramsA, request_paramsB, name=None,
+                   config=None, num_priorities=1, egp_queue_weights=None, request_cycle=0, max_sim_time=float('inf'),
+                   max_wall_time=float('inf'), max_mhp_cycle=float('inf'), enable_pdb=False, t0=0, t_cycle=0,
+                   alphaA=0.1, alphaB=0.1, wall_time_per_timestep=60, save_additional_data=True,
+                   collect_queue_data=False, log_to_file=True, log_level=None, filter_debug_logging=True,
+                   log_to_console=False):
+
+    # Setup logging
+    if log_to_file:
+        log_file = "{}_log.out".format(final_filebasename)
+        if log_level is not None:
+            setup_logging(log_to_file=log_file, file_log_level=log_level, log_to_console=log_to_console)
+        else:
+            setup_logging(log_to_file=log_file, log_to_console=log_to_console)
+    else:
+        if log_level is not None:
+            setup_logging(console_log_level=log_level, log_to_console=log_to_console)
+        else:
+            setup_logging(log_to_console=log_to_console)
+
+    logger.info("Starting simulation using a temporary data storage at {}".format(tmp_filebasename))
 
     # Set the current datacollection version
-    set_datacollection_version(results_path)
+    set_datacollection_version(tmp_filebasename)
 
     # Save additional data
     if save_additional_data:
@@ -236,7 +263,7 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                                                     additional_data)
 
     # Hook up data collectors to the scenarios
-    collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, results_path,
+    collectors = setup_data_collection(alice_scenario, bob_scenario, max_sim_time, tmp_filebasename,
                                        collect_queue_data=collect_queue_data)
 
     # Start the simulation
@@ -315,7 +342,7 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                     additional_data["p_succ"] = midpoint._nr_of_succ / midpoint._nr_of_meas
                 else:
                     additional_data["p_succ"] = None
-                with open(results_path + "_additional_data.json", 'w') as json_file:
+                with open(tmp_filebasename + "_additional_data.json", 'w') as json_file:
                     json.dump(additional_data, json_file, indent=4)
 
             # Commit the data collected in the data-sequences
@@ -326,9 +353,16 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
                 logger.info("Max wall time reached, ending simulation.")
                 break
 
+            if log_to_file and filter_debug_logging:
+                clean_log_files(log_file)
+
         stop_time = time()
         logger.info("Finished simulation, took {} (s) wall time and {} (s) real time".format(stop_time - start_time,
                                                                                              sim_time() / SECOND))
+
+        if log_to_file and filter_debug_logging:
+            clean_log_files(log_file)
+
     # Allow for Ctrl-C-ing out of a simulation in a manner that commits data to the databases
     except Exception:
         logger.exception("Something went wrong. Ending simulation early!")
@@ -337,3 +371,55 @@ def run_simulation(results_path, sim_dir, request_paramsA, request_paramsB, name
         # Debugging
         if enable_pdb:
             pdb.set_trace()
+
+
+def clean_log_files(log_file, block_size=1000):
+    reduced_log_file = "{}_reduced.out".format(log_file[:-4])
+
+    if not os.path.exists(log_file):
+        return
+
+    with open(log_file, 'r') as f:
+        lines = f.readlines()
+
+    i = 0
+    min_block = 0
+    end_block = 0
+    offset = int(block_size / 2)
+    new_lines = []
+
+    while i < len(lines):
+        line = lines[i]
+
+        # Remove characters which could occur when reading file which is written to?
+        line = line.replace('\x00', '')
+
+        if ("WARNING" in line) or ("ERROR" in line):
+            start_block = max(min_block, i - offset)
+
+            # Have we skipped something?
+            if start_block > end_block:
+                new_lines.append("... ({} lines skipped)\n".format(start_block - end_block))
+
+            end_block = min(len(lines), i + offset)
+            new_lines += lines[start_block:end_block]
+            i = end_block
+            min_block = end_block
+        elif "INFO" in line:
+
+            # Have we skipped something?
+            if i > end_block:
+                new_lines.append("... ({} lines skipped)\n".format(i - end_block))
+
+            new_lines.append(line)
+            end_block = i + 1
+            min_block = end_block
+            i += 1
+        else:
+            i += 1
+
+    with open(reduced_log_file, 'a') as f:
+        f.writelines(new_lines)
+
+    with open(log_file, 'w') as f:
+        f.write("")

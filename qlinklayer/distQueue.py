@@ -259,9 +259,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             try:
                 self._process_cmd(cmd, data)
-            except:
-                logger.exception("{}: Error occurred processing cmd {} with data {}".format(self.node.nodeID, cmd,
-                                                                                            data))
+            except Exception as err:
+                logger.exception("{}: Error {} occurred processing cmd {} with data {}".format(self.node.nodeID, err,
+                                                                                               cmd, data))
 
     def _process_cmd(self, cmd, data):
         """
@@ -453,7 +453,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             elif cseq in self.transmitted_aid:
                 tqseq, tqid = self.transmitted_aid[cseq]
                 logger.warning("Retransmitting ADD ACK for comms seq {} queue ID {} queue seq {}"
-                             .format(cseq, tqid, tqseq))
+                               .format(cseq, tqid, tqseq))
                 self.send_ADD_ACK(cseq, tqseq, tqid)
                 return False
 

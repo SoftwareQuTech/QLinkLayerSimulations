@@ -6,7 +6,7 @@ from easysquid.easynetwork import setup_physical_network
 from util.config_paths import ConfigPathStorage
 from netsquid.qubits import dm_fidelity
 from netsquid.qubits.ketstates import b00, b01, b10, b11
-from numpy import kron, isclose
+from numpy import kron
 
 
 class TestSingleClickFidelityEstimationUnit(unittest.TestCase):

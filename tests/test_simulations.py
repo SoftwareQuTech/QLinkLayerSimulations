@@ -6,9 +6,9 @@ import glob
 import logging
 from math import floor
 from easysquid.toolbox import logger
-from easysquid.simulationinputparser import SimulationInputParser
+from easysquid.simulations.single_simulation_run_methods import SimulationParameters
 from simulations import _get_configs_from_easysquid
-from simulations.create_measure_simulation.readonly import create_simdetails_and_paramcombinations
+from easysquid.simulations import create_simdetails
 from simulations import create_measure_simulation
 from simulations.create_measure_simulation.setupsim import perform_single_simulation_run, \
     set_simdetails_and_paramcombinations
@@ -21,8 +21,7 @@ logger.setLevel(logging.CRITICAL)
 class TestSimulations(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        sim_dir = os.path.dirname(create_measure_simulation.__file__)
-        os.environ["SIMULATION_DIR"] = sim_dir
+        cls.sim_dir = os.path.dirname(create_measure_simulation.__file__)
         cls.sim_name = "Test_NoNoise"
         cls.results_folder = os.path.join(os.path.abspath(os.path.dirname(__file__)), "test_simulation_tmp")
         cls.alpha = 0.1
@@ -92,22 +91,24 @@ class TestSimulations(unittest.TestCase):
         }
 
         # Test creating simdetails and paramcombinations
-        create_simdetails_and_paramcombinations.setup_sim_parameters(params=paramcombinations,
-                                                                     description_string="Test simulation",
-                                                                     number_of_runs=1, outputdirname="test_simulations",
-                                                                     make_paramcombinations=False, ask_for_input=False)
+        create_simdetails.setup_sim_parameters(params=paramcombinations,
+                                               sim_dir=self.sim_dir,
+                                               description="Test simulation",
+                                               num_runs=1, sim_name="test_simulations",
+                                               make_paramcombinations=False, ask_for_input=False)
 
         self._reset_folder(self.results_folder)
-        paramfile = os.path.join(os.environ["SIMULATION_DIR"], "setupsim/paramcombinations.json")
+        paramfile = os.path.join(self.sim_dir, "setupsim/paramcombinations.json")
         shutil.copy(paramfile, self.results_folder)
-    #
+
     def test3_run_single_case(self):
         timestamp = "TEST_SIMULATION"
         runindex = 0
-        paramfile = os.path.join(os.environ["SIMULATION_DIR"], "setupsim/paramcombinations.json")
+        paramfile = os.path.join(self.sim_dir, "setupsim/paramcombinations.json")
         actualkey = self.sim_name
-        params_for_simulation = [timestamp, self.results_folder, runindex, paramfile, actualkey]
-        perform_single_simulation_run.main(params_for_simulation)
+        perform_single_simulation_run.main(final_results_dir=self.results_folder, tmp_results_dir=self.results_folder,
+                                           timestamp=timestamp, run_key=actualkey, run_index=runindex,
+                                           paramcombinations_file=paramfile)
 
     def test4_analyse_single_case(self):
         analysis_sql_data.main(results_path=self.results_folder, no_plot=True, save_figs=False, save_output=True)
@@ -147,8 +148,9 @@ class TestSimulations(unittest.TestCase):
         timestamp = "TEST_SIMULATION"
         runindex = 0
         for actualkey in paramcombinations.keys():
-            params_for_simulation = [timestamp, self.results_folder, runindex, paramfile, actualkey]
-            perform_single_simulation_run.main(params_for_simulation)
+            perform_single_simulation_run.main(final_results_dir=self.results_folder,
+                                               tmp_results_dir=self.results_folder, timestamp=timestamp,
+                                               run_key=actualkey, run_index=runindex, paramcombinations_file=paramfile)
 
     def test6_analyse_multi_case(self):
         nr_of_add_data_files = len(
@@ -177,18 +179,18 @@ class TestSimulations(unittest.TestCase):
         for actualkey in paramcombinations.keys():
             timestamp = "TEST_SIMULATION"
             runindex = 0
-            params = [timestamp, self.results_folder, runindex, paramfile, actualkey]
-            sip = SimulationInputParser(params)
+            sim_param = SimulationParameters(final_results_dir=self.results_folder,
+                                             tmp_results_dir=self.results_folder,
+                                             timestamp=timestamp,
+                                             run_key=actualkey,
+                                             run_index=runindex,
+                                             paramcombinations_file=paramfile)
 
             # extract the desired data from the SimulationInputParser
-            paramsdict = sip.inputdict
-
-            # Get path to simulation folder
-            path_to_here = os.path.dirname(os.path.abspath(__file__))
-            sim_dir = "/".join(path_to_here.split("/")[:-1] + ["simulations/create_measure_simulation"]) + "/"
+            paramsdict = sim_param.paramsdict
 
             # Get absolute path to config
-            abs_config_path = sim_dir + paramsdict["config"]
+            abs_config_path = os.path.join(self.sim_dir, paramsdict["config"])
 
             # Create the network
             network = setup_physical_network(abs_config_path)
