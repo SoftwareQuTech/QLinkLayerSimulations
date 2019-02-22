@@ -672,6 +672,148 @@ class TestDistributedQueue(unittest.TestCase):
         dq.queueList[0].pop()
         dq2.queueList[0].pop()
 
+    def test_unordered_subsequent_acks(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=25)
+
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        storage1 = []
+        storage2 = []
+
+        def callback1(result):
+            storage1.append(result)
+        def callback2(result):
+            storage2.append(result)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        # Add three requests (master)
+        dq.add_callback = callback1
+        dq2.add_callback = callback2
+        for create_id in range(3):
+            request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+            dq.add(request=request, qid=0)
+        run_time = dq.comm_delay * dq.timeout_factor
+        sim_run(run_time)
+        self.assertEqual(len(storage1), 3)
+        self.assertEqual(len(storage2), 3)
+        q_seqs1 = [res[2] for res in storage1]
+        q_seqs2 = [res[2] for res in storage2]
+        self.assertEqual(q_seqs1, [0, 1, 2])
+        self.assertEqual(q_seqs2, [0, 1, 2])
+
+        # Remove one request (such that next queue seq will be 0 again)
+        dq.remove_item(0, 1)
+        dq2.remove_item(0, 1)
+        storage1 = []
+        storage2 = []
+
+        # Add requests from master and slave
+        create_id = 3
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq.add(request=request, qid=0)
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq2.add(request=request, qid=0)
+
+        run_time += dq.comm_delay * dq.timeout_factor
+        sim_run(run_time)
+
+        self.assertEqual(len(storage1), 2)
+        self.assertEqual(len(storage2), 2)
+        q_seqs1 = [res[2] for res in storage1]
+        q_seqs2 = [res[2] for res in storage2]
+        self.assertIn(1, q_seqs1)
+        self.assertIn(3, q_seqs1)
+        self.assertIn(1, q_seqs2)
+        self.assertIn(3, q_seqs2)
+        # TODO what should the ordering be?
+        # self.assertEqual(q_seqs1, [1, 3])
+        # self.assertEqual(q_seqs2, [1, 3])
+
+    def test_resend_acks(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=25)
+
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        storage1 = []
+        storage2 = []
+
+        def callback1(result):
+            storage1.append(result)
+
+        def callback2(result):
+            storage2.append(result)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+        dq.add_callback = callback1
+        dq2.add_callback = callback2
+
+        # Add one request
+        create_id = 0
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq2.add(request=request, qid=0)
+        run_time = dq.comm_delay * dq.timeout_factor
+        sim_run(run_time)
+
+        # Set way to short timeout (to force resend)
+        dq2.timeout_factor = 1 / 2
+
+        # Add one request (slave)
+        create_id = 1
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq2.add(request=request, qid=0)
+        run_time += (dq.comm_delay + 1) * 4
+        sim_run(run_time)
+
+        # Set to correct factor again
+        dq2.timeout_factor = 2
+
+        create_id = 2
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq.add(request=request, qid=0)
+        dq2.add(request=request, qid=0)
+        run_time += dq.comm_delay * dq.timeout_factor
+        sim_run(run_time)
+
+        self.assertEqual(len(storage1), 4)
+        self.assertEqual(len(storage2), 4)
+
+        q_seqs1 = [res[2] for res in storage1]
+        q_seqs2 = [res[2] for res in storage2]
+
+        for qseq in range(4):
+            for q_seqs in [q_seqs1, q_seqs2]:
+                # TODO do we care about the ordering?
+                self.assertIn(qseq, q_seqs)
+
 
 class TestFilteredDistributedQueue(unittest.TestCase):
     def setUp(self):
