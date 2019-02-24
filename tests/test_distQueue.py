@@ -599,8 +599,8 @@ class TestDistributedQueue(unittest.TestCase):
         network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
         network.start()
 
-        dq.callback = callback
-        dq2.callback = callback
+        dq.add_callback = callback
+        dq2.add_callback = callback
         for i in range(1, 3 * dq2.maxSeq):
             for j in range(3 * dq2.maxSeq):
                 try:
