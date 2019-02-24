@@ -20,7 +20,7 @@ from qlinklayer.mhp import NodeCentricMHPHeraldedConnection
 from qlinklayer.scenario import EGPSimulationScenario, MeasureAfterSuccessScenario, MeasureBeforeSuccessScenario
 from cqc.backend.entInfoHeader import EntInfoCreateKeepHeader, EntInfoMeasDirectHeader
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.WARNING)
 
 
 def store_result(storage, result):
@@ -1084,7 +1084,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         bob_pairs = 2
 
         # Use a max time that is a multiple of the mhp timestep and allows the request to begin processing
-        max_time = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.time_step) * egpA.mhp.time_step * 12
+        max_time = ceil(egpA.mhp.conn.full_cycle / egpA.mhp.time_step) * egpA.mhp.time_step * 16
         alice_request = EGPSimulationScenario.construct_cqc_epr_request(otherID=bob.nodeID, num_pairs=alice_pairs,
                                                                         min_fidelity=0.5, max_time=max_time,
                                                                         purpose_id=1, priority=10)
@@ -1105,7 +1105,7 @@ class TestNodeCentricEGP(unittest.TestCase):
 
         # There should be at least a timeout message and the two successful generations from bob's request
         self.assertGreaterEqual(len(self.alice_results), 3)
-        self.assertEqual(len(self.alice_results), len(self.bob_results))
+        self.assertEqual(len(self.bob_results), 3)
 
         # Check that the timeout message is in the results
         self.assertIn((egpA.ERR_TIMEOUT, [alice_create_id, -1, -1, -1]), self.alice_results)
