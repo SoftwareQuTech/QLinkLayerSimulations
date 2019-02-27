@@ -54,16 +54,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Record the ID of this node
         self.myID = node.nodeID
 
-        # Current sequence number for making add requests (distinct from queue items)
-        # expected sequence number
-        self.maxCommsSeq = 2 ** 8
-        self.comms_seq = 0
-        self.expectedSeq = 0
-        self.msg_queue = []
-        self.comm_delay = 0
-        self.timeout_factor = 3
-        self.max_add_attempts = 3
-
         # Maximum sequence number
         self.maxSeq = maxSeq
 
@@ -114,6 +104,15 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Backlog of requests
         self.backlogAdd = deque()
+
+        # Current sequence number for making add requests (distinct from queue items)
+        self.maxCommsSeq = 2 ** 8
+        self.comms_seq = 0
+        self.expectedSeq = 0
+        self.msg_queue = []
+        self.comm_delay = 0
+        self.timeout_factor = 3
+        self.max_add_attempts = 3
 
         # Track the absolute queue ID we transmitted for the corresponding comms_seq
         self.transmitted_aid = {}
@@ -272,7 +271,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             clock = item[2]
             other_seq, other_expected_seq = clock
             logger.warning("{}: Received message with clock {}".format(self.node.name, clock))
-            if check_within_boundaries(other_seq, self.expectedSeq + 1, (self.expectedSeq + self.otherWsize) % self.maxCommsSeq):
+            if check_within_boundaries(other_seq, self.expectedSeq + 1, (self.expectedSeq + self.otherWsize) % self.maxCommsSeq
+                                       ):
                 logger.warning("Buffering message with seq {} ahead of expected {}!".format(other_seq, self.expectedSeq))
                 self.msg_queue.append((cmd, data, clock))
             else:
