@@ -15,8 +15,11 @@ from easysquid.easynetwork import EasyNetwork
 from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
+from easysquid.puppetMaster import PM_Controller
+from qlinklayer.datacollection import EGPLocalQueueSequence
+from qlinklayer.scheduler import WFQSchedulerRequest
 
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.CRITICAL)
 
 
 class FastTestProtocol(TimedProtocol):
@@ -65,6 +68,26 @@ class TestProtocol(FastTestProtocol):
 
 
 class TestDistributedQueue(unittest.TestCase):
+    def check_local_queues(self, lq1, lq2):
+        self.assertEqual(len(lq1.sequence_to_item), len(lq2.sequence_to_item))
+
+        if len(lq1.sequence_to_item) == 0:
+            return
+
+        qitem1 = lq1.pop()
+        qitem2 = lq2.pop()
+        while qitem1 is not None:
+            self.assertIsNotNone(qitem2)
+            self.assertEqual(qitem1.seq, qitem2.seq)
+            self.assertEqual(qitem1.request, qitem2.request)
+
+            qitem1 = lq1.pop()
+            qitem2 = lq2.pop()
+
+    def ready_items(self, lq):
+        for qseq in lq.sequence_to_item:
+            lq.ready(qseq)
+
     def test_init(self):
 
         node = QuantumNode("TestNode 1", 1)
@@ -573,10 +596,6 @@ class TestDistributedQueue(unittest.TestCase):
                                   myWsize=wSize, otherWsize=wSize, maxSeq=maxSeq)
         dq.connect_to_peer_protocol(dq2, conn)
 
-        from easysquid.puppetMaster import PM_Controller
-        from qlinklayer.datacollection import EGPLocalQueueSequence
-        from qlinklayer.scheduler import WFQSchedulerRequest
-
         pm = PM_Controller()
         ds = EGPLocalQueueSequence(name="EGP Local Queue A {}".format(0), dbFile='test.db')
 
@@ -813,6 +832,122 @@ class TestDistributedQueue(unittest.TestCase):
             for q_seqs in [q_seqs1, q_seqs2]:
                 # TODO do we care about the ordering?
                 self.assertIn(qseq, q_seqs)
+
+    def test_slave_add_while_waiting(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=25)
+
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        # Add one request for both master and slave
+        create_id = 0
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq.add(request=request, qid=0)
+        create_id = 1
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq2.add(request=request, qid=0)
+
+        # Wait for slaves add to arrive but not the ack
+        run_time = dq.comm_delay * (3 / 4)
+        sim_run(run_time)
+
+        # Add request from master
+        create_id = 2
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq.add(request=request, qid=0)
+
+        # Make sure things are added
+        run_time = dq.comm_delay * 4
+        sim_run(run_time)
+
+        self.ready_items(dq.queueList[0])
+        self.ready_items(dq2.queueList[0])
+        self.check_local_queues(dq.queueList[0], dq2.queueList[0])
+
+    def test_random_add_remove(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=25)
+
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        create_id = 0
+        for _ in range(20):
+            # Add random requests to master
+            num_reqs_master = randint(0, 3)
+            for _ in range(num_reqs_master):
+                request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+                try:
+                    dq.add(request=request, qid=0)
+                except LinkLayerException:
+                    # Full queue
+                    pass
+                create_id += 1
+
+            # Add random requests to slave
+            num_reqs_slave = randint(0, 3)
+            for _ in range(num_reqs_slave):
+                request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+                try:
+                    dq2.add(request=request, qid=0)
+                except LinkLayerException:
+                    # Full queue
+                    pass
+                create_id += 1
+
+            # Randomly remove things for both
+            num_pop = randint(0, 6)
+            for _ in range(num_pop):
+                dq.local_pop(qid=0)
+
+            # Run for random fraction of timeout
+            r = randint(1, 20)
+            run_time = dq.comm_delay * dq.timeout_factor * (r / 10)
+            sim_run(run_time)
+
+        # Make sure things are not in flight
+        sim_run()
+
+        self.ready_items(dq.queueList[0])
+        self.ready_items(dq2.queueList[0])
+        self.check_local_queues(dq.queueList[0], dq2.queueList[0])
+
+        # Add one request for both master and slave
+        create_id = 0
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq.add(request=request, qid=0)
+        create_id = 1
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq2.add(request=request, qid=0)
 
 
 class TestFilteredDistributedQueue(unittest.TestCase):

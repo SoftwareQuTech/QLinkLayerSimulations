@@ -12,7 +12,7 @@ from easysquid.easyfibre import ClassicalFibreConnection
 from easysquid.easyprotocol import EasyProtocol, ClassicalProtocol
 from netsquid.pydynaa import EventType, EventHandler
 from qlinklayer.localQueue import TimeoutLocalQueue, EGPLocalQueue, WFQLocalQueue
-from qlinklayer.toolbox import LinkLayerException
+from qlinklayer.toolbox import LinkLayerException, check_within_boundaries
 from easysquid.toolbox import logger
 
 
@@ -54,6 +54,16 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Record the ID of this node
         self.myID = node.nodeID
 
+        # Current sequence number for making add requests (distinct from queue items)
+        # expected sequence number
+        self.maxCommsSeq = 2 ** 8
+        self.comms_seq = 0
+        self.expectedSeq = 0
+        self.msg_queue = []
+        self.comm_delay = 0
+        self.timeout_factor = 3
+        self.max_add_attempts = 3
+
         # Maximum sequence number
         self.maxSeq = maxSeq
 
@@ -91,7 +101,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.status = self.STAT_IDLE
 
         # Window size for us and the other node
+        if maxSeq < myWsize / 2:
+            myWsize = maxSeq * 2
         self.myWsize = myWsize
+
+        if maxSeq < otherWsize / 2:
+            otherWsize = maxSeq * 2
         self.otherWsize = otherWsize
 
         # Initialize queues
@@ -99,15 +114,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Backlog of requests
         self.backlogAdd = deque()
-
-        # Current sequence number for making add requests (distinct from queue items)
-        # expected sequence number
-        self.comms_seq = 0
-        self.expectedSeq = 0
-        self.msg_queue = []
-        self.comm_delay = 0
-        self.timeout_factor = 3
-        self.max_add_attempts = 3
 
         # Track the absolute queue ID we transmitted for the corresponding comms_seq
         self.transmitted_aid = {}
@@ -265,14 +271,15 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             data = item[1]
             clock = item[2]
             other_seq, other_expected_seq = clock
-            if other_seq > self.expectedSeq:
+            logger.warning("{}: Received message with clock {}".format(self.node.name, clock))
+            if check_within_boundaries(other_seq, self.expectedSeq + 1, (self.expectedSeq + self.otherWsize) % self.maxCommsSeq):
                 logger.warning("Buffering message with seq {} ahead of expected {}!".format(other_seq, self.expectedSeq))
                 self.msg_queue.append((cmd, data, clock))
             else:
                 try:
                     self._process_cmd(cmd, data)
                     if other_seq == self.expectedSeq:
-                        self.expectedSeq = (other_seq + 1) % self.maxSeq
+                        self.expectedSeq = (other_seq + 1) % self.maxCommsSeq
                     processed = True
                 except Exception as err:
                     logger.exception("{}: Error {} occurred processing cmd {} with data {}".format(self.node.name, err,
@@ -298,7 +305,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
                 try:
                     self._process_cmd(cmd, data)
                     if other_seq == self.expectedSeq:
-                        self.expectedSeq = (other_seq + 1) % self.maxSeq
+                        self.expectedSeq = (other_seq + 1) % self.maxCommsSeq
                     processed = True
                 except Exception as err:
                     logger.exception("{}: Error {} occurred processing cmd {} with data {}".format(self.node.name, err,
@@ -349,7 +356,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :return: None
         """
         clock = (self.comms_seq, self.expectedSeq)
-        self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+        self.comms_seq = (self.comms_seq + 1) % self.maxCommsSeq
         self.send_msg(self.CMD_ADD_ACK, (self.myID, cseq, qseq), clock)
         self._post_process_send_ADD_ACK(qid, qseq)
 
@@ -362,7 +369,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             Queue item sequence number
         :return: None
         """
-        pass
+        self.queueList[qid].ack(qseq)
 
     def send_error(self, error, error_data=0):
         """
@@ -374,7 +381,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             Error code
         """
         clock = (self.comms_seq, self.expectedSeq)
-        self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+        self.comms_seq = (self.comms_seq + 1) % self.maxCommsSeq
         self.send_msg(error, error_data, clock)
 
     def send_hello(self):
@@ -532,7 +539,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             logger.error("Node {}: ADD ERROR from {} comms seq {} queue ID {} is full!"
                          .format(self.node.name, nodeID, cseq, qid))
             clock = (self.comms_seq, self.expectedSeq)
-            self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+            self.comms_seq = (self.comms_seq + 1) % self.maxCommsSeq
             self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request), clock)
             return False
 
@@ -742,7 +749,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :param qseq: int
             Sequence number within local queue of item
         """
-        pass
+        self.queueList[qid].ack(qseq)
 
     def has_subsequent_acks(self, qid, qseq):
         """
@@ -768,7 +775,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Grab item info, ack, and schedule
         nodeID, cseq, qseq, request = self.addAckBacklog[qid].pop(0)
         clock = (self.comms_seq, self.expectedSeq)
-        self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+        self.comms_seq = (self.comms_seq + 1) % self.maxCommsSeq
         self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request), clock)
 
         # Check if the following item(s) belong to the same queue and release them as well
@@ -776,7 +783,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             # Check if this item is a subsequent item in the same queue
             nodeID, cseq, qseq, request = self.addAckBacklog[qid].pop(0)
             clock = (self.comms_seq, self.expectedSeq)
-            self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+            self.comms_seq = (self.comms_seq + 1) % self.maxCommsSeq
             self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request), clock)
 
     def release_acks(self, qid):
@@ -802,7 +809,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :param qseq: int
             Sequence number within local queue of item
         """
-        self.queueList[qid].ack(qseq)
+        pass
 
     def has_queue_id(self, qid):
         """
@@ -999,12 +1006,12 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         queue_seq = self.queueList[qid].add(self.myID, request)
 
         # Check if we are waiting for any acks from the slave
-        if not self.waitingForAcks(qid):
-            self.send_ADD_ACK(cseq, queue_seq, qid)
+        # if not self.waitingForAcks(qid):
+        self.send_ADD_ACK(cseq, queue_seq, qid)
 
         # Otherwise wait on a response for our ADDs we have in flight before we ack
-        else:
-            self.addAckBacklog[qid].append((nodeID, cseq, queue_seq, request))
+        # else:
+        #     self.addAckBacklog[qid].append((nodeID, cseq, queue_seq, request))
 
         return queue_seq
 
@@ -1071,7 +1078,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.acksWaiting = self.acksWaiting + 1
 
         # Increment our own sequence number of this request to add
-        self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+        self.comms_seq = (self.comms_seq + 1) % self.maxCommsSeq
 
         self.status = self.STAT_BUSY
 
@@ -1095,7 +1102,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.acksWaiting = self.acksWaiting + 1
 
         # Increment our own sequence number of this request to add
-        self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+        self.comms_seq = (self.comms_seq + 1) % self.maxCommsSeq
 
         self.status = self.STAT_BUSY
 
@@ -1188,7 +1195,7 @@ class FilteredDistributedQueue(DistributedQueue):
             logger.error("Node {}: ADD ERROR not accepting requests with purpose id {} from node {}"
                          .format(self.node.name, request.purpose_id, nodeID))
             clock = (self.comms_seq, self.expectedSeq)
-            self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+            self.comms_seq = (self.comms_seq + 1) % self.maxCommsSeq
             self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request), clock)
             return False
 
@@ -1264,26 +1271,6 @@ class EGPDistributedQueue(FilteredDistributedQueue):
         logger.debug("Node {}: Updating to MHP cycle {}".format(self.node.name, current_cycle))
         for queue in self.queueList:
             queue.update_mhp_cycle_number(current_cycle, max_cycle)
-
-    def _post_process_send_ADD_ACK(self, qid, qseq):
-        """
-        Entry point (to be overridden) for post processing queue items that were added by the remote node
-        :param qid: int
-            (Local) Queue ID where the item will be added
-        :param qseq: int
-            Sequence number within local queue of item
-        """
-        self.queueList[qid].ack(qseq)
-
-    def _post_process_cmd_ADD_ACK(self, qid, qseq):
-        """
-        Entry point (to be overridden) for post processing queue items that were acknowledged by the remote node
-        :param qid: int
-            (Local) Queue ID where the item will be added
-        :param qseq: int
-            Sequence number within local queue of item
-        """
-        self.queueList[qid].ack(qseq)
 
 
 class WFQDistributedQueue(EGPDistributedQueue):
