@@ -101,7 +101,10 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.backlogAdd = deque()
 
         # Current sequence number for making add requests (distinct from queue items)
+        # expected sequence number
         self.comms_seq = 0
+        self.expectedSeq = 0
+        self.msg_queue = []
         self.comm_delay = 0
         self.timeout_factor = 3
         self.max_add_attempts = 3
@@ -116,8 +119,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         self.comm_timeout_handler = None
         self._EVT_COMM_TIMEOUT = EventType("COMM TIMEOUT", "Communication timeout")
 
-        # expected sequence number
-        self.expectedSeq = 0
         self.add_callback = None
 
     def _init_queues(self, numQueues=1, maxSeq=2 ** 8, throw_local_queue_events=False):
@@ -244,9 +245,10 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
                 # Construct the add message using the same comms seq as used originally
                 add_msg = (self.myID, ack_id, qid, queue_seq, request)
+                clock = (ack_id, self.expectedSeq)
 
                 # Send and setup a communication timeout to retry
-                self.send_msg(self.CMD_ADD, add_msg)
+                self.send_msg(self.CMD_ADD, add_msg, clock)
                 self.schedule_comm_timeout(ack_id=ack_id)
 
     def process_data(self):
@@ -255,17 +257,55 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         # Fetch message from the other side
         [content, t] = self.conn.get_as(self.myID)
+        processed = False
         for item in content:
-            if len(item) != 2:
+            if len(item) != 3:
                 raise ValueError("Unexpected format of classical message.")
             cmd = item[0]
             data = item[1]
+            clock = item[2]
+            other_seq, other_expected_seq = clock
+            if other_seq > self.expectedSeq:
+                logger.warning("Buffering message with seq {} ahead of expected {}!".format(other_seq, self.expectedSeq))
+                self.msg_queue.append((cmd, data, clock))
+            else:
+                try:
+                    self._process_cmd(cmd, data)
+                    if other_seq == self.expectedSeq:
+                        self.expectedSeq = (other_seq + 1) % self.maxSeq
+                    processed = True
+                except Exception as err:
+                    logger.exception("{}: Error {} occurred processing cmd {} with data {}".format(self.node.name, err,
+                                                                                                   cmd, data))
+        if processed:
+            self.process_queue()
 
-            try:
-                self._process_cmd(cmd, data)
-            except Exception as err:
-                logger.exception("{}: Error {} occurred processing cmd {} with data {}".format(self.node.name, err,
-                                                                                               cmd, data))
+    def process_queue(self):
+        processed = True
+        while processed:
+            processed = False
+            msg_index = -1
+            for i, msg_data in enumerate(self.msg_queue):
+                cmd, data, clock = msg_data
+                other_seq, other_expected_seq = clock
+                if other_seq == self.expectedSeq:
+                    logger.warning("Processing queued message")
+                    msg_index = i
+
+            if msg_index != -1:
+                cmd, data, clock = self.msg_queue.pop(msg_index)
+                other_seq, other_expected_seq = clock
+                try:
+                    self._process_cmd(cmd, data)
+                    if other_seq == self.expectedSeq:
+                        self.expectedSeq = (other_seq + 1) % self.maxSeq
+                    processed = True
+                except Exception as err:
+                    logger.exception("{}: Error {} occurred processing cmd {} with data {}".format(self.node.name, err,
+                                                                                                   cmd, data))
+
+    def compare_to_local_clock(self, clock):
+        pass
 
     def _process_cmd(self, cmd, data):
         """
@@ -283,7 +323,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         # Process message demanding on command
         self.commandHandlers[cmd](data)
 
-    def send_msg(self, cmd, data):
+    def send_msg(self, cmd, data, clock):
         """
         Send message to the other side
 
@@ -294,7 +334,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         data : object
             Data to be sent
         """
-        self.conn.put_from(self.myID, [(cmd, data)])
+        self.conn.put_from(self.myID, [(cmd, data, clock)])
 
     def send_ADD_ACK(self, cseq, qseq, qid=0):
         """
@@ -308,7 +348,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
             The queue ID (not part of the message but used for post_processing
         :return: None
         """
-        self.send_msg(self.CMD_ADD_ACK, (self.myID, cseq, qseq))
+        clock = (self.comms_seq, self.expectedSeq)
+        self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+        self.send_msg(self.CMD_ADD_ACK, (self.myID, cseq, qseq), clock)
         self._post_process_send_ADD_ACK(qid, qseq)
 
     def _post_process_send_ADD_ACK(self, qid, qseq):
@@ -331,7 +373,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         error : int
             Error code
         """
-        self.send_msg(error, error_data)
+        clock = (self.comms_seq, self.expectedSeq)
+        self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+        self.send_msg(error, error_data, clock)
 
     def send_hello(self):
         """
@@ -341,7 +385,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if self.status == self.STAT_IDLE:
             # We are in the idle state, just send hello
             self.status = self.STAT_WAIT_HELLO
-            self.send_msg(self.CMD_HELLO, 0)
+            self.send_msg(self.CMD_HELLO, 0, (self.comms_seq, self.expectedSeq))
             logger.debug("Sending Hello")
 
     # CMD Handlers
@@ -354,7 +398,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if self.status == self.STAT_IDLE:
 
             # We are in the idle state, just send a reply
-            self.send_msg(self.CMD_HELLO, self.node.name)
+            self.send_hello()
             logger.debug("Hello received, replying")
 
         elif self.status == self.STAT_WAIT_HELLO:
@@ -439,8 +483,6 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if cseq >= self.expectedSeq:
             if cseq > self.expectedSeq:
                 logger.warning("Node {}: Got comms seq {} ahead of expected seq, updating".format(self.node.name, cseq))
-            # Update our expectedSeq as necessary
-            self.expectedSeq = (cseq + 1) % self.maxSeq
             return True
 
         # A message was delayed or retransmitted upon loss
@@ -455,10 +497,10 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
             # If we have seen this comms_seq before retransmit the absolute queue id
             elif cseq in self.transmitted_aid:
-                tqseq, tqid = self.transmitted_aid[cseq]
+                (tqseq, tqid), clock = self.transmitted_aid[cseq]
                 logger.warning("Node {}: Retransmitting ADD ACK for comms seq {} queue ID {} queue seq {}"
                                .format(self.node.name, cseq, tqid, tqseq))
-                self.send_ADD_ACK(cseq, tqseq, tqid)
+                self.send_msg(self.CMD_ADD_ACK, (self.myID, cseq, tqseq), clock)
                 return False
 
             else:
@@ -489,7 +531,9 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         elif self.is_full(qid):
             logger.error("Node {}: ADD ERROR from {} comms seq {} queue ID {} is full!"
                          .format(self.node.name, nodeID, cseq, qid))
-            self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
+            clock = (self.comms_seq, self.expectedSeq)
+            self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+            self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request), clock)
             return False
 
         return True
@@ -543,6 +587,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if not self.validate_ADD(data):
             return
 
+        clock = (self.comms_seq, self.expectedSeq)
         if self.master:
             # We are the node in control of the queue
             qseq = self._master_remote_add(nodeID, cseq, qid, request)
@@ -559,7 +604,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
                      .format(self.node.name, nodeID, cseq, qid, qseq))
 
         # Store the absolute queue ID under the comms seq in case the message is lost
-        self.store_transmitted_info(cseq, qid, qseq)
+        self.store_transmitted_info(cseq, qid, qseq, clock)
 
         # Post process
         self._post_process_cmd_ADD(qid, qseq)
@@ -567,7 +612,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         if self.add_callback:
             self.add_callback((self.DQ_OK, qid, qseq, copy(request)))
 
-    def store_transmitted_info(self, cseq, qid, qseq):
+    def store_transmitted_info(self, cseq, qid, qseq, clock):
         """
         Stores a mapping between the comms seq and absolute queue id temporarily in case ack message
         is lost and peer attempts re-adding
@@ -578,7 +623,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         :param qseq: int
             The sequence number in the local queue where the item was added
         """
-        self.transmitted_aid[cseq] = (qseq, qid)
+        self.transmitted_aid[cseq] = ((qseq, qid), clock)
 
         # Set up a handler to clear the stored data when we believe our peer got the ack
         evt = self._schedule_after(self.max_add_attempts * self.timeout_factor * self.comm_delay,
@@ -596,7 +641,7 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         """
         # Remove if still available locally
         if cseq in self.transmitted_aid:
-            aid = self.transmitted_aid.pop(cseq)
+            aid, clock = self.transmitted_aid.pop(cseq)
             logger.debug("Node {}: Clearing transmitted queue id {} for comms seq {}".format(self.node.name, aid, cseq))
 
     def _post_process_cmd_ADD(self, qid, qseq):
@@ -722,13 +767,17 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
         logger.warning("Node {}: Rejecting outstanding acks".format(self.node.name))
         # Grab item info, ack, and schedule
         nodeID, cseq, qseq, request = self.addAckBacklog[qid].pop(0)
-        self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
+        clock = (self.comms_seq, self.expectedSeq)
+        self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+        self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request), clock)
 
         # Check if the following item(s) belong to the same queue and release them as well
         while self.has_subsequent_acks(qid=qid, qseq=qseq):
             # Check if this item is a subsequent item in the same queue
             nodeID, cseq, qseq, request = self.addAckBacklog[qid].pop(0)
-            self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
+            clock = (self.comms_seq, self.expectedSeq)
+            self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+            self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request), clock)
 
     def release_acks(self, qid):
         """
@@ -1008,7 +1057,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Send an add message to the other side
         add_msg = self._construct_add_msg(qid, queue_seq, copy(request))
-        self.send_msg(self.CMD_ADD, add_msg)
+        clock = (self.comms_seq, self.expectedSeq)
+        self.send_msg(self.CMD_ADD, add_msg, clock)
         logger.debug("Node {}: Communicated absolute queue id ({}, {}) to slave".format(self.node.name, qid, queue_seq))
 
         # Mark that we are waiting for an ack for this, store attempt 1 for initial transmission
@@ -1032,7 +1082,8 @@ class DistributedQueue(EasyProtocol, ClassicalProtocol):
 
         # Send an add message to the other side
         add_msg = self._construct_add_msg(qid, 0, copy(request))
-        self.send_msg(self.CMD_ADD, add_msg)
+        clock = (self.comms_seq, self.expectedSeq)
+        self.send_msg(self.CMD_ADD, add_msg, clock)
         logger.debug("Node {}: Sent ADD request to master".format(self.node.name))
 
         # Mark that we are waiting for an ack for this, store attempt 1 for initial transmission
@@ -1136,7 +1187,9 @@ class FilteredDistributedQueue(DistributedQueue):
         if not self.accept_all and request.purpose_id not in self.accept_rules[nodeID]:
             logger.error("Node {}: ADD ERROR not accepting requests with purpose id {} from node {}"
                          .format(self.node.name, request.purpose_id, nodeID))
-            self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request))
+            clock = (self.comms_seq, self.expectedSeq)
+            self.comms_seq = (self.comms_seq + 1) % self.maxSeq
+            self.send_msg(self.CMD_ERR_REJ, (cseq, qid, qseq, request), clock)
             return False
 
         return True

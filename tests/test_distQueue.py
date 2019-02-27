@@ -16,7 +16,7 @@ from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.WARNING)
 
 
 class FastTestProtocol(TimedProtocol):
@@ -301,25 +301,25 @@ class TestDistributedQueue(unittest.TestCase):
 
         self.lost_messages = defaultdict(int)
 
-        def faulty_send_add(cmd, data):
+        def faulty_send_add(cmd, data, clock):
             if cmd == dq.CMD_ADD:
                 _, cseq, qid, qseq, request = data
                 if self.lost_messages[(cseq, qid, qseq)] >= 1:
-                    dq.conn.put_from(dq.myID, (cmd, data))
+                    dq.conn.put_from(dq.myID, (cmd, data, clock))
                 else:
                     self.lost_messages[(cseq, qid, qseq)] += 1
             else:
-                dq.conn.put_from(dq.myID, (cmd, data))
+                dq.conn.put_from(dq.myID, (cmd, data, clock))
 
-        def faulty_send_ack(cmd, data):
+        def faulty_send_ack(cmd, data, clock):
             if cmd == dq2.CMD_ADD_ACK:
                 _, ackd_id, qseq = data
                 if self.lost_messages[(ackd_id, qseq)] >= 1:
-                    dq2.conn.put_from(dq2.myID, (cmd, data))
+                    dq2.conn.put_from(dq2.myID, (cmd, data, clock))
                 else:
                     self.lost_messages[(ackd_id, qseq)] += 1
             else:
-                dq2.conn.put_from(dq2.myID, (cmd, data))
+                dq2.conn.put_from(dq2.myID, (cmd, data, clock))
 
         nodes = [
             (node, [dq]),
@@ -371,25 +371,25 @@ class TestDistributedQueue(unittest.TestCase):
 
         self.lost_messages = defaultdict(int)
 
-        def faulty_send_add(cmd, data):
+        def faulty_send_add(cmd, data, clock):
             if cmd == dq2.CMD_ADD:
                 _, cseq, qid, qseq, request = data
                 if self.lost_messages[(cseq, qid, qseq)] >= 1:
-                    dq2.conn.put_from(dq2.myID, (cmd, data))
+                    dq2.conn.put_from(dq2.myID, (cmd, data, clock))
                 else:
                     self.lost_messages[(cseq, qid, qseq)] += 1
             else:
-                dq2.conn.put_from(dq2.myID, (cmd, data))
+                dq2.conn.put_from(dq2.myID, (cmd, data, clock))
 
-        def faulty_send_ack(cmd, data):
+        def faulty_send_ack(cmd, data, clock):
             if cmd == dq.CMD_ADD_ACK:
                 _, ackd_id, qseq = data
                 if self.lost_messages[(ackd_id, qseq)] >= 1:
-                    dq.conn.put_from(dq.myID, (cmd, data))
+                    dq.conn.put_from(dq.myID, (cmd, data, clock))
                 else:
                     self.lost_messages[(ackd_id, qseq)] += 1
             else:
-                dq.conn.put_from(dq.myID, (cmd, data))
+                dq.conn.put_from(dq.myID, (cmd, data, clock))
 
         nodes = [
             (node, [dq]),
