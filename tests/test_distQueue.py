@@ -19,7 +19,7 @@ from easysquid.puppetMaster import PM_Controller
 from qlinklayer.datacollection import EGPLocalQueueSequence
 from qlinklayer.scheduler import WFQSchedulerRequest
 
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.WARNING)
 
 
 class FastTestProtocol(TimedProtocol):
@@ -659,11 +659,6 @@ class TestDistributedQueue(unittest.TestCase):
                                otherWsize=wSize, maxSeq=maxSeq)
         dq.connect_to_peer_protocol(dq2, conn)
 
-        storage = []
-
-        def callback(result):
-            storage.append(result)
-
         nodes = [
             (node, [dq]),
             (node2, [dq2]),
@@ -690,6 +685,71 @@ class TestDistributedQueue(unittest.TestCase):
         dq2.queueList[0].pop()
         dq.queueList[0].pop()
         dq2.queueList[0].pop()
+
+    def test_lossy_comms_wraparound(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=0.1)
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        self.lost_messages = 0
+        self.lost_seq = dq.maxCommsSeq - 1
+        def faulty_send_msg(cmd, data, clock):
+            if self.lost_messages == 0 and clock[0] == self.lost_seq:
+                self.lost_messages += 1
+            else:
+                dq.conn.put_from(dq.myID, (cmd, data, clock))
+
+        dq.send_msg = faulty_send_msg
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        num_adds = 0
+        r = 1
+        curr_time = 0
+        import pdb
+        while num_adds < 2 * dq.maxCommsSeq:
+            add_delay = 2
+            for i in range(dq.myWsize):
+                request = SchedulerRequest(0, 0, 0, 0, i, 0, 0, True, False, False, True)
+                dq.add(request)
+                sim_run(curr_time + (i+1)*add_delay)
+                curr_time += add_delay
+
+            pdb.set_trace()
+
+            for j in range(dq2.myWsize):
+                request = SchedulerRequest(0, 0, 0, 0, j, 0, 0, True, False, False, True)
+                dq2.add(request)
+                sim_run(curr_time + (j + 1) * add_delay)
+                curr_time += add_delay
+
+            pdb.set_trace()
+            num_adds += dq.myWsize
+            num_adds += dq2.myWsize
+            run_time = r * dq.comm_delay * 4
+            sim_run(curr_time + run_time)
+            curr_time += run_time
+            r += 1
+            self.ready_items(dq.queueList[0])
+            self.ready_items(dq2.queueList[0])
+            self.check_local_queues(dq.queueList[0], dq2.queueList[0])
+
+            for i in range(dq.myWsize + dq2.myWsize):
+                dq.local_pop()
+                dq2.local_pop()
 
     def test_unordered_subsequent_acks(self):
         sim_reset()
