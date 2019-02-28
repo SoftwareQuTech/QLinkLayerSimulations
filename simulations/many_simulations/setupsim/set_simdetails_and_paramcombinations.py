@@ -7,7 +7,7 @@ from qlinklayer.feu import estimate_success_probability, get_assigned_brigh_stat
 #######################
 
 description = "Simulation of EGP with many runs"
-num_runs = 102
+num_runs = 6
 sim_name = "many_simulations"
 
 #########################
