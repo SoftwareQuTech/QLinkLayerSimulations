@@ -16,7 +16,7 @@ sim_name = "many_simulations"
 
 constant_params = {
     "max_sim_time": 0,
-    "max_wall_time": 1 * 24 * 60 * 60 - 2 * 60,
+    "max_wall_time": 1 * 60 * 60 - 2 * 60,
     "max_mhp_cycle": 0,
     "t0": 0,
     "enable_pdb": False,
