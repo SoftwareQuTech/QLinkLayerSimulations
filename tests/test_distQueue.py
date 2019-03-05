@@ -19,7 +19,7 @@ from easysquid.puppetMaster import PM_Controller
 from qlinklayer.datacollection import EGPLocalQueueSequence
 from qlinklayer.scheduler import WFQSchedulerRequest
 
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.CRITICAL)
 
 
 class FastTestProtocol(TimedProtocol):
@@ -98,11 +98,12 @@ class TestDistributedQueue(unittest.TestCase):
         dq = DistributedQueue(node, conn)
         assert dq.node == node
         assert dq.conn == conn
-        assert dq.myWsize == 100
+        assert dq.myWsize == 64
         assert dq.master is True
-        assert dq.otherWsize == 100
+        assert dq.otherWsize == 64
         assert len(dq.queueList) == 1
         assert dq.maxSeq == 2 ** 8
+        assert dq.maxCommsSeq == 2 ** 8
         assert dq.status == dq.STAT_IDLE
         assert dq.comms_seq == 0
         assert dq.acksWaiting == 0
@@ -113,9 +114,9 @@ class TestDistributedQueue(unittest.TestCase):
         dq = DistributedQueue(node2, conn)
         assert dq.node == node2
         assert dq.conn == conn
-        assert dq.myWsize == 100
+        assert dq.myWsize == 64
         assert dq.master is False
-        assert dq.otherWsize == 100
+        assert dq.otherWsize == 64
         assert len(dq.queueList) == 1
         assert dq.maxSeq == 2 ** 8
         assert dq.status == dq.STAT_IDLE
@@ -296,7 +297,7 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(5000)
 
         expected_qid = 0
-        expected_results = [(aliceDQ.DQ_TIMEOUT, expected_qid, qseq, [alice.name, qseq]) for qseq in range(num_adds)]
+        expected_results = [(aliceDQ.DQ_TIMEOUT, expected_qid, qseq % aliceDQ.myWsize, [alice.name, qseq]) for qseq in range(num_adds)]
 
         # Check that all attempted add's timed out
         self.assertEqual(self.callback_storage, expected_results)
@@ -620,10 +621,12 @@ class TestDistributedQueue(unittest.TestCase):
 
         dq.add_callback = callback
         dq2.add_callback = callback
+        k = 0
         for i in range(1, 3 * dq2.maxSeq):
             for j in range(3 * dq2.maxSeq):
                 try:
-                    r = WFQSchedulerRequest(0, 0, 0, 0, j + 1, 0, 0, 0, True, False, False, True)
+                    r = WFQSchedulerRequest(0, 0, 0, 0, k, 0, 0, 0, True, False, False, True)
+                    k += 1
                     if j % i:
                         dq.add(request=r, qid=0)
                     else:
@@ -631,7 +634,7 @@ class TestDistributedQueue(unittest.TestCase):
                 except Exception:
                     pass
 
-            sim_run(i * 1000000)
+            sim_run(i * dq.comm_delay * dq.timeout_factor + 1)
 
             for seq in range(dq.maxSeq):
                 qitem = dq.queueList[0].sequence_to_item.get(seq)
@@ -696,7 +699,7 @@ class TestDistributedQueue(unittest.TestCase):
         dq.connect_to_peer_protocol(dq2, conn)
 
         self.lost_messages = 0
-        self.lost_seq = dq.maxCommsSeq - 1
+        self.lost_seq = dq.myWsize + 1
         def faulty_send_msg(cmd, data, clock):
             if self.lost_messages == 0 and clock[0] == self.lost_seq:
                 self.lost_messages += 1
@@ -728,15 +731,12 @@ class TestDistributedQueue(unittest.TestCase):
                 sim_run(curr_time + (i+1)*add_delay)
                 curr_time += add_delay
 
-            pdb.set_trace()
-
             for j in range(dq2.myWsize):
                 request = SchedulerRequest(0, 0, 0, 0, j, 0, 0, True, False, False, True)
                 dq2.add(request)
                 sim_run(curr_time + (j + 1) * add_delay)
                 curr_time += add_delay
 
-            pdb.set_trace()
             num_adds += dq.myWsize
             num_adds += dq2.myWsize
             run_time = r * dq.comm_delay * 4
