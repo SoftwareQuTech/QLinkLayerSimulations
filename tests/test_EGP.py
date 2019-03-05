@@ -519,7 +519,7 @@ class TestNodeCentricEGP(unittest.TestCase):
         network = self.create_network(egpA, egpB)
         network.start()
 
-        sim_run(15000)
+        sim_run(20000)
 
         self.assertEqual(len(self.alice_results), alice_num_bits + bob_num_bits + alice_num_pairs + bob_num_pairs)
         for resA, resB in zip(self.alice_results, self.bob_results):

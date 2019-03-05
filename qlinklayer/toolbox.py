@@ -26,3 +26,10 @@ def check_schedule_cycle_bounds(current_cycle, max_cycle, check_cycle):
         return left_boundary <= check_cycle <= right_boundary
     else:
         return check_cycle <= right_boundary or check_cycle >= left_boundary
+
+
+def check_within_boundaries(x, a, b):
+    if a < b:
+        return a <= x <= b
+    else:
+        return x <= b or x >= a

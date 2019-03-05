@@ -15,6 +15,9 @@ from easysquid.easynetwork import EasyNetwork
 from easysquid.easyprotocol import TimedProtocol
 from easysquid.toolbox import logger
 from netsquid.simutil import sim_run, sim_reset
+from easysquid.puppetMaster import PM_Controller
+from qlinklayer.datacollection import EGPLocalQueueSequence
+from qlinklayer.scheduler import WFQSchedulerRequest
 
 logger.setLevel(logging.CRITICAL)
 
@@ -65,6 +68,26 @@ class TestProtocol(FastTestProtocol):
 
 
 class TestDistributedQueue(unittest.TestCase):
+    def check_local_queues(self, lq1, lq2):
+        self.assertEqual(len(lq1.sequence_to_item), len(lq2.sequence_to_item))
+
+        if len(lq1.sequence_to_item) == 0:
+            return
+
+        qitem1 = lq1.pop()
+        qitem2 = lq2.pop()
+        while qitem1 is not None:
+            self.assertIsNotNone(qitem2)
+            self.assertEqual(qitem1.seq, qitem2.seq)
+            self.assertEqual(qitem1.request, qitem2.request)
+
+            qitem1 = lq1.pop()
+            qitem2 = lq2.pop()
+
+    def ready_items(self, lq):
+        for qseq in lq.sequence_to_item:
+            lq.ready(qseq)
+
     def test_init(self):
 
         node = QuantumNode("TestNode 1", 1)
@@ -75,11 +98,12 @@ class TestDistributedQueue(unittest.TestCase):
         dq = DistributedQueue(node, conn)
         assert dq.node == node
         assert dq.conn == conn
-        assert dq.myWsize == 100
+        assert dq.myWsize == 64
         assert dq.master is True
-        assert dq.otherWsize == 100
+        assert dq.otherWsize == 64
         assert len(dq.queueList) == 1
         assert dq.maxSeq == 2 ** 8
+        assert dq.maxCommsSeq == 2 ** 8
         assert dq.status == dq.STAT_IDLE
         assert dq.comms_seq == 0
         assert dq.acksWaiting == 0
@@ -90,9 +114,9 @@ class TestDistributedQueue(unittest.TestCase):
         dq = DistributedQueue(node2, conn)
         assert dq.node == node2
         assert dq.conn == conn
-        assert dq.myWsize == 100
+        assert dq.myWsize == 64
         assert dq.master is False
-        assert dq.otherWsize == 100
+        assert dq.otherWsize == 64
         assert len(dq.queueList) == 1
         assert dq.maxSeq == 2 ** 8
         assert dq.status == dq.STAT_IDLE
@@ -273,7 +297,7 @@ class TestDistributedQueue(unittest.TestCase):
         sim_run(5000)
 
         expected_qid = 0
-        expected_results = [(aliceDQ.DQ_TIMEOUT, expected_qid, qseq, [alice.name, qseq]) for qseq in range(num_adds)]
+        expected_results = [(aliceDQ.DQ_TIMEOUT, expected_qid, qseq % aliceDQ.myWsize, [alice.name, qseq]) for qseq in range(num_adds)]
 
         # Check that all attempted add's timed out
         self.assertEqual(self.callback_storage, expected_results)
@@ -301,25 +325,25 @@ class TestDistributedQueue(unittest.TestCase):
 
         self.lost_messages = defaultdict(int)
 
-        def faulty_send_add(cmd, data):
+        def faulty_send_add(cmd, data, clock):
             if cmd == dq.CMD_ADD:
                 _, cseq, qid, qseq, request = data
                 if self.lost_messages[(cseq, qid, qseq)] >= 1:
-                    dq.conn.put_from(dq.myID, (cmd, data))
+                    dq.conn.put_from(dq.myID, (cmd, data, clock))
                 else:
                     self.lost_messages[(cseq, qid, qseq)] += 1
             else:
-                dq.conn.put_from(dq.myID, (cmd, data))
+                dq.conn.put_from(dq.myID, (cmd, data, clock))
 
-        def faulty_send_ack(cmd, data):
+        def faulty_send_ack(cmd, data, clock):
             if cmd == dq2.CMD_ADD_ACK:
                 _, ackd_id, qseq = data
                 if self.lost_messages[(ackd_id, qseq)] >= 1:
-                    dq2.conn.put_from(dq2.myID, (cmd, data))
+                    dq2.conn.put_from(dq2.myID, (cmd, data, clock))
                 else:
                     self.lost_messages[(ackd_id, qseq)] += 1
             else:
-                dq2.conn.put_from(dq2.myID, (cmd, data))
+                dq2.conn.put_from(dq2.myID, (cmd, data, clock))
 
         nodes = [
             (node, [dq]),
@@ -371,25 +395,25 @@ class TestDistributedQueue(unittest.TestCase):
 
         self.lost_messages = defaultdict(int)
 
-        def faulty_send_add(cmd, data):
+        def faulty_send_add(cmd, data, clock):
             if cmd == dq2.CMD_ADD:
                 _, cseq, qid, qseq, request = data
                 if self.lost_messages[(cseq, qid, qseq)] >= 1:
-                    dq2.conn.put_from(dq2.myID, (cmd, data))
+                    dq2.conn.put_from(dq2.myID, (cmd, data, clock))
                 else:
                     self.lost_messages[(cseq, qid, qseq)] += 1
             else:
-                dq2.conn.put_from(dq2.myID, (cmd, data))
+                dq2.conn.put_from(dq2.myID, (cmd, data, clock))
 
-        def faulty_send_ack(cmd, data):
+        def faulty_send_ack(cmd, data, clock):
             if cmd == dq.CMD_ADD_ACK:
                 _, ackd_id, qseq = data
                 if self.lost_messages[(ackd_id, qseq)] >= 1:
-                    dq.conn.put_from(dq.myID, (cmd, data))
+                    dq.conn.put_from(dq.myID, (cmd, data, clock))
                 else:
                     self.lost_messages[(ackd_id, qseq)] += 1
             else:
-                dq.conn.put_from(dq.myID, (cmd, data))
+                dq.conn.put_from(dq.myID, (cmd, data, clock))
 
         nodes = [
             (node, [dq]),
@@ -573,10 +597,6 @@ class TestDistributedQueue(unittest.TestCase):
                                   myWsize=wSize, otherWsize=wSize, maxSeq=maxSeq)
         dq.connect_to_peer_protocol(dq2, conn)
 
-        from easysquid.puppetMaster import PM_Controller
-        from qlinklayer.datacollection import EGPLocalQueueSequence
-        from qlinklayer.scheduler import WFQSchedulerRequest
-
         pm = PM_Controller()
         ds = EGPLocalQueueSequence(name="EGP Local Queue A {}".format(0), dbFile='test.db')
 
@@ -601,10 +621,12 @@ class TestDistributedQueue(unittest.TestCase):
 
         dq.add_callback = callback
         dq2.add_callback = callback
+        k = 0
         for i in range(1, 3 * dq2.maxSeq):
             for j in range(3 * dq2.maxSeq):
                 try:
-                    r = WFQSchedulerRequest(0, 0, 0, 0, j + 1, 0, 0, 0, True, False, False, True)
+                    r = WFQSchedulerRequest(0, 0, 0, 0, k, 0, 0, 0, True, False, False, True)
+                    k += 1
                     if j % i:
                         dq.add(request=r, qid=0)
                     else:
@@ -612,7 +634,7 @@ class TestDistributedQueue(unittest.TestCase):
                 except Exception:
                     pass
 
-            sim_run(i * 1000000)
+            sim_run(i * dq.comm_delay * dq.timeout_factor + 1)
 
             for seq in range(dq.maxSeq):
                 qitem = dq.queueList[0].sequence_to_item.get(seq)
@@ -640,11 +662,6 @@ class TestDistributedQueue(unittest.TestCase):
                                otherWsize=wSize, maxSeq=maxSeq)
         dq.connect_to_peer_protocol(dq2, conn)
 
-        storage = []
-
-        def callback(result):
-            storage.append(result)
-
         nodes = [
             (node, [dq]),
             (node2, [dq2]),
@@ -671,6 +688,68 @@ class TestDistributedQueue(unittest.TestCase):
         dq2.queueList[0].pop()
         dq.queueList[0].pop()
         dq2.queueList[0].pop()
+
+    def test_lossy_comms_wraparound(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=0.1)
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        self.lost_messages = 0
+        self.lost_seq = dq.myWsize + 1
+        def faulty_send_msg(cmd, data, clock):
+            if self.lost_messages == 0 and clock[0] == self.lost_seq:
+                self.lost_messages += 1
+            else:
+                dq.conn.put_from(dq.myID, (cmd, data, clock))
+
+        dq.send_msg = faulty_send_msg
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        num_adds = 0
+        r = 1
+        curr_time = 0
+        import pdb
+        while num_adds < 2 * dq.maxCommsSeq:
+            add_delay = 2
+            for i in range(dq.myWsize):
+                request = SchedulerRequest(0, 0, 0, 0, i, 0, 0, True, False, False, True)
+                dq.add(request)
+                sim_run(curr_time + (i+1)*add_delay)
+                curr_time += add_delay
+
+            for j in range(dq2.myWsize):
+                request = SchedulerRequest(0, 0, 0, 0, j, 0, 0, True, False, False, True)
+                dq2.add(request)
+                sim_run(curr_time + (j + 1) * add_delay)
+                curr_time += add_delay
+
+            num_adds += dq.myWsize
+            num_adds += dq2.myWsize
+            run_time = r * dq.comm_delay * 4
+            sim_run(curr_time + run_time)
+            curr_time += run_time
+            r += 1
+            self.ready_items(dq.queueList[0])
+            self.ready_items(dq2.queueList[0])
+            self.check_local_queues(dq.queueList[0], dq2.queueList[0])
+
+            for i in range(dq.myWsize + dq2.myWsize):
+                dq.local_pop()
+                dq2.local_pop()
 
     def test_unordered_subsequent_acks(self):
         sim_reset()
@@ -813,6 +892,122 @@ class TestDistributedQueue(unittest.TestCase):
             for q_seqs in [q_seqs1, q_seqs2]:
                 # TODO do we care about the ordering?
                 self.assertIn(qseq, q_seqs)
+
+    def test_slave_add_while_waiting(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=25)
+
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        # Add one request for both master and slave
+        create_id = 0
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq.add(request=request, qid=0)
+        create_id = 1
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq2.add(request=request, qid=0)
+
+        # Wait for slaves add to arrive but not the ack
+        run_time = dq.comm_delay * (3 / 4)
+        sim_run(run_time)
+
+        # Add request from master
+        create_id = 2
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq.add(request=request, qid=0)
+
+        # Make sure things are added
+        run_time = dq.comm_delay * 4
+        sim_run(run_time)
+
+        self.ready_items(dq.queueList[0])
+        self.ready_items(dq2.queueList[0])
+        self.check_local_queues(dq.queueList[0], dq2.queueList[0])
+
+    def test_random_add_remove(self):
+        sim_reset()
+        node = QuantumNode("TestNode 1", 1)
+        node2 = QuantumNode("TestNode 2", 2)
+        conn = ClassicalFibreConnection(node, node2, length=25)
+
+        dq = DistributedQueue(node, conn, numQueues=3, throw_local_queue_events=True)
+        dq2 = DistributedQueue(node2, conn, numQueues=3, throw_local_queue_events=True)
+        dq.connect_to_peer_protocol(dq2, conn)
+
+        nodes = [
+            (node, [dq]),
+            (node2, [dq2]),
+        ]
+        conns = [
+            (conn, "dq_conn", [dq, dq2])
+        ]
+
+        network = EasyNetwork(name="DistQueueNetwork", nodes=nodes, connections=conns)
+        network.start()
+
+        create_id = 0
+        for _ in range(20):
+            # Add random requests to master
+            num_reqs_master = randint(0, 3)
+            for _ in range(num_reqs_master):
+                request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+                try:
+                    dq.add(request=request, qid=0)
+                except LinkLayerException:
+                    # Full queue
+                    pass
+                create_id += 1
+
+            # Add random requests to slave
+            num_reqs_slave = randint(0, 3)
+            for _ in range(num_reqs_slave):
+                request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+                try:
+                    dq2.add(request=request, qid=0)
+                except LinkLayerException:
+                    # Full queue
+                    pass
+                create_id += 1
+
+            # Randomly remove things for both
+            num_pop = randint(0, 6)
+            for _ in range(num_pop):
+                dq.local_pop(qid=0)
+
+            # Run for random fraction of timeout
+            r = randint(1, 20)
+            run_time = dq.comm_delay * dq.timeout_factor * (r / 10)
+            sim_run(run_time)
+
+        # Make sure things are not in flight
+        sim_run()
+
+        self.ready_items(dq.queueList[0])
+        self.ready_items(dq2.queueList[0])
+        self.check_local_queues(dq.queueList[0], dq2.queueList[0])
+
+        # Add one request for both master and slave
+        create_id = 0
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq.add(request=request, qid=0)
+        create_id = 1
+        request = SchedulerRequest(0, 0, 0, 0, create_id, 0, 0, True, False, False, True)
+        dq2.add(request=request, qid=0)
 
 
 class TestFilteredDistributedQueue(unittest.TestCase):
