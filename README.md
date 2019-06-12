@@ -15,6 +15,11 @@ NetSQUID is currently under development and is not yet freely available.
 For this reason you cannot run the simulation without getting access to NetSQUID.
 However you can still take a look at the actual implementation of the protocol.
 
+Requirements:
+ - netsquid v4.0.2
+ - simulaqron v1.3
+ - easysquid 547555a2584eb83e7a59dc501ccdfe4071939bb2
+
 -----
 Notes
 -----
